@@ -2,11 +2,11 @@
 
 **Date:** October 8, 2025  
 **Framework Tested:** ChatDev  
-**Status:** ❌ Cannot Execute (Placeholder Implementation)
+**Status:** ⚠️ Partially Working (Placeholders + Fixed Config)
 
 ## Issues Found and Fixed
 
-### 1. ✅ PYTHONPATH Unbound Variable Error
+### 1. ✅ PYTHONPATH Unbound Variable Error (FIXED)
 **Issue:** Script failed with "PYTHONPATH: unbound variable" error  
 **Root Cause:** Script uses `set -u` but tried to append to undefined PYTHONPATH  
 **Fix Applied:** Changed line 92 in `runners/run_experiment.sh`:
@@ -17,9 +17,10 @@ export PYTHONPATH="$PROJECT_ROOT:$PYTHONPATH"
 # After:
 export PYTHONPATH="$PROJECT_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 ```
-**Commit:** 92fc826
+**Commit:** 92fc826  
+**Status:** ✅ RESOLVED
 
-### 2. ✅ ChatDev Commit Hash Syntax Error
+### 2. ✅ ChatDev Commit Hash Syntax Error (FIXED)
 **Issue:** ChatDev adapter failed with git checkout error  
 **Root Cause:** Malformed YAML - missing opening quote in `config/experiment.yaml` line 18  
 **Fix Applied:**
@@ -30,9 +31,41 @@ commit_hash: 31fd994416a251ecdeb1f0a73c329271743bfb56"
 # After:
 commit_hash: "31fd994416a251ecdeb1f0a73c329271743bfb56"
 ```
-**Commit:** 600d13c
+**Commit:** 600d13c  
+**Status:** ✅ RESOLVED
 
-### 3. ❌ Adapter Implementation Incomplete
+### 3. ✅ .env File Not Being Loaded (FIXED)
+**Issue:** Script checked for .env but never loaded it - API keys unavailable  
+**Root Cause:** Missing `source .env` command in `run_experiment.sh`  
+**Evidence:**
+- .env file exists with valid API keys ✅
+- .env is in .gitignore (security) ✅  
+- .env.example exists (documentation) ✅
+- BUT script never sourced the file ❌
+
+**Fix Applied:** Modified lines 74-82 in `runners/run_experiment.sh`:
+```bash
+# Load environment variables from .env file
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    echo "Loading environment variables from .env..."
+    set -a  # Mark variables for export
+    source "$PROJECT_ROOT/.env"
+    set +a  # Unmark variables for export
+    echo -e "${GREEN}✓${NC} Environment variables loaded"
+else
+    echo -e "${YELLOW}Warning: .env file not found${NC}"
+    # ... rest of warning logic
+fi
+```
+**Commit:** b59b718  
+**Status:** ✅ RESOLVED
+
+**Result:** API keys now properly available:
+- ✅ OPENAI_API_KEY_BAES
+- ✅ OPENAI_API_KEY_CHATDEV  
+- ✅ OPENAI_API_KEY_GHSPEC
+
+### 4. ⚠️ Adapter Implementation Incomplete (DESIGN DECISION)
 **Issue:** ChatDev adapter is a placeholder and cannot execute real experiments  
 **Evidence:**
 - `execute_step()` method returns dummy data (hardcoded success=True)
@@ -45,18 +78,35 @@ commit_hash: "31fd994416a251ecdeb1f0a73c329271743bfb56"
 - No HITL handling
 
 **Current Behavior:**
-The adapter can:
+The adapter can now:
 - ✅ Clone the ChatDev repository
 - ✅ Checkout the specific commit
 - ✅ Verify commit hash for reproducibility
+- ✅ Access API keys from environment
 
-The adapter **cannot**:
+The adapter **still cannot** (by design - placeholders):
 - ❌ Install ChatDev dependencies
 - ❌ Start ChatDev services
 - ❌ Execute actual software generation tasks
 - ❌ Track real token usage
 - ❌ Handle HITL interactions
 - ❌ Generate real metrics
+
+**Test Results:**
+```bash
+$ ./runners/run_experiment.sh chatdev
+BAEs Experiment Framework
+======================================
+Framework: chatdev
+
+✓ Python 3.11.13
+✓ Dependencies installed
+✓ Environment variables loaded  # <-- NEW!
+
+# Creates: runs/chatdev/b7cd556a-4015-4abb-b6c3-d706bcc4ef1d/
+# Clones: ChatDev framework successfully
+# But: No metrics.json, no archive (placeholder execute_step returns dummy data)
+```
 
 ## Framework Architecture Status
 
