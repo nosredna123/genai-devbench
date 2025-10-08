@@ -15,7 +15,7 @@ frameworks:
     
   chatdev:
     repo_url: "https://github.com/OpenBMB/ChatDev.git"
-    commit_hash: 31fd994416a251ecdeb1f0a73c329271743bfb56"
+    commit_hash: "31fd994416a251ecdeb1f0a73c329271743bfb56"
     api_port: 8001
     ui_port: 3001
     api_key_env: "OPENAI_API_KEY_CHATDEV"
