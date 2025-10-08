@@ -1,0 +1,17 @@
+Add pagination and filtering to all list endpoints.
+
+Requirements:
+- Add pagination to all GET list endpoints (students, courses, teachers, enrollments)
+- Pagination parameters: page (default 1), page_size (default 20, max 100)
+- Return pagination metadata: total_count, total_pages, current_page, page_size
+- Add filtering capabilities:
+  - GET /students?department=X - filter by department (via enrollments)
+  - GET /courses?teacher_id=X - filter by assigned teacher
+  - GET /courses?min_credits=X&max_credits=Y - filter by credit range
+  - GET /teachers?department=X - filter by department
+  - GET /enrollments?student_id=X - filter by student
+  - GET /enrollments?course_id=X - filter by course
+  - GET /enrollments?grade=X - filter by grade
+- Filters can be combined (AND logic)
+- Return empty list (not error) when no results match filters
+- Maintain backward compatibility with existing endpoints
