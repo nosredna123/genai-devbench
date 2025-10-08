@@ -161,6 +161,164 @@ baes_experiment/
 
 **Structure Decision**: Single CLI application structure (Option 1). No frontend/backend split needed—this is a research automation tool with CLI-only interface. All orchestration logic in `src/orchestrator/`, framework-specific adapters in `src/adapters/`, and analysis tools in `src/analysis/`. Clear separation between core logic, adapters, and utilities enables independent testing and future framework additions.
 
+## Adapter Implementation Strategy
+
+**Critical Path Note**: Infrastructure (Phases 1-7) is complete. System cannot execute real experiments until framework adapters are fully implemented (Phase 8).
+
+### Current Adapter Status
+
+**Infrastructure**: ✅ Complete (67% of tasks)
+- Orchestration, logging, metrics, archiving working
+- Configuration system functional
+- Statistical analysis and visualization ready
+
+**Adapters**: ⚠️ Placeholders (30% complete)
+- Can clone repositories and verify commit hashes
+- **Cannot** install dependencies, execute commands, track tokens, or detect HITL
+- All three adapters (BAEs, ChatDev, Spec-kit) have identical gaps
+
+### Phased Adapter Implementation
+
+**Approach**: Implement ChatDev first (template for others), then replicate pattern for BAEs and GitHub Spec-kit.
+
+**Why ChatDev First**:
+1. Most mature open-source LLM agent framework (35K+ GitHub stars)
+2. Well-documented CLI interface and API patterns
+3. Active community with integration examples
+4. Reference implementation validates orchestrator before adapting to BAEs
+
+**Phase 8 Breakdown** (30 new tasks, 80-135 hours):
+
+#### Phase 8A: ChatDev Adapter (T063-T073, 30-45 hours)
+
+1. **Research & Documentation** (T063, 2-4 hours)
+   - Manual ChatDev exploration: Run standalone to understand I/O patterns
+   - Document: CLI entry point, command arguments, output format, token logging
+   - Identify: HITL detection signals, service architecture, dependencies
+   - Deliverable: `docs/chatdev_integration.md` with integration specification
+
+2. **Environment & Setup** (T064-T065, 6-12 hours)
+   - Virtual environment creation and dependency installation
+   - Service startup (if API-based) or CLI validation
+   - Environment variable configuration (OPENAI_API_KEY)
+   - Deliverable: Working `start()` method in `chatdev_adapter.py`
+
+3. **Core Execution** (T066-T068, 12-20 hours)
+   - Command execution via subprocess with proper timeout/error handling
+   - Token extraction from ChatDev logs using framework-specific regex
+   - HITL detection via stdout monitoring and response injection
+   - Deliverable: Working `execute_step()` and `handle_hitl()` methods
+
+4. **Lifecycle Management** (T069-T070, 3-5 hours)
+   - Health check implementation (process or API endpoint)
+   - Graceful shutdown with SIGTERM/SIGKILL sequence
+   - Resource cleanup and logging
+   - Deliverable: Complete adapter lifecycle
+
+5. **Testing & Validation** (T071-T073, 6-11 hours)
+   - Single-step test: Verify one command executes successfully
+   - Six-step test: Complete end-to-end run with archival
+   - Reproducibility test: Identical config produces identical results
+   - Deliverable: Passing integration tests, validated adapter
+
+#### Phase 8B: BAEs Adapter (T074-T082, 23-41 hours)
+
+- Replicate ChatDev pattern for BAEs framework
+- **Note**: BAEs is under development, may require framework modifications
+- Document all BAEs changes separately from adapter wrapper code
+- Follow same 9-step process (research → setup → execution → lifecycle → testing)
+
+#### Phase 8C: GitHub Spec-kit Adapter (T083-T091, 23-41 hours)
+
+- Replicate ChatDev pattern for GitHub Spec-kit
+- Spec-kit likely has different interface (GitHub-native vs standalone CLI)
+- May require GitHub API integration for issue/PR-based workflows
+- Follow same 9-step process
+
+#### Phase 8D: Multi-Framework Validation (T092, 4-8 hours)
+
+- Execute `./runners/run_experiment.sh all`
+- Verify stopping rule triggers correctly across all frameworks
+- Generate comparative analysis and visualizations
+- Validate statistical reports with real data
+
+### Integration Requirements Per Framework
+
+Each adapter MUST implement (per FR-002.1 through FR-002.4):
+
+**1. Repository Setup**
+- Clone at pinned commit hash
+- Verify SHA matches configuration
+- Create isolated virtual environment
+- Install framework-specific dependencies
+
+**2. Service Lifecycle**
+- Start framework services (if API-based) on configured ports
+- Validate CLI availability (if CLI-based)
+- Maintain process handles for monitoring
+- Implement framework-specific health checks
+
+**3. Command Execution**
+- Construct framework-specific command syntax
+- Execute with proper environment variables and timeouts
+- Capture stdout/stderr for metric extraction
+- Handle framework-specific error codes
+
+**4. Metric Extraction**
+- Parse token usage from framework logs (regex patterns vary by framework)
+- Fall back to OpenAI Usage API if no framework logging
+- Detect success/failure from exit codes or output markers
+- Extract timing information from orchestrator (framework-agnostic)
+
+**5. HITL Integration**
+- Monitor for clarification requests (keywords or specific prompts)
+- Inject fixed response from `config/hitl/expanded_spec.txt`
+- Log events with SHA-1 hash for reproducibility
+- Enforce 2-clarification limit per step
+
+**6. Graceful Shutdown**
+- SIGTERM → wait 30 seconds → SIGKILL if needed
+- Clean up virtual environments (optional)
+- Save all logs before termination
+- Verify no orphaned processes
+
+### Risk Mitigation
+
+**Risk 1**: Framework incompatibility (doesn't support 6-step iterative refinement)
+- **Mitigation**: Manual pre-validation (FR-032) before adapter implementation
+- **Fallback**: Document incompatibility, exclude from comparison, update spec
+
+**Risk 2**: Frameworks don't log tokens consistently
+- **Mitigation**: Rely on OpenAI Usage API verification (FR-009.2)
+- **Acceptable**: Use API as source of truth if local parsing fails
+
+**Risk 3**: HITL detection too brittle (false positives/negatives)
+- **Mitigation**: Conservative detection (miss is better than false positive)
+- **Logging**: All detection attempts logged for post-analysis
+
+**Risk 4**: BAEs requires modifications for protocol compliance
+- **Mitigation**: Separate adapter wrapper (read-only) from BAEs changes (versioned)
+- **Documentation**: Maintain BAEs integration log with rationale for each change
+
+### Success Criteria for Phase 8
+
+**ChatDev Adapter Complete** when:
+- ✅ Single-step test passes (T071)
+- ✅ Six-step run generates complete archive with real metrics (T072)
+- ✅ Two runs with identical config produce matching token counts (T073)
+
+**All Adapters Complete** when:
+- ✅ Multi-framework test executes all 3 frameworks successfully (T092)
+- ✅ Stopping rule triggers for all frameworks
+- ✅ Statistical analysis generates comparative reports
+- ✅ No manual intervention required for any framework
+
+**System Ready for Research** when:
+- ✅ Can execute 75-run experiment (25 per framework) unattended
+- ✅ All metrics collected with <5% discrepancy vs OpenAI API
+- ✅ Reproducibility validated across all frameworks
+- ✅ Analysis scripts generate publication-quality outputs
+
 ## Complexity Tracking
 
 *Fill ONLY if Constitution Check has violations that must be justified*

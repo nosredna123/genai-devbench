@@ -157,9 +157,21 @@ A researcher integrates the BAEs Framework into the experiment harness after val
 
 - **FR-002**: System MUST support three framework adapters (ChatDev, GitHub Spec-kit, BAEs) that translate standard CLI commands (start, command, health, stop) into framework-specific invocations. External framework adapters (ChatDev, Spec-kit) are read-only wrappers that do not modify framework behavior. BAEs adapter may include both wrapper translation and documentation of BAEs framework modifications needed for protocol compliance.
 
+- **FR-002.1**: Each framework adapter MUST implement a complete lifecycle: (1) Clone framework repository at pinned commit hash, (2) Create isolated Python virtual environment in workspace, (3) Install framework dependencies from requirements.txt, (4) Start framework services (if applicable) on configured ports, (5) Execute commands by invoking framework CLI/API with proper environment variables, (6) Parse framework output to extract metrics (tokens, errors, completion status), (7) Detect and respond to HITL requests, (8) Perform health checks, (9) Gracefully shutdown services and cleanup resources.
+
+- **FR-002.2**: Adapter implementations MUST map framework-specific interfaces to the standard adapter contract: (a) For CLI-based frameworks (like ChatDev), execute framework entry point script with task argument and capture stdout/stderr, (b) For API-based frameworks, make HTTP requests to framework endpoints and parse JSON responses, (c) For frameworks without native HITL support, detect clarification requests via pattern matching in output and inject fixed response text, (d) For frameworks without structured token logging, parse console output using framework-specific regex patterns or rely solely on OpenAI Usage API verification.
+
+- **FR-002.3**: Each adapter MUST maintain framework-specific configuration including: Python version requirement, virtual environment path, framework entry point (e.g., `run.py`, `main.py`), command execution pattern (CLI args vs API payload format), expected output format (JSON, plain text, structured logs), token usage logging pattern (regex for parsing), HITL detection pattern (keywords or prompts indicating clarification needed), health check endpoint or process check method, graceful shutdown timeout (default 30 seconds).
+
+- **FR-002.4**: Framework integration MUST be validated before implementation by: (1) Manual exploration - run framework standalone to understand CLI/API, (2) Output analysis - identify token logging format and HITL patterns in console output, (3) Documentation review - verify framework supports required operations (task execution, iterative refinement, API access), (4) Dependency compatibility - ensure framework works with Python 3.11 and doesn't conflict with orchestrator dependencies.
+
 - **FR-003**: System MUST isolate each run in a unique workspace directory with a generated run ID and clean environment (fresh database, no shared state between runs).
 
 - **FR-004**: System MUST provide deterministic human-in-the-loop responses using a fixed expanded specification text from config/hitl/expanded_spec.txt, limited to 2 clarifications per step with weighted effort score HEU=3.
+
+- **FR-004.1**: HITL detection MUST support multiple framework patterns: (a) For frameworks with native HITL support, monitor for specific prompts or API callbacks requesting user input, (b) For frameworks without native HITL, detect clarification requests by scanning stdout/stderr for keywords like "clarification", "unclear", "please specify", "need more information", "waiting for input", or question marks followed by framework pause, (c) Timeout detection - if framework produces no output for 30 seconds during execution, probe with health check and log potential HITL state, (d) Maximum 2 HITL injections per step enforced by counter - subsequent detections logged but not responded to.
+
+- **FR-004.2**: HITL response injection MUST: (1) Read fixed response text from config/hitl/expanded_spec.txt (unchanged across all runs for reproducibility), (2) Inject response via framework-specific method (stdin for CLI frameworks, API POST for API-based frameworks, or restart command with additional context), (3) Compute SHA-1 hash of response text, (4) Log HITL event to hitl_events.jsonl with timestamp, step number, detected query pattern, response text, hash, and framework name, (5) Resume framework execution and continue monitoring for next potential HITL.
 
 - **FR-005**: System MUST execute runs sequentially (no parallel framework executions) to ensure resource isolation and deterministic timing measurements.
 
@@ -172,6 +184,10 @@ A researcher integrates the BAEs Framework into the experiment harness after val
 - **FR-008**: System MUST collect quality metrics: CRUD coverage (CRUDe, 0-12 scale), endpoint success rate (ESR, 0-1), migration continuity (MC, 0-1), and zero-downtime incidents (ZDI count).
 
 - **FR-009**: System MUST verify local token counts against OpenAI Usage API using framework-specific API keys (token-tracker-baes, token-tracker-chatdev, token-tracker-github_spec) and log discrepancies.
+
+- **FR-009.1**: Token extraction from framework output MUST follow framework-specific patterns: (a) **ChatDev**: Parse console logs for OpenAI API call summaries (pattern: `prompt_tokens: \d+` and `completion_tokens: \d+`) or extract from ChatDev's usage tracking files if available, (b) **GitHub Spec-kit**: Parse structured JSON output from spec-kit CLI or monitor API response headers for token usage, (c) **BAEs**: Extract from BAEs metrics API endpoint or parse structured logs, (d) **Fallback**: If framework doesn't log tokens, rely solely on OpenAI Usage API verification with 5-minute delay for API propagation, (e) **Validation**: Compare parsed tokens with Usage API, log discrepancies >5% as warnings, and prefer Usage API values in final metrics if discrepancy >10%.
+
+- **FR-009.2**: Token verification retry logic MUST: (1) Wait 5 minutes after step completion for OpenAI Usage API propagation, (2) Retry up to 3 times with exponential backoff (5s, 10s, 20s) if API returns 429 or 503, (3) On persistent API failure, mark verification as incomplete in usage_api.json with local counts only, (4) Log all API responses (success and failure) with timestamps for audit trail.
 
 - **FR-010**: System MUST compute composite scores: Q* = 0.4·ESR + 0.3·(CRUDe/12) + 0.3·MC and AEI = AUTR / log(1 + TOK_IN).
 
@@ -203,6 +219,10 @@ A researcher integrates the BAEs Framework into the experiment harness after val
 
 - **FR-021**: System MUST generate visualizations: radar charts (6 metrics), Pareto plots (Q* vs TOK_IN), and timeline charts (CRUD coverage and downtime events over steps).
 
+- **FR-021.1**: Visualization specifications MUST define: (a) **Radar Charts**: 6 axes (AUTR, normalized TOK_IN, normalized T_WALL, CRUDe/12, ESR, MC) on 0-1 scale, one polygon per framework with distinct colors (color-blind safe palette: blue, orange, green), export as SVG 800x800px with framework legend, (b) **Pareto Plots**: Scatter plot with Q* (y-axis, 0-1 range) vs log(TOK_IN) (x-axis), framework markers with labels, Pareto frontier line connecting optimal points, export as SVG 1000x600px, (c) **Timeline Charts**: Dual-axis line chart showing CRUDe (left y-axis, 0-12 range) and ZDI cumulative count (right y-axis) over steps 1-6 (x-axis), one line per metric per framework, export as SVG 1200x600px.
+
+- **FR-021.2**: All visualizations MUST use consistent styling: (1) Color-blind safe palette (blue #0173B2, orange #DE8F05, green #029E73), (2) 12pt Arial font for labels, 14pt bold for titles, (3) Grid lines at 25% intervals, (4) Framework legend in top-right corner, (5) Axis labels clearly describe metrics with units, (6) SVG format for publication-quality scaling.
+
 **Reproducibility & Determinism**
 
 - **FR-022**: System MUST enforce deterministic execution: temperature=0, top_p=1.0, fixed random seeds in config, and identical prompts across runs.
@@ -222,6 +242,14 @@ A researcher integrates the BAEs Framework into the experiment harness after val
 - **FR-028**: System MUST automatically provision isolated Python 3.11 virtual environments, install dependencies, clone framework repositories, and configure ports per framework.
 
 - **FR-029**: System MUST handle retries and timeouts automatically: up to 3 API retries with exponential backoff, up to 2 step retries (r=2) before marking a step as failed, and enforce 10-minute timeout per step (configurable in config/experiment.yaml as step_timeout_seconds). On timeout, system sends SIGTERM, waits 30 seconds, then SIGKILL if needed.
+
+**Implementation Priority & Phasing**
+
+- **FR-030**: System implementation MUST follow phased approach: (1) **Phase 1**: Complete infrastructure (orchestration, logging, metrics collection, archiving) - COMPLETE, (2) **Phase 2**: Implement one complete framework adapter (recommended: ChatDev due to mature CLI and documentation) with all integration components (environment setup, command execution, token parsing, HITL detection), (3) **Phase 3**: Validate Phase 2 with single-step and six-step test runs, verify reproducibility, (4) **Phase 4**: Extend adapter pattern to remaining frameworks (BAEs, GitHub Spec-kit), (5) **Phase 5**: Execute multi-framework comparison and validate statistical analysis. No phase can begin until previous phase passes acceptance tests.
+
+- **FR-031**: Framework adapter implementation for each framework MUST complete these steps in order: (1) **Research**: Run framework manually standalone, document CLI/API usage, identify token logging format and HITL patterns (2-4 hours), (2) **Environment Setup**: Implement virtual environment creation and dependency installation (2-4 hours), (3) **Basic Execution**: Implement command execution with stdout/stderr capture (4-8 hours), (4) **Token Tracking**: Implement parsing of framework-specific token logs (4-6 hours), (5) **HITL Integration**: Implement detection and response injection (4-6 hours), (6) **Health Checks**: Implement framework-specific health monitoring (2-3 hours), (7) **Graceful Shutdown**: Implement cleanup and process termination (1-2 hours), (8) **Testing**: Validate single-step execution, six-step run, reproducibility (4-8 hours). Estimated total: 23-41 hours per framework adapter.
+
+- **FR-032**: Before implementing any framework adapter, system MUST validate framework compatibility: (1) Framework supports Python 3.11 or can run in isolated environment, (2) Framework provides CLI or API for programmatic task execution, (3) Framework can receive iterative refinement commands (6 sequential steps), (4) Framework exposes token usage through logs, API, or OpenAI client integration, (5) Framework documentation exists for integration guidance. If any requirement fails, document workaround or mark framework as incompatible for this experiment.
 
 ### Key Entities
 
