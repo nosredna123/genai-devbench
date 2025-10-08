@@ -1,5 +1,5 @@
 """
-Orchestrator runner for managing single framework executions.
+Orchestrator runner for managing single and multi-framework executions.
 
 Handles timeouts, retries, and full run lifecycle.
 """
@@ -7,8 +7,9 @@ Handles timeouts, retries, and full run lifecycle.
 import signal
 import time
 import os
+import json
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import subprocess
 from src.utils.logger import get_logger
 from src.utils.isolation import create_isolated_workspace, cleanup_workspace
@@ -18,6 +19,9 @@ from src.orchestrator.metrics_collector import MetricsCollector
 from src.orchestrator.validator import Validator
 from src.orchestrator.archiver import Archiver
 from src.adapters.baes_adapter import BAeSAdapter
+from src.adapters.chatdev_adapter import ChatDevAdapter
+from src.adapters.ghspec_adapter import GHSpecAdapter
+from src.analysis.stopping_rule import check_convergence, get_convergence_summary
 
 logger = get_logger(__name__)
 
@@ -193,6 +197,12 @@ class OrchestratorRunner:
             if self.framework_name == 'baes':
                 self.adapter = BAeSAdapter(framework_config, self.run_id, 
                                           self.workspace_path)
+            elif self.framework_name == 'chatdev':
+                self.adapter = ChatDevAdapter(framework_config, self.run_id,
+                                             self.workspace_path)
+            elif self.framework_name == 'ghspec':
+                self.adapter = GHSpecAdapter(framework_config, self.run_id,
+                                            self.workspace_path)
             else:
                 raise ValueError(f"Unsupported framework: {self.framework_name}")
                 
@@ -354,3 +364,157 @@ class OrchestratorRunner:
                     logger.warning("Error during adapter shutdown",
                                  extra={'run_id': self.run_id,
                                        'metadata': {'error': str(e)}})
+    
+    def execute_multi_framework(
+        self,
+        frameworks: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Execute experiments across multiple frameworks with stopping rule.
+        
+        Runs each framework until convergence is achieved (5-25 runs per framework).
+        Uses bootstrap confidence intervals to determine convergence.
+        
+        Args:
+            frameworks: List of framework names to execute. 
+                       If None, executes all frameworks from config.
+        
+        Returns:
+            Dictionary with results for all frameworks:
+            {
+                'frameworks': {
+                    'baes': {
+                        'runs': [list of run results],
+                        'convergence': convergence result dict,
+                        'aggregate_metrics': aggregate statistics
+                    },
+                    ...
+                },
+                'summary': {
+                    'total_runs': int,
+                    'successful_runs': int,
+                    'failed_runs': int
+                }
+            }
+        """
+        # Load config if not already loaded
+        if not self.config:
+            self.config = load_config(self.config_path)
+        
+        # Determine frameworks to execute
+        if frameworks is None:
+            frameworks = list(self.config['frameworks'].keys())
+        
+        logger.info("Starting multi-framework experiment",
+                   extra={'metadata': {'frameworks': frameworks}})
+        
+        all_results = {}
+        total_runs = 0
+        successful_runs = 0
+        failed_runs = 0
+        
+        for framework in frameworks:
+            logger.info(f"Starting experiments for framework: {framework}",
+                       extra={'metadata': {'framework': framework}})
+            
+            framework_runs = []
+            framework_metrics = []
+            run_count = 0
+            
+            # Execute runs until stopping rule satisfied
+            while run_count < 25:  # MAX_RUNS
+                run_count += 1
+                total_runs += 1
+                
+                logger.info(f"Executing run {run_count} for {framework}",
+                           extra={'metadata': {'framework': framework, 'run': run_count}})
+                
+                # Create new runner for this run
+                runner = OrchestratorRunner(framework, self.config_path)
+                result = runner.execute_single_run()
+                
+                framework_runs.append(result)
+                
+                if result['status'] == 'success':
+                    successful_runs += 1
+                    # Extract aggregate metrics for convergence check
+                    metrics = result['metrics']['aggregate_metrics']
+                    framework_metrics.append(metrics)
+                else:
+                    failed_runs += 1
+                    logger.warning(f"Run {run_count} failed for {framework}",
+                                 extra={'metadata': {
+                                     'framework': framework,
+                                     'error': result.get('error')
+                                 }})
+                
+                # Check stopping rule (only if we have enough successful runs)
+                if len(framework_metrics) >= 5:  # MIN_RUNS
+                    convergence = check_convergence(
+                        framework_metrics,
+                        framework
+                    )
+                    
+                    logger.info(f"Convergence check for {framework}",
+                               extra={'metadata': {
+                                   'framework': framework,
+                                   'runs': len(framework_metrics),
+                                   'should_stop': convergence['should_stop']
+                               }})
+                    
+                    if convergence['should_stop']:
+                        logger.info(f"Stopping rule satisfied for {framework}",
+                                   extra={'metadata': {
+                                       'framework': framework,
+                                       'runs': len(framework_metrics),
+                                       'reason': convergence['reason']
+                                   }})
+                        
+                        print(f"\n{framework.upper()} Convergence:")
+                        print(get_convergence_summary(convergence))
+                        break
+            
+            # Compute aggregate statistics for this framework
+            from src.analysis.statistics import bootstrap_aggregate_metrics
+            aggregate_stats = bootstrap_aggregate_metrics(framework_metrics)
+            
+            all_results[framework] = {
+                'runs': framework_runs,
+                'convergence': convergence if len(framework_metrics) >= 5 else None,
+                'aggregate_metrics': aggregate_stats,
+                'n_successful': len(framework_metrics),
+                'n_failed': run_count - len(framework_metrics)
+            }
+            
+            logger.info(f"Completed all runs for {framework}",
+                       extra={'metadata': {
+                           'framework': framework,
+                           'successful': len(framework_metrics),
+                           'failed': run_count - len(framework_metrics)
+                       }})
+        
+        # Save multi-framework results
+        results_path = Path("runs/multi_framework_results.json")
+        results_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        final_results = {
+            'frameworks': all_results,
+            'summary': {
+                'total_runs': total_runs,
+                'successful_runs': successful_runs,
+                'failed_runs': failed_runs,
+                'frameworks_tested': len(frameworks)
+            }
+        }
+        
+        with open(results_path, 'w', encoding='utf-8') as f:
+            json.dump(final_results, f, indent=2)
+        
+        logger.info("Multi-framework experiment completed",
+                   extra={'metadata': {
+                       'total_runs': total_runs,
+                       'successful': successful_runs,
+                       'failed': failed_runs
+                   }})
+        
+        return final_results
