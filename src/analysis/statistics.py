@@ -265,6 +265,297 @@ def bootstrap_aggregate_metrics(
     return results
 
 
+def compute_composite_scores(metrics: Dict[str, float]) -> Dict[str, float]:
+    """
+    Compute composite quality scores from raw metrics.
+    
+    Implements two composite scores:
+    - Q* (Quality Star): Weighted combination of ESR, CRUDe, and MC
+    - AEI (API Efficiency Index): Ratio of AUTR to log(1 + TOK_IN)
+    
+    Args:
+        metrics: Dictionary of metric values. Must contain:
+                - ESR (Emerging State Rate)
+                - CRUDe (CRUD evolution coverage)
+                - MC (Model Calls)
+                - AUTR (Automated User Testing Rate)
+                - TOK_IN (Input tokens)
+    
+    Returns:
+        Dictionary with:
+        {
+            'Q*': float (Quality Star score),
+            'AEI': float (API Efficiency Index)
+        }
+    
+    Raises:
+        ValueError: If required metrics are missing
+    """
+    required_for_qstar = ['ESR', 'CRUDe', 'MC']
+    required_for_aei = ['AUTR', 'TOK_IN']
+    
+    missing_qstar = [m for m in required_for_qstar if m not in metrics]
+    missing_aei = [m for m in required_for_aei if m not in metrics]
+    
+    if missing_qstar or missing_aei:
+        raise ValueError(
+            f"Missing required metrics. "
+            f"For Q*: {missing_qstar}. For AEI: {missing_aei}"
+        )
+    
+    # Q* = 0.4·ESR + 0.3·(CRUDe/12) + 0.3·MC
+    # ESR and MC are already normalized rates [0,1]
+    # CRUDe is count [0,12], normalize to [0,1]
+    q_star = (
+        0.4 * metrics['ESR'] +
+        0.3 * (metrics['CRUDe'] / 12.0) +
+        0.3 * metrics['MC']
+    )
+    
+    # AEI = AUTR / log(1 + TOK_IN)
+    # AUTR is a rate [0,1]
+    # log(1 + TOK_IN) normalizes token consumption
+    aei = metrics['AUTR'] / math.log(1 + metrics['TOK_IN'])
+    
+    return {
+        'Q*': q_star,
+        'AEI': aei
+    }
+
+
+def generate_statistical_report(
+    frameworks_data: Dict[str, List[Dict[str, float]]],
+    output_path: str
+) -> None:
+    """
+    Generate comprehensive statistical report in Markdown format.
+    
+    Creates a report with:
+    - Aggregate statistics table (mean, median, CI for each metric)
+    - Kruskal-Wallis test results for each metric
+    - Pairwise comparisons with Cliff's delta effect sizes
+    - Outlier detection results
+    
+    Args:
+        frameworks_data: Dict mapping framework names to lists of run metrics.
+                        Example: {
+                            'BAEs': [
+                                {'AUTR': 0.85, 'TOK_IN': 12000, ...},
+                                {'AUTR': 0.88, 'TOK_IN': 11500, ...}
+                            ],
+                            ...
+                        }
+        output_path: Path to save the markdown report.
+    
+    Raises:
+        ValueError: If frameworks_data is empty or invalid.
+    """
+    if not frameworks_data:
+        raise ValueError("frameworks_data cannot be empty")
+    
+    from pathlib import Path
+    
+    # Start markdown document
+    lines = [
+        "# Statistical Analysis Report",
+        "",
+        f"**Generated:** {_get_timestamp()}",
+        "",
+        f"**Frameworks:** {', '.join(frameworks_data.keys())}",
+        "",
+        "---",
+        ""
+    ]
+    
+    # Collect all metrics
+    all_metrics = set()
+    for runs in frameworks_data.values():
+        for run in runs:
+            all_metrics.update(run.keys())
+    
+    all_metrics = sorted(all_metrics)
+    
+    # Section 1: Aggregate Statistics
+    lines.extend([
+        "## 1. Aggregate Statistics",
+        "",
+        "### Mean Values with 95% Bootstrap CI",
+        ""
+    ])
+    
+    # Table header
+    header = "| Framework | " + " | ".join(all_metrics) + " |"
+    separator = "|-----------|" + "|".join(["-" * 12 for _ in all_metrics]) + "|"
+    lines.extend([header, separator])
+    
+    # Table rows
+    for framework, runs in frameworks_data.items():
+        aggregated = bootstrap_aggregate_metrics(runs)
+        row = f"| {framework} |"
+        
+        for metric in all_metrics:
+            if metric in aggregated:
+                stats = aggregated[metric]
+                mean = stats['mean']
+                ci_lower = stats['ci_lower']
+                ci_upper = stats['ci_upper']
+                row += f" {mean:.3f} [{ci_lower:.3f}, {ci_upper:.3f}] |"
+            else:
+                row += " N/A |"
+        
+        lines.append(row)
+    
+    lines.extend(["", ""])
+    
+    # Section 2: Kruskal-Wallis Tests
+    lines.extend([
+        "## 2. Kruskal-Wallis H-Tests",
+        "",
+        "Testing for significant differences across all frameworks.",
+        "",
+        "| Metric | H | p-value | Significant | Groups | N |",
+        "|--------|---|---------|-------------|--------|---|"
+    ])
+    
+    for metric in all_metrics:
+        # Collect metric values by framework
+        groups = {}
+        for framework, runs in frameworks_data.items():
+            groups[framework] = [run[metric] for run in runs if metric in run]
+        
+        if all(len(vals) > 0 for vals in groups.values()):
+            result = kruskal_wallis_test(groups)
+            sig = "✓ Yes" if result['significant'] else "✗ No"
+            lines.append(
+                f"| {metric} | {result['H']:.3f} | {result['p_value']:.4f} | "
+                f"{sig} | {result['n_groups']} | {result['n_total']} |"
+            )
+        else:
+            lines.append(f"| {metric} | N/A | N/A | N/A | N/A | N/A |")
+    
+    lines.extend(["", ""])
+    
+    # Section 3: Pairwise Comparisons
+    lines.extend([
+        "## 3. Pairwise Comparisons",
+        "",
+        "Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.",
+        ""
+    ])
+    
+    for metric in all_metrics:
+        # Collect metric values by framework
+        groups = {}
+        for framework, runs in frameworks_data.items():
+            groups[framework] = [run[metric] for run in runs if metric in run]
+        
+        if all(len(vals) > 0 for vals in groups.values()) and len(groups) >= 2:
+            lines.append(f"### {metric}")
+            lines.append("")
+            lines.append("| Comparison | p-value | Significant | Cliff's δ | Effect Size |")
+            lines.append("|------------|---------|-------------|-----------|-------------|")
+            
+            comparisons = pairwise_comparisons(groups)
+            
+            for comp in comparisons:
+                pair = f"{comp['group1']} vs {comp['group2']}"
+                sig = "✓" if comp['significant'] else "✗"
+                delta = comp['cliff_delta']
+                effect = comp['effect_size']
+                
+                lines.append(
+                    f"| {pair} | {comp['p_value']:.4f} | {sig} | "
+                    f"{delta:.3f} | {effect} |"
+                )
+            
+            lines.extend(["", ""])
+    
+    # Section 4: Outlier Detection
+    lines.extend([
+        "## 4. Outlier Detection",
+        "",
+        "Values > 3σ from median (per framework, per metric).",
+        ""
+    ])
+    
+    outliers_found = False
+    for framework, runs in frameworks_data.items():
+        framework_outliers = []
+        
+        for metric in all_metrics:
+            values = [run[metric] for run in runs if metric in run]
+            if len(values) >= 3:
+                outlier_indices, outlier_values = identify_outliers(values)
+                
+                if outlier_indices:
+                    framework_outliers.append(
+                        f"  - **{metric}**: {len(outlier_indices)} outlier(s) "
+                        f"at runs {outlier_indices} with values {outlier_values}"
+                    )
+        
+        if framework_outliers:
+            outliers_found = True
+            lines.append(f"**{framework}:**")
+            lines.extend(framework_outliers)
+            lines.append("")
+    
+    if not outliers_found:
+        lines.append("No outliers detected.")
+        lines.append("")
+    
+    # Section 5: Composite Scores
+    lines.extend([
+        "## 5. Composite Scores",
+        "",
+        "**Q*** = 0.4·ESR + 0.3·(CRUDe/12) + 0.3·MC",
+        "",
+        "**AEI** = AUTR / log(1 + TOK_IN)",
+        "",
+        "| Framework | Q* Mean | Q* CI | AEI Mean | AEI CI |",
+        "|-----------|---------|-------|----------|--------|"
+    ])
+    
+    for framework, runs in frameworks_data.items():
+        # Compute composite scores for each run
+        q_star_values = []
+        aei_values = []
+        
+        for run in runs:
+            try:
+                scores = compute_composite_scores(run)
+                q_star_values.append(scores['Q*'])
+                aei_values.append(scores['AEI'])
+            except ValueError:
+                # Missing required metrics, skip
+                continue
+        
+        if q_star_values and aei_values:
+            q_agg = bootstrap_aggregate_metrics([{'Q*': v} for v in q_star_values])
+            aei_agg = bootstrap_aggregate_metrics([{'AEI': v} for v in aei_values])
+            
+            q_mean = q_agg['Q*']['mean']
+            q_ci = f"[{q_agg['Q*']['ci_lower']:.3f}, {q_agg['Q*']['ci_upper']:.3f}]"
+            aei_mean = aei_agg['AEI']['mean']
+            aei_ci = f"[{aei_agg['AEI']['ci_lower']:.3f}, {aei_agg['AEI']['ci_upper']:.3f}]"
+            
+            lines.append(
+                f"| {framework} | {q_mean:.3f} | {q_ci} | {aei_mean:.3f} | {aei_ci} |"
+            )
+        else:
+            lines.append(f"| {framework} | N/A | N/A | N/A | N/A |")
+    
+    lines.extend(["", ""])
+    
+    # Write to file
+    output_path_obj = Path(output_path)
+    output_path_obj.parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines))
+    
+    logger.info(f"Statistical report saved to {output_path}")
+
+
 def identify_outliers(
     values: List[float],
     threshold_std: float = 3.0
@@ -357,7 +648,7 @@ def _mann_whitney_u_test(group1: List[float], group2: List[float]) -> float:
     
     # Assign ranks
     rank_sum_1 = 0
-    for i, (value, group) in enumerate(combined):
+    for i, (_, group) in enumerate(combined):
         if group == 1:
             rank_sum_1 += i + 1
     
@@ -379,3 +670,9 @@ def _mann_whitney_u_test(group1: List[float], group2: List[float]) -> float:
     p_value = 2 * (1 - 0.5 * (1 + math.erf(abs(z) / math.sqrt(2))))
     
     return p_value
+
+
+def _get_timestamp() -> str:
+    """Get current UTC timestamp in ISO format."""
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
