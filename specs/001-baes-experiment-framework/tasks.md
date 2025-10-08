@@ -22,12 +22,12 @@ description: "Implementation tasks for BAEs Experiment Framework"
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Create project directory structure: config/, src/{orchestrator,adapters,analysis,utils}/, tests/{unit,integration,contract}/, runners/, runs/
-- [ ] T002 Initialize Python project with requirements.txt (PyYAML==6.0.1, requests==2.31.0, pytest==7.4.3)
-- [ ] T003 [P] Create .env.example with template API key variables (OPENAI_API_KEY_BAES, OPENAI_API_KEY_CHATDEV, OPENAI_API_KEY_GHSPEC)
-- [ ] T004 [P] Create .gitignore (runs/, .env, __pycache__, *.pyc, venv/)
-- [ ] T005 [P] Create LICENSE file (CC BY 4.0)
-- [ ] T006 [P] Create README.md with project overview and setup instructions
+- [x] T001 Create project directory structure: config/, src/{orchestrator,adapters,analysis,utils}/, tests/{unit,integration,contract}/, runners/, runs/
+- [x] T002 Initialize Python project with requirements.txt (PyYAML==6.0.1, requests==2.31.0, pytest==7.4.3)
+- [x] T003 [P] Create .env.example with template API key variables (OPENAI_API_KEY_BAES, OPENAI_API_KEY_CHATDEV, OPENAI_API_KEY_GHSPEC)
+- [x] T004 [P] Create .gitignore (runs/, .env, __pycache__, *.pyc, venv/)
+- [x] T005 [P] Create LICENSE file (CC BY 4.0)
+- [x] T006 [P] Create README.md with project overview and setup instructions
 
 ---
 
@@ -37,13 +37,13 @@ description: "Implementation tasks for BAEs Experiment Framework"
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T007 Implement structured JSON logger in src/utils/logger.py (JSONFormatter with timestamp, run_id, framework, step, event, metadata fields)
-- [ ] T008 [P] Implement configuration loader in src/orchestrator/config_loader.py (load/validate experiment.yaml schema, validate all required keys)
-- [ ] T009 [P] Create base adapter abstract class in src/adapters/base_adapter.py (@abstractmethod: start, execute_step, health_check, handle_hitl, stop)
-- [ ] T010 [P] Implement workspace isolation utilities in src/utils/isolation.py (create_isolated_workspace, cleanup_workspace with UUID run_id)
-- [ ] T011 Create experiment.yaml configuration template in config/experiment.yaml (frameworks: {baes, chatdev, ghspec} with repo_url, commit_hash, api_port, ui_port, api_key_env; stopping_rule; timeouts)
-- [ ] T012 [P] Create six-step scenario prompt files in config/prompts/ (step_1.txt: "Create Student/Course/Teacher CRUD app", step_2.txt: "Add enrollment", step_3.txt: "Add teacher assignment", step_4.txt: "Add validation", step_5.txt: "Add pagination", step_6.txt: "Add comprehensive UI")
-- [ ] T013 [P] Create fixed HITL clarification text in config/hitl/expanded_spec.txt (deterministic expanded specification for all frameworks)
+- [x] T007 Implement structured JSON logger in src/utils/logger.py (JSONFormatter with timestamp, run_id, framework, step, event, metadata fields)
+- [x] T008 [P] Implement configuration loader in src/orchestrator/config_loader.py (load/validate experiment.yaml schema, validate all required keys)
+- [x] T009 [P] Create base adapter abstract class in src/adapters/base_adapter.py (@abstractmethod: start, execute_step, health_check, handle_hitl, stop)
+- [x] T010 [P] Implement workspace isolation utilities in src/utils/isolation.py (create_isolated_workspace, cleanup_workspace with UUID run_id)
+- [x] T011 Create experiment.yaml configuration template in config/experiment.yaml (frameworks: {baes, chatdev, ghspec} with repo_url, commit_hash, api_port, ui_port, api_key_env; stopping_rule; timeouts)
+- [x] T012 [P] Create six-step scenario prompt files in config/prompts/ (step_1.txt: "Create Student/Course/Teacher CRUD app", step_2.txt: "Add enrollment", step_3.txt: "Add teacher assignment", step_4.txt: "Add validation", step_5.txt: "Add pagination", step_6.txt: "Add comprehensive UI")
+- [x] T013 [P] Create fixed HITL clarification text in config/hitl/expanded_spec.txt (deterministic expanded specification for all frameworks)
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
