@@ -71,14 +71,21 @@ pip install -q --upgrade pip
 pip install -q -r requirements.txt
 echo -e "${GREEN}✓${NC} Dependencies installed"
 
-# Check for .env file
-if [ ! -f "$PROJECT_ROOT/.env" ]; then
+# Load environment variables from .env file
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    echo "Loading environment variables from .env..."
+    set -a  # Mark variables for export
+    source "$PROJECT_ROOT/.env"
+    set +a  # Unmark variables for export
+    echo -e "${GREEN}✓${NC} Environment variables loaded"
+else
     echo -e "${YELLOW}Warning: .env file not found${NC}"
     echo "Copy .env.example to .env and configure API keys"
     if [ ! -f "$PROJECT_ROOT/.env.example" ]; then
         echo -e "${RED}Error: .env.example not found${NC}"
         exit 1
     fi
+    echo -e "${YELLOW}Continuing without API keys...${NC}"
 fi
 
 # Create runs directory if it doesn't exist
