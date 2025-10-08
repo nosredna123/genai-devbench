@@ -169,7 +169,7 @@ description: "Implementation tasks for BAEs Experiment Framework"
 
 ### ChatDev Adapter Complete Implementation (Replaces T027)
 
-- [ ] T063 [US2] **Research ChatDev Integration** - Run ChatDev standalone manually, document: CLI entry point (run.py or main.py), command-line arguments for task execution, console output format, token logging patterns, HITL detection signals, service architecture (CLI vs API-based), Python/dependency requirements. Create research notes in docs/chatdev_integration.md (Estimated: 2-4 hours)
+- [x] T063 [US2] **Research ChatDev Integration** - Run ChatDev standalone manually, document: CLI entry point (run.py or main.py), command-line arguments for task execution, console output format, token logging patterns, HITL detection signals, service architecture (CLI vs API-based), Python/dependency requirements. Create research notes in docs/chatdev_integration.md (Estimated: 2-4 hours)
 
 - [ ] T064 [US2] **ChatDev Environment Setup** - Implement in src/adapters/chatdev_adapter.py start() method: Create Python virtual environment at workspace/.venv using subprocess.run([sys.executable, "-m", "venv"]), install ChatDev dependencies from requirements.txt using pip install, verify Python version compatibility, set OPENAI_API_KEY environment variable from config (Estimated: 2-4 hours, implements FR-002.1 step 2-3)
 
