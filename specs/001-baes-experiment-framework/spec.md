@@ -5,6 +5,12 @@
 **Status**: Draft  
 **Input**: User description: "BAEs experiment framework for comparing LLM-driven software generation systems (BAEs, ChatDev, GitHub Spec-kit) across a six-step academic scenario with deterministic orchestration, reproducible metrics, and automated validation"
 
+## Clarifications
+
+### Session 2025-10-08
+
+- Q: How are experimental scenarios defined, and can the system support multiple scenarios? → A: Initial version focuses on a single hardcoded six-step academic CRUD scenario (Student, Course, Teacher entities). Scenario content is stored in version-controlled prompt files (config/prompts/step_1.txt through step_6.txt). Future extensibility (scenario library with schema validation) is documented as a design consideration but deferred to post-initial release.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - [Brief Title] (Priority: P1)
@@ -138,8 +144,8 @@ A researcher integrates the BAEs Framework into the experiment harness after val
 - What happens when the same run ID is accidentally reused?
   - System detects existing run directory, appends a UUID suffix to prevent collision, logs a warning, and proceeds with the unique ID.
 
-- What happens when a framework requires protocol compliance modifications?
-  - For external frameworks (ChatDev, Spec-kit): System fails the integration test and documents the incompatibility. The framework cannot be tested until protocol expectations are adjusted (change experimental design, not framework). For BAEs Framework: Modifications are permitted and documented in a BAEs integration log with commit hashes, modified files, and rationale. Changes are version-controlled separately from orchestrator code to maintain clear separation between experimental infrastructure and research artifact evolution.
+- What happens when a prompt file (step_N.txt) is missing or corrupted?
+  - System validates all six prompt files exist and are readable before starting any run. If validation fails, system logs error with missing file names and exits before creating run directory. Researcher must fix prompt files before retrying.
 
 ## Requirements *(mandatory)*
 
@@ -147,7 +153,7 @@ A researcher integrates the BAEs Framework into the experiment harness after val
 
 **Orchestration & Execution**
 
-- **FR-001**: System MUST execute a six-step scenario where each step sends a natural language command to a framework and waits for completion before proceeding to the next step.
+- **FR-001**: System MUST execute a six-step scenario where each step sends a natural language command to a framework and waits for completion before proceeding to the next step. Step commands are stored in config/prompts/step_1.txt through step_6.txt and version-controlled for reproducibility.
 
 - **FR-002**: System MUST support three framework adapters (ChatDev, GitHub Spec-kit, BAEs) that translate standard CLI commands (start, command, health, stop) into framework-specific invocations. External framework adapters (ChatDev, Spec-kit) are read-only wrappers that do not modify framework behavior. BAEs adapter may include both wrapper translation and documentation of BAEs framework modifications needed for protocol compliance.
 
@@ -223,7 +229,7 @@ A researcher integrates the BAEs Framework into the experiment harness after val
 
 - **Run**: Represents a single experimental execution with attributes: run ID (UUID), framework name, start timestamp, end timestamp, status (in-progress/completed/failed), artifact directory path.
 
-- **Step**: Represents one of six evolutionary commands with attributes: step number (1-6), command text, completion timestamp, success status, retry count.
+- **Step**: Represents one of six evolutionary commands with attributes: step number (1-6), command text (from config/prompts/step_N.txt), completion timestamp, success status, retry count.
 
 - **Metric**: Represents a measured value with attributes: metric name (e.g., TOK_IN, AUTR, CRUDe), value (numeric), unit, step number, run ID.
 
@@ -295,7 +301,7 @@ A researcher integrates the BAEs Framework into the experiment harness after val
 
 - **Assumption 5**: Framework repositories remain accessible at their public GitHub URLs for cloning at specified commit hashes.
 
-- **Assumption 6**: The six-step scenario adequately represents realistic software evolution patterns for academic domain applications.
+- **Assumption 6**: The six-step academic CRUD evolution scenario (Student, Course, Teacher entities) adequately represents realistic software evolution patterns for academic domain applications. Step commands are stored in config/prompts/step_1.txt through step_6.txt. Future extensibility to support multiple scenarios is a documented design consideration but not implemented in this version.
 
 - **Assumption 7**: Failed steps result in run termination and a fresh run attempt. After r=2 automatic step retries fail, the system marks the run as "failed", archives partial artifacts for debugging, and continues with the next scheduled run. Failed runs do not count toward the stopping rule minimum. See [decisions.md](decisions.md#decision-1-failed-step-retry-policy) for detailed rationale.
 
@@ -316,3 +322,19 @@ A researcher integrates the BAEs Framework into the experiment harness after val
 - **Network**: System requires stable internet access for OpenAI API calls and framework repository cloning but should gracefully handle transient network failures with retries.
 
 - **Determinism**: No use of system time for random seeds; all randomness sources must be explicitly seeded from config/experiment.yaml.
+
+## Future Extensibility Considerations
+
+**Multi-Scenario Support** (Deferred to post-initial release):
+
+The specification acknowledges that future research may benefit from testing frameworks across multiple scenarios with varying complexity, domain focus, and step counts. While the initial version focuses exclusively on the six-step academic CRUD scenario, the following design considerations document how scenario extensibility could be added:
+
+- **Scenario Library Structure**: Future versions could organize scenarios as `scenarios/{scenario-name}/` directories containing scenario.yaml (metadata: name, description, step count, timeout budget) and step files (step_1.txt through step_N.txt).
+
+- **Schema Validation**: A JSON/YAML schema could validate scenario files before execution, ensuring consistent step numbering, required metadata fields, and explicit technology stack specifications in each step command.
+
+- **Metric Adaptations**: Step-dependent calculations would become parameterized: AUTR = 1 - HIT/N (where N = scenario step count from metadata), timeout budgets would be scenario-configurable, and all metrics would be tagged with scenario name for cross-scenario comparisons.
+
+- **Backward Compatibility**: The current six-step scenario would become `scenarios/academic-crud-evolution/` with no orchestrator logic changes required for existing runs.
+
+**Rationale for Deferral**: Implementing scenario library infrastructure in the initial version would add complexity (schema design, validation logic, dynamic timeout calculation) without immediate research value. The single six-step scenario is sufficient to validate the comparative framework evaluation methodology. Multi-scenario support can be added incrementally based on research findings from the initial experiment.
