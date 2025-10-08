@@ -29,11 +29,12 @@
   - Decision 1: Failed steps → terminate and restart
   - Decision 2: Step timeout → 10 minutes
   - Decision 3: Artifact archival → full workspace
+  - Decision 4: Framework testing order → External frameworks first (P1), BAEs integration (P2), comparison (P3)
 - All 28 functional requirements are testable with clear acceptance criteria
 - 16 success criteria defined with specific metrics (time bounds, percentages, counts)
-- 8 edge cases documented with explicit handling strategies (added timeout edge case)
+- 9 edge cases documented with explicit handling strategies (includes framework protocol adaptation handling)
 - Scope bounded to three frameworks, six steps, specific metric set
-- 9 assumptions and 6 constraints documented
+- 10 assumptions (including framework adaptation policy) and 6 constraints documented
 
 ## Feature Readiness
 
@@ -43,18 +44,20 @@
 - [x] No implementation details leak into specification
 
 **Notes**: 
-- 4 user stories (P1-P3) cover complete research workflow: single run → comparison → reproducibility → analysis
+- 5 user stories (P1-P3) cover complete research workflow: single run (external frameworks) → BAEs integration → comparison → reproducibility → analysis
 - All clarifications resolved with documented decisions in [decisions.md](../decisions.md)
+- Strategic testing order: validate orchestrator with ChatDev/Spec-kit first (P1), then integrate BAEs (P2), finally run comparative analysis (P3)
 - Specification is ready for `/speckit.plan` phase
 
 ## ~~Clarifications Required~~
 
-**Status**: ✅ **ALL RESOLVED** (2025-10-08)
+**Status**: ✅ **ALL RESOLVED** (2025-10-08, updated 2025-01-08)
 
 All clarifications have been resolved. See [decisions.md](../decisions.md) for detailed decision records:
 - **Decision 1**: Failed Step Retry Policy → Option A (terminate and restart)
 - **Decision 2**: Step Timeout Policy → Option B modified (10 minutes per step)
 - **Decision 3**: Artifact Archival Scope → Option A (full workspace)
+- **Decision 4**: Framework Testing Order Strategy → Option B (external frameworks first, BAEs second, comparison last)
 
 ---
 
@@ -73,7 +76,9 @@ All clarifications have been resolved. See [decisions.md](../decisions.md) for d
 **Non-Blocking Observations**:
 - Specification is comprehensive and well-structured
 - User stories are independently testable with clear priorities
+- Strategic testing order reduces risk: validate orchestrator with stable external frameworks (ChatDev, Spec-kit) before integrating BAEs, which may need protocol modifications
 - Functional requirements cover all aspects: orchestration, metrics, validation, artifacts, analysis, automation
 - Success criteria are measurable and technology-agnostic
-- Edge cases thoughtfully addressed with timeout and failure handling
+- Edge cases thoughtfully addressed including framework adaptation handling
 - All decisions documented with rollback instructions for future adjustments
+- Clear separation between read-only adapters (external frameworks) and modifiable integration (BAEs)

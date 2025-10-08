@@ -18,15 +18,15 @@
 
 ### User Story 1 - Execute Single Framework Run (Priority: P1)
 
-A researcher executes a complete six-step experiment run for one framework (e.g., BAEs) to evaluate its ability to generate and evolve a full-stack web application from natural language commands. The system orchestrates the entire process automatically, collecting metrics and validating outputs at each step.
+A researcher executes a complete six-step experiment run for an external framework (ChatDev or GitHub Spec-kit) to evaluate its ability to generate and evolve a full-stack web application from natural language commands. The system orchestrates the entire process automatically, collecting metrics and validating outputs at each step.
 
-**Why this priority**: This is the core functionality that enables any experimental comparison. Without the ability to execute a single framework run reliably, no comparative analysis is possible.
+**Why this priority**: This is the core functionality that enables any experimental comparison. Testing with stable external frameworks first (ChatDev, Spec-kit) validates the orchestrator infrastructure before integrating BAEs, which may require protocol adaptations.
 
-**Independent Test**: Can be fully tested by running `./runners/run_experiment.sh baes` and verifying that all six steps complete with metrics collected, artifacts archived, and health checks passed.
+**Independent Test**: Can be fully tested by running `./runners/run_experiment.sh chatdev` and verifying that all six steps complete with metrics collected, artifacts archived, and health checks passed.
 
 **Acceptance Scenarios**:
 
-1. **Given** the researcher has configured experiment.yaml with BAEs framework details, **When** they execute run_experiment.sh for BAEs, **Then** the system creates an isolated environment, executes all six steps sequentially, collects token/time/quality metrics, and archives all artifacts with a unique run ID.
+1. **Given** the researcher has configured experiment.yaml with ChatDev framework details, **When** they execute run_experiment.sh for ChatDev, **Then** the system creates an isolated environment, executes all six steps sequentially, collects token/time/quality metrics, and archives all artifacts with a unique run ID.
 
 2. **Given** a framework run is in progress at step 3, **When** the framework requests clarification, **Then** the system automatically responds with the fixed expanded specification text (max 2 clarifications per step), logs the HITL event with timestamp and hash, and continues execution.
 
@@ -36,13 +36,13 @@ A researcher executes a complete six-step experiment run for one framework (e.g.
 
 ---
 
-### User Story 2 - Compare Multiple Frameworks (Priority: P2)
+### User Story 2 - Compare Multiple Frameworks (Priority: P3)
 
-A researcher compares all three frameworks (BAEs, ChatDev, GitHub Spec-kit) across identical scenarios to identify performance differences in autonomy, efficiency, and quality. The system executes multiple runs per framework until statistical confidence is achieved.
+A researcher compares all three frameworks (ChatDev, GitHub Spec-kit, and BAEs) across identical scenarios to identify performance differences in autonomy, efficiency, and quality. The system executes multiple runs per framework until statistical confidence is achieved.
 
-**Why this priority**: This enables the primary research question—comparative evaluation—but depends on the single-run capability (P1) being functional.
+**Why this priority**: This enables the primary research question—comparative evaluation—but depends on both the single-run capability (P1) and BAEs integration (P2) being complete. Running this after BAEs integration ensures all frameworks are protocol-compliant and comparable.
 
-**Independent Test**: Can be fully tested by running `./runners/run_experiment.sh all` and verifying that confidence intervals for key metrics reach ≤10% half-width for all frameworks.
+**Independent Test**: Can be fully tested by running `./runners/run_experiment.sh all` and verifying that confidence intervals for key metrics reach ≤10% half-width for all three frameworks.
 
 **Acceptance Scenarios**:
 
@@ -90,6 +90,28 @@ A researcher analyzes collected metrics to understand framework behavior pattern
 
 ---
 
+### User Story 5 - Integrate and Adapt BAEs Framework (Priority: P2)
+
+A researcher integrates the BAEs Framework into the experiment harness after validating the orchestrator with external frameworks (ChatDev, GitHub Spec-kit). This story acknowledges that BAEs may require modifications to comply with experimental protocols, unlike the read-only external frameworks.
+
+**Why this priority**: BAEs is the research artifact under development and may need protocol adaptations. Testing external frameworks first (P1) validates the orchestrator infrastructure before introducing a moving target. This reduces experimental risk and allows BAEs improvements based on lessons learned from external framework testing.
+
+**Independent Test**: Can be fully tested by successfully executing a complete six-step run for BAEs with all protocol compliance requirements met (deterministic HITL, timeout enforcement, metric collection, artifact archival) and comparing results with ChatDev/Spec-kit baseline runs.
+
+**Acceptance Scenarios**:
+
+1. **Given** the orchestrator has been validated with ChatDev and GitHub Spec-kit, **When** the researcher integrates BAEs adapter, **Then** the system identifies any protocol compliance gaps (missing CLI commands, non-standard outputs, HITL interface differences) and documents required adaptations.
+
+2. **Given** BAEs requires modifications to support the experimental protocol, **When** the researcher implements adapter extensions or BAEs framework changes, **Then** all changes are documented in a BAEs-specific integration log with commit hashes and rationale for each modification.
+
+3. **Given** BAEs adapter is implemented, **When** the researcher executes a test run, **Then** BAEs complies with all protocol requirements: responds to start/command/health/stop CLI, provides deterministic HITL handling, exposes API/UI on configured ports, and completes within timeout constraints.
+
+4. **Given** BAEs integration is complete, **When** the researcher runs comparative analysis including BAEs, **Then** BAEs runs are statistically comparable to ChatDev/Spec-kit runs (same metric definitions, validation procedures, artifact structures).
+
+5. **Given** BAEs framework is modified during integration, **When** the researcher reviews changes, **Then** a clear distinction exists between orchestrator adaptations (read-only wrappers for external frameworks) and BAEs modifications (actual framework changes documented for reproducibility).
+
+---
+
 ### Edge Cases
 
 - What happens when a framework crashes during step execution?
@@ -116,6 +138,9 @@ A researcher analyzes collected metrics to understand framework behavior pattern
 - What happens when the same run ID is accidentally reused?
   - System detects existing run directory, appends a UUID suffix to prevent collision, logs a warning, and proceeds with the unique ID.
 
+- What happens when a framework requires protocol compliance modifications?
+  - For external frameworks (ChatDev, Spec-kit): System fails the integration test and documents the incompatibility. The framework cannot be tested until protocol expectations are adjusted (change experimental design, not framework). For BAEs Framework: Modifications are permitted and documented in a BAEs integration log with commit hashes, modified files, and rationale. Changes are version-controlled separately from orchestrator code to maintain clear separation between experimental infrastructure and research artifact evolution.
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
@@ -124,7 +149,7 @@ A researcher analyzes collected metrics to understand framework behavior pattern
 
 - **FR-001**: System MUST execute a six-step scenario where each step sends a natural language command to a framework and waits for completion before proceeding to the next step.
 
-- **FR-002**: System MUST support three framework adapters (BAEs, ChatDev, GitHub Spec-kit) that translate standard CLI commands (start, command, health, stop) into framework-specific invocations.
+- **FR-002**: System MUST support three framework adapters (ChatDev, GitHub Spec-kit, BAEs) that translate standard CLI commands (start, command, health, stop) into framework-specific invocations. External framework adapters (ChatDev, Spec-kit) are read-only wrappers that do not modify framework behavior. BAEs adapter may include both wrapper translation and documentation of BAEs framework modifications needed for protocol compliance.
 
 - **FR-003**: System MUST isolate each run in a unique workspace directory with a generated run ID and clean environment (fresh database, no shared state between runs).
 
@@ -256,7 +281,9 @@ A researcher analyzes collected metrics to understand framework behavior pattern
 
 ## Assumptions
 
-- **Assumption 1**: All frameworks (BAEs, ChatDev, GitHub Spec-kit) can generate Python-based web applications, as the prompts specify Python 3.11, FastAPI, and SQLite.
+- **Assumption 1**: All frameworks (ChatDev, GitHub Spec-kit, BAEs) can generate Python-based web applications, as the prompts specify Python 3.11, FastAPI, and SQLite.
+
+- **Assumption 1a**: External frameworks (ChatDev, GitHub Spec-kit) are used as-is without modifications, requiring only adapter wrappers to translate the standard CLI protocol. BAEs Framework, as an internal research artifact, may require protocol compliance modifications. These modifications are documented separately and do not affect the experimental validity when properly recorded with commit hashes and rationale.
 
 - **Assumption 2**: OpenAI Usage API data is available within 24 hours of API calls for reconciliation with local logs.
 

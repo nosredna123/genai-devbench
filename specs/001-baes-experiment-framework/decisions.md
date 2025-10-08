@@ -261,12 +261,130 @@ To change archival policy:
 | BAES-SPEC-001 | Failed Step Retry Policy | A - Terminate and restart | Preserves experimental purity, simpler implementation |
 | BAES-SPEC-002 | Step Timeout Policy | B (Modified) - 10 minutes/step | Prevents hangs, faster failure detection |
 | BAES-SPEC-003 | Artifact Archival Scope | A - Full workspace | Maximum reproducibility, ~10GB/run storage |
+| BAES-SPEC-004 | Framework Testing Order | External frameworks first, BAEs second | Validates orchestrator stability, manages moving target risk |
+
+---
+
+## Decision 4: Framework Testing Order Strategy
+
+**Decision ID**: BAES-SPEC-004  
+**Date**: 2025-01-08  
+**Status**: ✅ Resolved
+
+### Original Question
+
+**Context**: Initial specification assumed BAEs Framework would be tested first or alongside external frameworks (ChatDev, GitHub Spec-kit). However, BAEs is an internal research artifact that may require protocol compliance modifications during integration.
+
+**What we needed to know**: In what order should frameworks be tested to minimize risk and maintain experimental validity?
+
+### Available Options
+
+| Option | Description | Implications |
+|--------|-------------|--------------|
+| A | BAEs first, external frameworks later | Risk: couples orchestrator development with BAEs modifications, may bias design toward BAEs quirks |
+| **B** | **External frameworks first (P1), BAEs integration second (P2), comparison last (P3)** | Validates orchestrator with stable targets, allows BAEs modifications without destabilizing orchestrator |
+| C | All frameworks tested in parallel from the start | Faster but high risk of conflicting requirements, difficult debugging |
+| D | No specific order, test as frameworks become available | Flexible but unpredictable, no clear validation milestones |
+
+### Selected Answer
+
+**Option B**: External frameworks first (ChatDev, Spec-kit as P1), BAEs integration as P2, comparison as P3
+
+### Rationale
+
+This approach:
+- **Validates orchestrator early**: ChatDev and Spec-kit are stable, well-documented frameworks that won't change during integration. Testing them first proves the orchestrator can handle real-world frameworks correctly.
+- **Manages moving target risk**: BAEs Framework is an internal research artifact that may need protocol compliance changes (e.g., clarification handling, artifact organization). By testing it second, we can document necessary modifications without destabilizing the orchestrator.
+- **Maintains experimental integrity**: External frameworks are read-only (cannot modify them), so any integration issues force orchestrator improvements. BAEs adapter can include both wrapper logic and documentation of BAEs modifications.
+- **Clear separation of concerns**: Orchestrator code evolves independently of BAEs code. Changes to BAEs are version-controlled separately with explicit rationale logs.
+- **Reduces debugging complexity**: If orchestrator works with ChatDev/Spec-kit but fails with BAEs, the issue is localized to BAEs integration (not core orchestrator logic).
+
+### Implementation Details
+
+**Priority 1 (P1): External Framework Validation**
+- User Story 1: Single run execution with ChatDev (or Spec-kit)
+- Acceptance criteria: Complete 6-step CRUD evolution with full artifact archival
+- Framework adapters: Read-only wrappers that translate between orchestrator protocol and framework APIs
+- Integration failures: If external framework cannot be integrated, the experimental design (protocol) must be adjusted—framework code is never modified
+
+**Priority 2 (P2): BAEs Framework Integration**
+- User Story 5: BAEs Framework-specific integration with protocol compliance checks
+- Acceptance criteria: BAEs adapter handles quirks (e.g., YAML-based clarifications), documents any framework modifications
+- Modifications allowed: BAEs framework code can be modified if needed for protocol compliance
+- Modification tracking: All changes logged in `baes_integration.md` with commit hashes, file changes, rationale, and impact analysis
+- Version control: BAEs modifications are tracked separately from orchestrator code to prevent coupling
+
+**Priority 3 (P3): Comparative Analysis**
+- User Story 2: Multi-framework comparison (all frameworks functional)
+- User Story 3: Reproducibility validation
+- User Story 4: Statistical analysis
+
+### User Story Mapping Changes
+
+**Before (original spec)**:
+- US1: BAEs single run (P1)
+- US2: Multi-framework comparison (P2)
+- US3: Reproducibility (P3)
+- US4: Analysis (P3)
+
+**After (strategic revision)**:
+- US1: ChatDev/Spec-kit single run (P1) - validates orchestrator
+- US5: BAEs integration (P2) - integrates research artifact
+- US2: Multi-framework comparison (P3) - runs after all frameworks work
+- US3: Reproducibility (P3) - unchanged
+- US4: Analysis (P3) - unchanged
+
+### Functional Requirements Updates
+
+- **FR-002 (Framework Adapter)**: Now distinguishes between:
+  - **External framework adapters** (ChatDev, Spec-kit): Read-only wrappers that translate orchestrator protocol to framework API. No framework modifications allowed.
+  - **BAEs adapter**: May include wrapper logic AND documentation of BAEs framework modifications needed for protocol compliance.
+
+- **New Edge Case**: "What happens when a framework requires protocol compliance modifications?"
+  - External frameworks: Fail integration test, document incompatibility, adjust experimental design
+  - BAEs Framework: Allow modifications, document in BAEs integration log with version control
+
+### Rollback Instructions
+
+To revert testing order:
+1. Restore User Story 1 to use BAEs examples instead of ChatDev/Spec-kit
+2. Change User Story 5 priority from P2 to P1
+3. Move User Story 2 priority from P3 back to P2
+4. Remove Assumption 1a about framework adaptations
+5. Update FR-002 to remove adapter type distinction
+6. Remove edge case about framework protocol modifications
+7. Update this decision log with rollback justification
+
+### Benefits
+
+1. **Early orchestrator validation**: If ChatDev/Spec-kit work, core orchestrator is functional
+2. **Reduced coupling**: Orchestrator development is independent of BAEs development
+3. **Clear failure attribution**: Integration issues with BAEs are isolated from orchestrator bugs
+4. **Maintains research flexibility**: BAEs can evolve without breaking orchestrator
+5. **Preserves experimental integrity**: External frameworks cannot be modified, forcing proper protocol design
+
+### Risks and Mitigations
+
+| Risk | Mitigation |
+|------|------------|
+| BAEs may be incompatible with protocol validated by external frameworks | Document all BAEs modifications explicitly, version separately, analyze impact |
+| Delaying BAEs testing may discover late-stage issues | User Story 5 (P2) runs immediately after P1 completes |
+| External frameworks may not represent BAEs complexity | Choose diverse external frameworks (ChatDev for multi-agent, Spec-kit for DSL) |
+
+## Summary
+
+| Decision ID | Topic | Selected Option | Key Impact |
+|-------------|-------|-----------------|------------|
+| BAES-SPEC-001 | Failed Step Retry Policy | A - Terminate and restart | Preserves experimental purity, simpler implementation |
+| BAES-SPEC-002 | Step Timeout Policy | B (Modified) - 10 minutes/step | Prevents hangs, faster failure detection |
+| BAES-SPEC-003 | Artifact Archival Scope | A - Full workspace | Maximum reproducibility, ~10GB/run storage |
 
 ## Change History
 
 | Date | Decision ID | Change | Reason |
 |------|-------------|--------|--------|
 | 2025-10-08 | BAES-SPEC-002 | Reduced timeout from 2 hours to 10 minutes | More realistic for simple CRUD evolution scenario |
+| 2025-01-08 | BAES-SPEC-004 | Added framework testing order strategy | Separate orchestrator validation from BAEs integration to reduce coupling and manage moving target risk |
 
 ## Notes
 
@@ -274,3 +392,4 @@ To change archival policy:
 - Decisions prioritize scientific validity over resource efficiency
 - Storage costs (~750GB total) are acceptable for research project scale
 - Timeout value (10 min) may need adjustment after calibration runs
+- **Testing order strategy (Decision 4) reflects that BAEs Framework is an internal research artifact that may require modifications, while external frameworks (ChatDev, Spec-kit) are stable and cannot be modified**
