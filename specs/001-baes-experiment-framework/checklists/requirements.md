@@ -30,11 +30,11 @@
   - Decision 2: Step timeout → 10 minutes
   - Decision 3: Artifact archival → full workspace
   - Decision 4: Framework testing order → External frameworks first (P1), BAEs integration (P2), comparison (P3)
-- All 28 functional requirements are testable with clear acceptance criteria
+- All 29 functional requirements are testable with clear acceptance criteria (added FR-024 for prompt content validation)
 - 16 success criteria defined with specific metrics (time bounds, percentages, counts)
 - 9 edge cases documented with explicit handling strategies (includes framework protocol adaptation handling)
 - Scope bounded to three frameworks, six steps, specific metric set
-- 10 assumptions (including framework adaptation policy) and 6 constraints documented
+- 10 assumptions (including framework adaptation policy and prompt content specification) and 6 constraints documented
 
 ## Feature Readiness
 

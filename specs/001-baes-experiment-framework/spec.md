@@ -201,19 +201,21 @@ A researcher integrates the BAEs Framework into the experiment harness after val
 
 - **FR-022**: System MUST enforce deterministic execution: temperature=0, top_p=1.0, fixed random seeds in config, and identical prompts across runs.
 
-- **FR-023**: System MUST version-control all prompts (step_1.txt through step_6.txt) and HITL responses (expanded_spec.txt) to ensure immutability during experiments.
+- **FR-023**: System MUST version-control all prompts (step_1.txt through step_6.txt) and HITL responses (expanded_spec.txt) to ensure immutability during experiments. Each prompt file MUST explicitly specify technology constraints (Python 3.11, FastAPI, SQLite) to ensure consistent framework outputs across all runs.
 
-- **FR-024**: System MUST pin framework versions to specific commit hashes in config/experiment.yaml and verify checksums before each run.
+- **FR-024**: System MUST validate prompt files before execution, verifying that each step command contains required technology specifications and uses consistent terminology across all six steps.
 
-- **FR-025**: System MUST log all events in structured JSON format with UTC timestamps (ISO 8601), run ID, step number, and event type.
+- **FR-025**: System MUST pin framework versions to specific commit hashes in config/experiment.yaml and verify checksums before each run.
+
+- **FR-026**: System MUST log all events in structured JSON format with UTC timestamps (ISO 8601), run ID, step number, and event type.
 
 **Automation**
 
-- **FR-026**: System MUST provide a single entry point (run_experiment.sh) that accepts framework names ("baes", "chatdev", "ghspec", or "all") and executes complete experiment cycles without manual intervention.
+- **FR-027**: System MUST provide a single entry point (run_experiment.sh) that accepts framework names ("baes", "chatdev", "ghspec", or "all") and executes complete experiment cycles without manual intervention.
 
-- **FR-027**: System MUST automatically provision isolated Python 3.11 virtual environments, install dependencies, clone framework repositories, and configure ports per framework.
+- **FR-028**: System MUST automatically provision isolated Python 3.11 virtual environments, install dependencies, clone framework repositories, and configure ports per framework.
 
-- **FR-028**: System MUST handle retries and timeouts automatically: up to 3 API retries with exponential backoff, up to 2 step retries (r=2) before marking a step as failed, and enforce 10-minute timeout per step (configurable in config/experiment.yaml as step_timeout_seconds). On timeout, system sends SIGTERM, waits 30 seconds, then SIGKILL if needed.
+- **FR-029**: System MUST handle retries and timeouts automatically: up to 3 API retries with exponential backoff, up to 2 step retries (r=2) before marking a step as failed, and enforce 10-minute timeout per step (configurable in config/experiment.yaml as step_timeout_seconds). On timeout, system sends SIGTERM, waits 30 seconds, then SIGKILL if needed.
 
 ### Key Entities
 
@@ -281,7 +283,7 @@ A researcher integrates the BAEs Framework into the experiment harness after val
 
 ## Assumptions
 
-- **Assumption 1**: All frameworks (ChatDev, GitHub Spec-kit, BAEs) can generate Python-based web applications, as the prompts specify Python 3.11, FastAPI, and SQLite.
+- **Assumption 1**: All frameworks (ChatDev, GitHub Spec-kit, BAEs) are capable of generating Python-based web applications. To ensure consistent outputs, all natural language commands (step_1.txt through step_6.txt) explicitly specify the required technology stack: Python 3.11, FastAPI web framework, and SQLite database. This ensures frameworks generate comparable artifacts regardless of their default language preferences.
 
 - **Assumption 1a**: External frameworks (ChatDev, GitHub Spec-kit) are used as-is without modifications, requiring only adapter wrappers to translate the standard CLI protocol. BAEs Framework, as an internal research artifact, may require protocol compliance modifications. These modifications are documented separately and do not affect the experimental validity when properly recorded with commit hashes and rationale.
 
