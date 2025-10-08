@@ -191,7 +191,7 @@ If you use this framework in your research, please cite:
 ```bibtex
 @software{baes_experiment_2025,
   title={BAEs Experiment Framework},
-  author={GeSAD Lab},
+  author={GESAD Lab},
   year={2025},
   url={https://github.com/gesad-lab/baes_experiment}
 }
