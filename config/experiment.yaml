@@ -7,22 +7,22 @@ random_seed: 42
 # Framework configurations
 frameworks:
   baes:
-    repo_url: "https://github.com/gesad-lab/baes.git"
-    commit_hash: "REPLACE_WITH_ACTUAL_COMMIT_HASH"  # Update with specific commit
+    repo_url: "https://github.com/gesad-lab/baes_demo.git"
+    commit_hash: "a34b207253ef4beecedac913264732a93f16e979"
     api_port: 8000
     ui_port: 3000
     api_key_env: "OPENAI_API_KEY_BAES"
     
   chatdev:
     repo_url: "https://github.com/OpenBMB/ChatDev.git"
-    commit_hash: "REPLACE_WITH_ACTUAL_COMMIT_HASH"  # Update with specific commit
+    commit_hash: 31fd994416a251ecdeb1f0a73c329271743bfb56"
     api_port: 8001
     ui_port: 3001
     api_key_env: "OPENAI_API_KEY_CHATDEV"
     
   ghspec:
     repo_url: "https://github.com/github/spec-kit.git"
-    commit_hash: "REPLACE_WITH_ACTUAL_COMMIT_HASH"  # Update with specific commit
+    commit_hash: "89f4b0b38a42996376c0f083d47281a4c9196761"
     api_port: 8002
     ui_port: 3002
     api_key_env: "OPENAI_API_KEY_GHSPEC"
