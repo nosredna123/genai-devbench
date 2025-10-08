@@ -6,7 +6,7 @@ Loads experiment.yaml and validates schema compliance.
 
 import yaml
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -82,6 +82,9 @@ def validate_config(config: Dict[str, Any]) -> None:
     
     # Validate paths exist
     validate_paths(config)
+    
+    # Validate determinism settings (T042)
+    validate_determinism_config(config)
 
 
 def validate_framework_config(name: str, config: Dict[str, Any]) -> None:
@@ -227,3 +230,90 @@ def get_framework_config(config: Dict[str, Any], framework: str) -> Dict[str, An
         raise KeyError(f"Framework '{framework}' not found in configuration")
     
     return config['frameworks'][framework]
+
+
+def set_deterministic_seeds(seed: int) -> None:
+    """
+    Set random seeds for deterministic execution.
+    
+    Ensures reproducibility by setting seeds for Python's random module.
+    Call this before starting any experiment run.
+    
+    Args:
+        seed: Random seed value (typically from config['random_seed'])
+    """
+    import random
+    random.seed(seed)
+    
+    # Set NumPy seed if available
+    try:
+        import numpy as np
+        np.random.seed(seed)
+        logger.info("Set NumPy random seed", extra={'metadata': {'seed': seed}})
+    except ImportError:
+        pass  # NumPy not installed
+    
+    logger.info("Deterministic seeds set", extra={'metadata': {'seed': seed}})
+
+
+def validate_determinism_config(config: Dict[str, Any]) -> None:
+    """
+    Validate configuration enforces deterministic execution.
+    
+    Checks for settings that could introduce non-determinism:
+    - temperature must be 0 (for LLM APIs)
+    - top_p should be 1.0 (for LLM APIs)
+    - random_seed must be set
+    
+    Args:
+        config: Configuration dictionary
+        
+    Raises:
+        ConfigValidationError: If non-deterministic settings detected
+    """
+    # Check random seed is set
+    if 'random_seed' not in config:
+        raise ConfigValidationError("random_seed must be set for reproducibility")
+    
+    if not isinstance(config['random_seed'], int):
+        raise ConfigValidationError("random_seed must be an integer")
+    
+    # Check framework configs for deterministic LLM settings
+    for fw_name, fw_config in config['frameworks'].items():
+        # Check for temperature setting (should be 0)
+        if 'temperature' in fw_config:
+            if fw_config['temperature'] != 0:
+                logger.warning(
+                    f"Framework '{fw_name}' has non-zero temperature",
+                    extra={'metadata': {
+                        'framework': fw_name,
+                        'temperature': fw_config['temperature']
+                    }}
+                )
+        
+        # Check for top_p setting (should be 1.0)
+        if 'top_p' in fw_config:
+            if fw_config['top_p'] != 1.0:
+                logger.warning(
+                    f"Framework '{fw_name}' has top_p != 1.0",
+                    extra={'metadata': {
+                        'framework': fw_name,
+                        'top_p': fw_config['top_p']
+                    }}
+                )
+    
+    # Validate prompts are immutable (files exist and haven't been modified)
+    # This is best-effort - true immutability requires git commit hashes
+    prompts_dir = Path(config.get('prompts_dir', 'config/prompts'))
+    if prompts_dir.exists():
+        prompt_files = list(prompts_dir.glob('*.txt'))
+        if not prompt_files:
+            raise ConfigValidationError(
+                f"No prompt files found in {prompts_dir}"
+            )
+        logger.info(
+            f"Found {len(prompt_files)} prompt files",
+            extra={'metadata': {'count': len(prompt_files)}}
+        )
+    else:
+        raise ConfigValidationError(f"Prompts directory not found: {prompts_dir}")

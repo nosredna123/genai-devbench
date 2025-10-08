@@ -64,7 +64,10 @@ class ChatDevAdapter(BaseAdapter):
                 timeout=60
             )
             
-            logger.info("ChatDev repository cloned",
+            # Verify commit hash matches config (T038 - reproducibility)
+            self.verify_commit_hash(self.framework_dir, commit_hash)
+            
+            logger.info("ChatDev repository cloned and verified",
                        extra={'run_id': self.run_id, 
                              'metadata': {'commit': commit_hash}})
             

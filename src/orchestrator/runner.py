@@ -8,13 +8,15 @@ import signal
 import time
 import os
 import json
+import hashlib
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import subprocess
 from src.utils.logger import get_logger
 from src.utils.isolation import create_isolated_workspace, cleanup_workspace
 from src.utils.api_client import OpenAIAPIClient
-from src.orchestrator.config_loader import load_config
+from src.orchestrator.config_loader import load_config, set_deterministic_seeds
 from src.orchestrator.metrics_collector import MetricsCollector
 from src.orchestrator.validator import Validator
 from src.orchestrator.archiver import Archiver
@@ -58,6 +60,61 @@ class OrchestratorRunner:
         self.workspace_path = None
         self.run_id = None
         self.step_timeout_occurred = False
+        self.hitl_log_path = None
+        
+    def _log_hitl_event(
+        self,
+        step_num: int,
+        query: str,
+        response: str,
+        timestamp: Optional[str] = None
+    ) -> None:
+        """
+        Log HITL event with SHA-1 hash for reproducibility verification.
+        
+        Appends to hitl_events.jsonl in the run directory.
+        
+        Args:
+            step_num: Current step number
+            query: Framework's clarification question
+            response: Fixed response text provided
+            timestamp: ISO 8601 timestamp (uses current time if None)
+        """
+        if not self.hitl_log_path:
+            return
+        
+        if timestamp is None:
+            timestamp = datetime.utcnow().isoformat() + 'Z'
+        
+        # Compute SHA-1 hash of response text
+        response_hash = hashlib.sha1(response.encode('utf-8')).hexdigest()
+        
+        event = {
+            'timestamp': timestamp,
+            'run_id': self.run_id,
+            'step': step_num,
+            'query': query,
+            'response': response,
+            'response_sha1': response_hash,
+            'query_length': len(query),
+            'response_length': len(response)
+        }
+        
+        # Append to JSONL file
+        with open(self.hitl_log_path, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(event) + '\n')
+        
+        logger.info(
+            "HITL event logged",
+            extra={
+                'run_id': self.run_id,
+                'step': step_num,
+                'metadata': {
+                    'response_hash': response_hash,
+                    'query_length': len(query)
+                }
+            }
+        )
         
     def _timeout_handler(self, _signum, _frame):
         """Signal handler for step timeout."""
@@ -171,11 +228,17 @@ class OrchestratorRunner:
             self.config = load_config(self.config_path)
             framework_config = self.config['frameworks'][self.framework_name]
             
+            # Set deterministic seeds for reproducibility (T037)
+            set_deterministic_seeds(self.config['random_seed'])
+            
             # Generate run ID and create isolated workspace
             from src.utils.isolation import generate_run_id
             self.run_id = generate_run_id()
             run_dir, workspace_dir = create_isolated_workspace(self.framework_name, self.run_id)
             self.workspace_path = str(workspace_dir)
+            
+            # Initialize HITL event log (T039)
+            self.hitl_log_path = run_dir / "hitl_events.jsonl"
             
             logger.info("Starting framework run",
                        extra={'run_id': self.run_id, 'framework': self.framework_name,

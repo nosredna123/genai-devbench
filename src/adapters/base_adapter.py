@@ -5,7 +5,12 @@ Defines the contract that all framework adapters must implement.
 """
 
 from abc import ABC, abstractmethod
+import subprocess
+from pathlib import Path
 from typing import Any, Dict
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class BaseAdapter(ABC):
@@ -24,6 +29,77 @@ class BaseAdapter(ABC):
         self.run_id = run_id
         self.workspace_path = workspace_path
         self.current_step = 0
+    
+    def verify_commit_hash(self, repo_path: Path, expected_hash: str) -> None:
+        """
+        Verify cloned repository is at expected commit hash.
+        
+        Ensures reproducibility by checking the framework version matches
+        what's specified in the configuration. Fails fast if mismatch detected.
+        
+        Args:
+            repo_path: Path to cloned repository
+            expected_hash: Expected commit SHA from config
+            
+        Raises:
+            RuntimeError: If commit hash doesn't match or check fails
+        """
+        try:
+            # Get current HEAD commit hash
+            result = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'],
+                cwd=repo_path,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            actual_hash = result.stdout.strip()
+            
+            # Compare hashes (allow short hash matching)
+            if not actual_hash.startswith(expected_hash) and not expected_hash.startswith(actual_hash):
+                error_msg = (
+                    f"Commit hash mismatch! "
+                    f"Expected: {expected_hash}, Got: {actual_hash}"
+                )
+                logger.error(
+                    "Framework commit hash verification failed",
+                    extra={
+                        'run_id': self.run_id,
+                        'metadata': {
+                            'expected': expected_hash,
+                            'actual': actual_hash,
+                            'repo_path': str(repo_path)
+                        }
+                    }
+                )
+                raise RuntimeError(error_msg)
+            
+            logger.info(
+                "Framework commit hash verified",
+                extra={
+                    'run_id': self.run_id,
+                    'metadata': {
+                        'commit_hash': actual_hash,
+                        'repo_path': str(repo_path)
+                    }
+                }
+            )
+            
+        except subprocess.CalledProcessError as e:
+            error_msg = f"Failed to verify commit hash: {e}"
+            logger.error(
+                "Commit hash verification command failed",
+                extra={'run_id': self.run_id, 'metadata': {'error': str(e)}}
+            )
+            raise RuntimeError(error_msg) from e
+        except subprocess.TimeoutExpired as e:
+            error_msg = "Commit hash verification timed out"
+            logger.error(
+                error_msg,
+                extra={'run_id': self.run_id}
+            )
+            raise RuntimeError(error_msg) from e
     
     @abstractmethod
     def start(self) -> None:

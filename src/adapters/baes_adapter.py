@@ -64,8 +64,12 @@ class BAeSAdapter(BaseAdapter):
                 timeout=60
             )
             
-            logger.info(f"BAEs repository cloned at commit {commit_hash}",
-                       extra={'run_id': self.run_id})
+            # Verify commit hash matches config (T038 - reproducibility)
+            self.verify_commit_hash(self.framework_dir, commit_hash)
+            
+            logger.info("BAEs repository cloned and verified",
+                       extra={'run_id': self.run_id,
+                             'metadata': {'commit': commit_hash}})
             
             # TODO: Set up virtual environment and install dependencies
             # TODO: Start framework services (API, UI)
