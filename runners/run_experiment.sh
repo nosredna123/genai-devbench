@@ -89,7 +89,7 @@ echo ""
 echo -e "${GREEN}Starting experiment...${NC}"
 echo "======================================"
 
-export PYTHONPATH="$PROJECT_ROOT:$PYTHONPATH"
+export PYTHONPATH="$PROJECT_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
 if [ "$FRAMEWORK" == "all" ]; then
     # Run all frameworks sequentially
