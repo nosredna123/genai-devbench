@@ -145,6 +145,10 @@ EOF
       # Reconcile specific run
       echo "Reconciling specific run: $FRAMEWORK/$RUN_ID"
       echo ""
+      
+      # Convert bash boolean to Python boolean
+      FORCE_PYTHON=$([ "$FORCE" = "true" ] && echo "True" || echo "False")
+      
       python3 << EOF
 import sys
 from pathlib import Path
@@ -160,7 +164,7 @@ try:
     report = reconciler.reconcile_run(
         run_id="$RUN_ID",
         framework="$FRAMEWORK",
-        force=$FORCE
+        force=$FORCE_PYTHON
     )
     
     if report['status'] == 'success':
