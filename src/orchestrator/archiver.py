@@ -60,6 +60,14 @@ class Archiver:
                 logger.debug("Added metrics to archive",
                            extra={'run_id': self.run_id})
             
+            # Add artifacts directory (generated code from frameworks like ChatDev)
+            artifacts_dir = self.run_dir / "artifacts"
+            if artifacts_dir.exists():
+                tar.add(artifacts_dir, arcname="artifacts")
+                logger.debug("Added artifacts to archive",
+                           extra={'run_id': self.run_id,
+                                 'metadata': {'artifact_count': len(list(artifacts_dir.iterdir()))}})
+            
             # Add logs
             for log_name, log_path in logs.items():
                 if log_path.exists():

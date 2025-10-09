@@ -24,6 +24,7 @@ import os
 import subprocess
 import sys
 import time
+import shutil
 from pathlib import Path
 from typing import Any, Dict, Tuple
 import requests
@@ -456,6 +457,67 @@ class ChatDevAdapter(BaseAdapter):
         else:
             logger.info("O1/GPT-5 model patches already applied or files not found",
                        extra={'run_id': self.run_id})
+    
+    def _copy_artifacts(self, step_num: int, project_name: str) -> None:
+        """
+        Copy ChatDev's WareHouse output to permanent run directory.
+        
+        This preserves the generated code for reproducibility, debugging, and analysis.
+        Without this, artifacts are lost when the temp workspace is cleaned up.
+        
+        Args:
+            step_num: Step number that was executed
+            project_name: Name of the ChatDev project (e.g., BAEs_Step1_xxx)
+        """
+        warehouse_path = self.framework_dir / "WareHouse"
+        
+        if not warehouse_path.exists():
+            logger.warning("WareHouse directory not found - no artifacts to copy",
+                         extra={'run_id': self.run_id, 'step': step_num,
+                               'metadata': {'expected_path': str(warehouse_path)}})
+            return
+        
+        # Create artifacts directory in run directory (parent of workspace)
+        # Structure: runs/chatdev/<run-id>/artifacts/
+        run_dir = Path(self.workspace_path).parent
+        artifacts_dir = run_dir / "artifacts"
+        artifacts_dir.mkdir(exist_ok=True)
+        
+        # Find the project directory (ChatDev may add timestamp suffix)
+        project_dirs = list(warehouse_path.glob(f"{project_name}*"))
+        
+        if not project_dirs:
+            logger.warning("No matching project directory found in WareHouse",
+                         extra={'run_id': self.run_id, 'step': step_num,
+                               'metadata': {'project_pattern': f"{project_name}*",
+                                          'warehouse_path': str(warehouse_path)}})
+            return
+        
+        # Copy each matching project directory
+        for project_dir in project_dirs:
+            dest_path = artifacts_dir / project_dir.name
+            
+            try:
+                if dest_path.exists():
+                    shutil.rmtree(dest_path)  # Remove old copy if exists
+                
+                shutil.copytree(project_dir, dest_path)
+                
+                logger.info("Copied ChatDev artifacts",
+                          extra={'run_id': self.run_id, 'step': step_num,
+                                'metadata': {
+                                    'source': str(project_dir),
+                                    'destination': str(dest_path),
+                                    'size_bytes': sum(f.stat().st_size for f in dest_path.rglob('*') if f.is_file())
+                                }})
+            except Exception as e:
+                logger.error("Failed to copy ChatDev artifacts",
+                           extra={'run_id': self.run_id, 'step': step_num,
+                                 'metadata': {
+                                     'error': str(e),
+                                     'source': str(project_dir),
+                                     'destination': str(dest_path)
+                                 }})
             
     def execute_step(self, step_num: int, command_text: str) -> Dict[str, Any]:
         """
@@ -613,6 +675,11 @@ class ChatDevAdapter(BaseAdapter):
             
             # T068: Detect HITL events (should be 0 with Default config)
             hitl_count = self._detect_hitl_events(result.stdout)
+            
+            # Copy ChatDev's WareHouse output to permanent storage
+            # This preserves generated code for reproducibility and debugging
+            if success:
+                self._copy_artifacts(step_num, project_name)
             
             logger.info("ChatDev execution complete",
                        extra={'run_id': self.run_id, 'step': step_num,
