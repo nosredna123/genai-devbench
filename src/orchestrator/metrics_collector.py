@@ -42,7 +42,9 @@ class MetricsCollector:
         retry_count: int,
         hitl_count: int,
         tokens_in: int,
-        tokens_out: int
+        tokens_out: int,
+        start_timestamp: Optional[int] = None,
+        end_timestamp: Optional[int] = None
     ) -> None:
         """
         Record metrics for a single step.
@@ -54,8 +56,10 @@ class MetricsCollector:
             success: Whether step completed successfully
             retry_count: Number of retries attempted
             hitl_count: Number of HITL interventions
-            tokens_in: Input tokens consumed
-            tokens_out: Output tokens generated
+            tokens_in: Input tokens consumed (may be 0 initially)
+            tokens_out: Output tokens generated (may be 0 initially)
+            start_timestamp: Unix timestamp when step started (for Usage API reconciliation)
+            end_timestamp: Unix timestamp when step ended (for Usage API reconciliation)
         """
         self.steps_data[step_num] = {
             'step_number': step_num,
@@ -65,7 +69,9 @@ class MetricsCollector:
             'retry_count': retry_count,
             'hitl_count': hitl_count,
             'tokens_in': tokens_in,
-            'tokens_out': tokens_out
+            'tokens_out': tokens_out,
+            'start_timestamp': start_timestamp,
+            'end_timestamp': end_timestamp
         }
         
     def compute_interaction_metrics(self) -> Dict[str, float]:

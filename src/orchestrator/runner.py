@@ -301,7 +301,9 @@ class OrchestratorRunner:
                         retry_count=result.get('retry_count', 0),
                         hitl_count=result.get('hitl_count', 0),
                         tokens_in=result.get('tokens_in', 0),
-                        tokens_out=result.get('tokens_out', 0)
+                        tokens_out=result.get('tokens_out', 0),
+                        start_timestamp=result.get('start_timestamp'),
+                        end_timestamp=result.get('end_timestamp')
                     )
                     
                     logger.info("Step completed successfully",

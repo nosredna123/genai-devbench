@@ -631,7 +631,9 @@ class ChatDevAdapter(BaseAdapter):
                 'hitl_count': hitl_count,
                 'tokens_in': tokens_in,
                 'tokens_out': tokens_out,
-                'retry_count': 0
+                'retry_count': 0,
+                'start_timestamp': self._step_start_time,
+                'end_timestamp': end_timestamp
             }
             
         except subprocess.TimeoutExpired:
@@ -647,7 +649,9 @@ class ChatDevAdapter(BaseAdapter):
                 'tokens_in': 0,
                 'tokens_out': 0,
                 'retry_count': 0,
-                'error': 'timeout'
+                'error': 'timeout',
+                'start_timestamp': self._step_start_time,
+                'end_timestamp': int(time.time())
             }
             
         except Exception as e:
