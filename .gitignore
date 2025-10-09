@@ -1,6 +1,8 @@
 # Run artifacts (not version controlled)
 runs/
 .env
+experiment_output.log
+.copilot/
 
 # Python
 __pycache__/

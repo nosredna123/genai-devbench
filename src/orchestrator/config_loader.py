@@ -221,7 +221,7 @@ def get_framework_config(config: Dict[str, Any], framework: str) -> Dict[str, An
         framework: Framework name
         
     Returns:
-        Framework-specific configuration
+        Framework-specific configuration with global model injected
         
     Raises:
         KeyError: If framework not found in configuration
@@ -229,7 +229,14 @@ def get_framework_config(config: Dict[str, Any], framework: str) -> Dict[str, An
     if framework not in config['frameworks']:
         raise KeyError(f"Framework '{framework}' not found in configuration")
     
-    return config['frameworks'][framework]
+    # Get framework-specific config
+    fw_config = config['frameworks'][framework].copy()
+    
+    # Inject global model configuration (all frameworks must use same model)
+    if 'model' in config:
+        fw_config['model'] = config['model']
+    
+    return fw_config
 
 
 def set_deterministic_seeds(seed: int) -> None:

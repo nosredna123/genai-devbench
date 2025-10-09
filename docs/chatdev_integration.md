@@ -27,7 +27,7 @@ python run.py \
   --name "ProjectName" \
   --org "OrganizationName" \
   --config "Default" \
-  --model "GPT_4O_MINI"
+  --model "GPT_5_MINI"
 ```
 
 ### Key Arguments
@@ -38,7 +38,7 @@ python run.py \
 | `--name` | No | "Gomoku" | Project name (used in directory naming) |
 | `--org` | No | "DefaultOrganization" | Organization name (used in directory naming) |
 | `--config` | No | "Default" | Configuration profile (Default, Art, Human, incremental) |
-| `--model` | No | "GPT_3_5_TURBO" | Model selection: GPT_3_5_TURBO, GPT_4, GPT_4_TURBO, GPT_4O, GPT_4O_MINI |
+| `--model` | No | "GPT_3_5_TURBO" | Model selection: GPT_3_5_TURBO, GPT_4, GPT_4_TURBO, GPT_4O, GPT_4O_MINI, GPT_5, GPT_5_MINI, GPT_5_NANO, GPT_5_PRO |
 | `--path` | No | "" | Path to existing code for incremental mode |
 
 ### Execution Flow
@@ -320,13 +320,13 @@ ChatDev uses LLM APIs which are **non-deterministic by default**.
 1. Set `temperature=0` in model configuration
 2. Use fixed random seeds (if ChatDev supports)
 3. Pin framework commit hash (already done: `31fd994...`)
-4. Use same model version (GPT-4O-MINI)
+4. Use same model version (GPT-5-MINI for all frameworks)
 
 **Configuration File**: `CompanyConfig/Default/ChatChainConfig.json`
 
 ```json
 {
-  "model": "GPT_4O_MINI",
+  "model": "GPT_5_MINI",
   "temperature": 0.0,  // ⚠️ May need to modify this
   "top_p": 1.0
 }
@@ -379,13 +379,17 @@ def execute_step(self, step_num: int, command_text: str) -> Dict[str, Any]:
     # Generate unique project name per step
     project_name = f"BAEs_Step{step_num}_{self.run_id[:8]}"
     
+    # Get model from global config
+    model = self.config.get('model', 'gpt-5-mini')
+    chatdev_model = model.replace('-', '_').upper()  # Convert to GPT_5_MINI format
+    
     cmd = [
         str(python_path), "run.py",
         "--task", command_text,
         "--name", project_name,
         "--org", "BAEs_Experiment",
         "--config", "Default",
-        "--model", "GPT_4O_MINI"
+        "--model", chatdev_model
     ]
     
     result = subprocess.run(

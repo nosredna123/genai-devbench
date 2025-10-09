@@ -4,6 +4,13 @@
 # Fixed random seed for deterministic execution
 random_seed: 42
 
+# Model configuration - ALL frameworks must use the same model for fair comparison
+# Supported models: gpt-4o-mini, o1-mini, o1-preview, gpt-5-mini
+# - gpt-4o-mini: Native ChatDev support (commit 52edb89)
+# - o1-mini, o1-preview, gpt-5-mini: Added via runtime patch (see src/adapters/chatdev_adapter.py::_patch_o1_model_support)
+# Note: O1 models have better reasoning; GPT-5 mini is faster and cheaper
+model: "gpt-5-mini"
+
 # Framework configurations
 frameworks:
   baes:
@@ -15,7 +22,7 @@ frameworks:
     
   chatdev:
     repo_url: "https://github.com/OpenBMB/ChatDev.git"
-    commit_hash: "31fd994416a251ecdeb1f0a73c329271743bfb56"
+    commit_hash: "52edb89997b4312ad27d8c54584d0a6c59940135"  # Has 'refusal' + 'audio' fixes; we patch 'annotations' at runtime (see .copilot/WHY_VITORFOL_FORK.md)
     api_port: 8001
     ui_port: 3001
     api_key_env: "OPENAI_API_KEY_CHATDEV"
