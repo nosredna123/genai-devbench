@@ -574,7 +574,7 @@ class ChatDevAdapter(BaseAdapter):
             
             # Fetch token usage from OpenAI Usage API
             # This replaces framework-specific log parsing with a general DRY approach
-            api_key_env = self.config.get('api_key_env', 'OPENAI_API_KEY_CHATDEV')
+            # Note: Uses OPEN_AI_KEY_ADM (admin key) which has organization-level permissions
             model_config = self.config.get('model')  # From experiment.yaml
             
             logger.info(
@@ -585,13 +585,14 @@ class ChatDevAdapter(BaseAdapter):
                     'metadata': {
                         'start_timestamp': self._step_start_time,
                         'end_timestamp': end_timestamp,
-                        'model': model_config
+                        'model': model_config,
+                        'api_key_env': 'OPEN_AI_KEY_ADM'
                     }
                 }
             )
             
             tokens_in, tokens_out = self.fetch_usage_from_openai(
-                api_key_env_var=api_key_env,
+                api_key_env_var='OPEN_AI_KEY_ADM',
                 start_timestamp=self._step_start_time,
                 end_timestamp=end_timestamp,
                 model=model_config

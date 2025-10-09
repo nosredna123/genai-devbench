@@ -4,6 +4,27 @@
 
 Implemented a **DRY (Don't Repeat Yourself)** solution for token counting that works across ALL frameworks (ChatDev, GHSpec, BAEs) by querying the OpenAI Usage API directly instead of parsing framework-specific logs.
 
+## API Key Architecture
+
+This project uses a **two-tier API key system**:
+
+### 1. Admin Key (Organization-Level)
+- **Variable**: `OPEN_AI_KEY_ADM`
+- **Purpose**: Query the OpenAI Usage API for token counting
+- **Permissions**: Organization-level access required
+- **Used by**: All adapters (ChatDev, GHSpec, BAEs) for token tracking
+
+### 2. Framework Keys (Project-Level)
+- **Variables**: `OPENAI_API_KEY_CHATDEV`, `OPENAI_API_KEY_GHSPEC`, `OPENAI_API_KEY_BAES`
+- **Purpose**: Execute framework-specific API calls (chat completions, embeddings)
+- **Permissions**: Standard project-level access
+- **Used by**: Individual frameworks for their LLM operations
+
+**Why Two Tiers?**
+- Usage API requires **organization-level permissions** that framework keys don't have
+- Separating keys allows independent tracking and billing per framework
+- Admin key aggregates usage across all frameworks
+
 ## Problem Statement
 
 **Before**: Each framework had different token logging formats:
@@ -70,14 +91,16 @@ tokens_in, tokens_out = self._parse_token_usage(result.stdout, result.stderr)
 **After**:
 ```python
 # Fetch token usage from OpenAI Usage API
-# This replaces framework-specific log parsing with a general DRY approach
+# Uses OPEN_AI_KEY_ADM (admin key with org-level permissions)
 tokens_in, tokens_out = self.fetch_usage_from_openai(
-    api_key_env_var=api_key_env,
+    api_key_env_var='OPEN_AI_KEY_ADM',
     start_timestamp=self._step_start_time,
     end_timestamp=end_timestamp,
     model=model_config
 )
 ```
+
+**Important**: The Usage API requires an admin API key with organization-level permissions. The framework-specific keys (e.g., `OPENAI_API_KEY_CHATDEV`) don't have these permissions, so we use `OPEN_AI_KEY_ADM` instead.
 
 ### 3. Runner Updates
 
@@ -281,12 +304,12 @@ Run the smoke test to verify end-to-end:
 
 To add token counting to GHSpec and BAEs adapters:
 
-1. **No changes needed!** Just call the inherited method:
+1. **Use the admin API key** for Usage API queries:
 
 ```python
 # In ghspec_adapter.py execute_step():
 tokens_in, tokens_out = self.fetch_usage_from_openai(
-    api_key_env_var=self.config.get('api_key_env'),
+    api_key_env_var='OPEN_AI_KEY_ADM',  # Admin key with org permissions
     start_timestamp=self._step_start_time,
     end_timestamp=int(time.time()),
     model=self.config.get('model')
@@ -301,19 +324,27 @@ self._step_start_time = int(time.time())
 
 3. Done! Token counting works automatically.
 
+**Important**: All frameworks should use `OPEN_AI_KEY_ADM` for the Usage API, not their framework-specific keys (which lack organization permissions).
+
 ## API Requirements
 
 ### Permissions
 
 The API key must have **organization-level permissions** to access the Usage API.
 
+**In this project**:
+- ✅ `OPEN_AI_KEY_ADM` - Admin key with org permissions (use this for Usage API)
+- ❌ `OPENAI_API_KEY_CHATDEV` - Framework key (lacks org permissions)
+- ❌ `OPENAI_API_KEY_GHSPEC` - Framework key (lacks org permissions)
+- ❌ `OPENAI_API_KEY_BAES` - Framework key (lacks org permissions)
+
 **To check**:
 ```bash
 curl "https://api.openai.com/v1/organization/usage/completions?start_time=1728476220&limit=1" \
-  -H "Authorization: Bearer $OPENAI_API_KEY_CHATDEV"
+  -H "Authorization: Bearer $OPEN_AI_KEY_ADM"
 ```
 
-**If you get 403 Forbidden**: The API key doesn't have org permissions. Use an admin key or request permissions.
+**If you get 403 Forbidden**: The API key doesn't have org permissions. Make sure you're using `OPEN_AI_KEY_ADM`, not a framework-specific key.
 
 ### Rate Limits
 
@@ -328,7 +359,7 @@ Usage API has separate rate limits from Chat Completions:
 
 **Possible causes**:
 1. No API calls in time window → Expected if step hasn't run
-2. API key lacks org permissions → Use admin key
+2. Wrong API key - using framework key instead of admin key → Use `OPEN_AI_KEY_ADM`
 3. Model filter too specific → Try without model filter
 4. Network/timeout error → Check logs
 

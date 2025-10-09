@@ -43,11 +43,11 @@ def test_usage_api():
     print(f"  Start: {start_time} ({time.ctime(start_time)})")
     print(f"  End:   {end_time} ({time.ctime(end_time)})")
     print(f"  Model: {chatdev_config.get('model')}")
-    print(f"  API Key Env: {chatdev_config.get('api_key_env')}")
+    print(f"  API Key Env: OPEN_AI_KEY_ADM (admin key with org permissions)")
     
-    # Fetch usage
+    # Fetch usage using admin key (OPEN_AI_KEY_ADM has org-level permissions for Usage API)
     tokens_in, tokens_out = adapter.fetch_usage_from_openai(
-        api_key_env_var=chatdev_config.get('api_key_env'),
+        api_key_env_var='OPEN_AI_KEY_ADM',
         start_timestamp=start_time,
         end_timestamp=end_time,
         model=chatdev_config.get('model')
