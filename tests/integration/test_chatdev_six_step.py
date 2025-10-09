@@ -32,7 +32,10 @@ from src.orchestrator.config_loader import load_config
 def test_config():
     """Load experiment configuration for testing."""
     config = load_config()
-    return config['frameworks']['chatdev']
+    framework_config = config['frameworks']['chatdev']
+    # Add global model to framework config (same as runner.py does)
+    framework_config['model'] = config.get('model')
+    return framework_config
 
 
 @pytest.fixture
