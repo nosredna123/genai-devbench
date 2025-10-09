@@ -8,11 +8,12 @@ after the API reporting delay (5-60 minutes).
 import json
 import math
 import time
+import os
+import requests
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from src.utils.logger import get_logger
-from src.adapters.base_adapter import BaseAdapter
 
 logger = get_logger(__name__)
 
@@ -33,11 +34,66 @@ class UsageReconciler:
             runs_dir: Root directory containing framework run directories
         """
         self.runs_dir = runs_dir
-        self.base_adapter = BaseAdapter(
-            config={},
-            run_id="reconciler",
-            workspace_path="/tmp/reconciler"
-        )
+    
+    def _fetch_usage_from_openai(
+        self,
+        start_timestamp: int,
+        end_timestamp: int
+    ) -> tuple[int, int]:
+        """
+        Fetch usage data from OpenAI Usage API.
+        
+        Args:
+            start_timestamp: Unix timestamp for start of window
+            end_timestamp: Unix timestamp for end of window
+            
+        Returns:
+            Tuple of (input_tokens, output_tokens)
+        """
+        api_key = os.getenv('OPEN_AI_KEY_ADM')
+        if not api_key:
+            logger.warning("OPEN_AI_KEY_ADM not found in environment")
+            return 0, 0
+        
+        url = "https://api.openai.com/v1/organization/usage/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        params = {
+            "start_time": start_timestamp,
+            "end_time": end_timestamp,
+            "bucket_width": "1d",
+            "limit": 31
+        }
+        
+        try:
+            response = requests.get(url, headers=headers, params=params, timeout=30)
+            
+            # Check for permission errors
+            if response.status_code == 401:
+                error_data = response.json()
+                if "api.usage.read" in error_data.get("error", {}).get("message", ""):
+                    logger.error("API key lacks 'api.usage.read' scope")
+                    return 0, 0
+            
+            response.raise_for_status()
+            usage_data = response.json()
+            
+            # Aggregate tokens from all buckets
+            total_input_tokens = 0
+            total_output_tokens = 0
+            
+            for bucket in usage_data.get("data", []):
+                for result in bucket.get("results", []):
+                    total_input_tokens += result.get("n_context_tokens_total", 0)
+                    total_output_tokens += result.get("n_generated_tokens_total", 0)
+            
+            return total_input_tokens, total_output_tokens
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch usage from OpenAI API: {e}")
+            return 0, 0
     
     def reconcile_run(
         self,
@@ -142,11 +198,9 @@ class UsageReconciler:
             )
             
             try:
-                tokens_in, tokens_out = self.base_adapter.fetch_usage_from_openai(
-                    api_key_env_var='OPEN_AI_KEY_ADM',
+                tokens_in, tokens_out = self._fetch_usage_from_openai(
                     start_timestamp=start_timestamp,
-                    end_timestamp=end_timestamp,
-                    model=None  # Don't filter by model (unreliable)
+                    end_timestamp=end_timestamp
                 )
                 
                 # Update step
