@@ -74,9 +74,8 @@ echo -e "${GREEN}✓${NC} Dependencies installed"
 # Load environment variables from .env file
 if [ -f "$PROJECT_ROOT/.env" ]; then
     echo "Loading environment variables from .env..."
-    set -a  # Mark variables for export
-    source "$PROJECT_ROOT/.env"
-    set +a  # Unmark variables for export
+    # Export all variables from .env file
+    export $(grep -v '^#' "$PROJECT_ROOT/.env" | xargs)
     echo -e "${GREEN}✓${NC} Environment variables loaded"
 else
     echo -e "${YELLOW}Warning: .env file not found${NC}"

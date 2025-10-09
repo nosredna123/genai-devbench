@@ -159,6 +159,10 @@ class ChatDevAdapter(BaseAdapter):
             self.python_path = self.venv_path / "bin" / "python"
             pip_path = self.venv_path / "bin" / "pip"
         
+        # Ensure paths are absolute
+        self.python_path = self.python_path.absolute()
+        pip_path = pip_path.absolute()
+        
         # Verify Python is accessible
         try:
             result = subprocess.run(
@@ -185,24 +189,42 @@ class ChatDevAdapter(BaseAdapter):
             raise RuntimeError(f"Requirements file not found: {requirements_file}")
         
         try:
-            # Upgrade pip first
-            subprocess.run(
-                [str(pip_path), "install", "--upgrade", "pip"],
+            # Upgrade pip first and install build tools
+            # Note: setuptools>=67.0.0 required for Python 3.12 compatibility (pkgutil.ImpImporter removed)
+            logger.info("Upgrading pip and installing build tools (setuptools>=67.0.0, wheel)",
+                       extra={'run_id': self.run_id})
+            
+            result = subprocess.run(
+                [str(pip_path), "install", "--upgrade", "pip", "setuptools>=67.0.0", "wheel"],
                 capture_output=True,
                 stdin=subprocess.DEVNULL,
+                text=True,
                 timeout=120,
                 cwd=self.framework_dir
             )
+            
+            if result.returncode != 0:
+                logger.error("Failed to upgrade pip and install build tools", 
+                           extra={'run_id': self.run_id, 'metadata': {'stderr': result.stderr[:1000]}})
+                raise RuntimeError(f"Failed to upgrade pip/setuptools: {result.stderr}")
+            
+            logger.info("Build tools installed successfully",
+                       extra={'run_id': self.run_id, 
+                             'metadata': {'stdout_tail': result.stdout.split('\n')[-5:]}})
             
             # CRITICAL FIX: Pin compatible versions BEFORE installing requirements
             # - pydantic<2: ChatDev uses pydantic 1.x dataclasses
             # - httpx<0.28: httpx 0.28+ removed 'proxies' parameter used by openai
             # - openai<1.40: Newer versions include 'annotations' field that ChatDev doesn't support
-            logger.info("Pre-installing pydantic<2, httpx<0.28, openai<1.40",
+            # - numpy>=1.26.0: Python 3.12 requires numpy 1.26+ (older versions use removed distutils)
+            # - faiss-cpu>=1.8.0: Python 3.12 requires faiss-cpu 1.8.0+ (1.7.4 has no py312 wheel)
+            # - PyYAML>=6.0: Python 3.12 requires PyYAML 6.0+ (older versions have cython build issues)
+            logger.info("Pre-installing Python 3.12 compatible packages",
                        extra={'run_id': self.run_id})
             
             result = subprocess.run(
-                [str(pip_path), "install", "-v", "pydantic<2", "httpx<0.28", "openai<1.40"],
+                [str(pip_path), "install", "-v", "pydantic<2", "httpx<0.28", "openai<1.40", 
+                 "numpy>=1.26.0", "faiss-cpu>=1.8.0", "PyYAML>=6.0"],
                 capture_output=True,
                 stdin=subprocess.DEVNULL,
                 text=True,
@@ -219,42 +241,37 @@ class ChatDevAdapter(BaseAdapter):
                        extra={'run_id': self.run_id,
                              'metadata': {'stdout_tail': result.stdout[-500:] if result.stdout else ''}})
             
-            # Now install requirements.txt with --no-deps to prevent upgrades
-            # Then install missing dependencies separately
-            logger.info("Installing requirements with --no-deps",
+            # Now install requirements.txt WITHOUT incompatible packages (already installed compatible versions)
+            # Filter out these packages from requirements and install the rest
+            logger.info("Installing remaining requirements (skipping already-installed compatible packages)",
                        extra={'run_id': self.run_id})
             
-            result = subprocess.run(
-                [str(pip_path), "install", "--no-deps", "-r", "requirements.txt"],
-                capture_output=True,
-                stdin=subprocess.DEVNULL,
-                text=True,
-                timeout=600,
-                cwd=self.framework_dir
-            )
+            # Read requirements and filter out incompatible packages
+            with open(requirements_file) as f:
+                requirements = [line.strip() for line in f if line.strip() and not line.startswith('#')]
             
-            if result.returncode != 0:
-                logger.error("No-deps install failed", extra={'run_id': self.run_id,
-                           'metadata': {'stderr': result.stderr[:1000]}})
-                raise RuntimeError(f"Failed to install requirements (no-deps): {result.stderr}")
+            # Filter out packages we've already installed with compatible versions
+            skip_packages = ['numpy', 'faiss-cpu', 'pyyaml']
+            filtered_requirements = [req for req in requirements 
+                                   if not any(req.lower().startswith(pkg) for pkg in skip_packages)]
             
-            # Now install missing dependencies (but pydantic and httpx are already pinned)
-            logger.info("Installing missing dependencies",
+            if filtered_requirements:
+                result = subprocess.run(
+                    [str(pip_path), "install"] + filtered_requirements,
+                    capture_output=True,
+                    stdin=subprocess.DEVNULL,
+                    text=True,
+                    timeout=600,
+                    cwd=self.framework_dir
+                )
+                
+                if result.returncode != 0:
+                    logger.error("Requirements install failed", extra={'run_id': self.run_id,
+                               'metadata': {'stderr': result.stderr[:1000]}})
+                    raise RuntimeError(f"Failed to install requirements: {result.stderr}")
+            
+            logger.info("Dependencies install successful",
                        extra={'run_id': self.run_id})
-            
-            result = subprocess.run(
-                [str(pip_path), "install", "-r", "requirements.txt"],
-                capture_output=True,
-                stdin=subprocess.DEVNULL,
-                text=True,
-                timeout=600,
-                cwd=self.framework_dir
-            )
-            
-            if result.returncode != 0:
-                logger.error("Dependencies install failed", extra={'run_id': self.run_id,
-                           'metadata': {'stderr': result.stderr[:1000]}})
-                raise RuntimeError(f"Failed to install dependencies: {result.stderr}")
             
             # Verify pydantic version (critical for ChatMessage compatibility)
             verify_result = subprocess.run(

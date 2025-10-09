@@ -329,17 +329,13 @@ class OrchestratorRunner:
             crude_score, esr = self.validator.test_crud_endpoints()
             mc = self.validator.compute_migration_continuity()
             
-            # Compute all metrics
-            metrics = self.metrics_collector.get_aggregate_metrics()
-            
-            # Add quality metrics
-            quality_metrics = self.metrics_collector.compute_quality_metrics(
+            # Compute all metrics (including quality metrics)
+            metrics = self.metrics_collector.get_aggregate_metrics(
                 crude_score=crude_score,
                 esr=esr,
                 mc=mc,
                 zdi=zdi
             )
-            metrics['aggregate_metrics'].update(quality_metrics)
             
             # Verify token counts with OpenAI API (T026)
             api_key_env = framework_config.get('api_key_env')
@@ -388,8 +384,8 @@ class OrchestratorRunner:
             archive_hash = self.archiver.compute_hash(archive_path)
             self.archiver.create_metadata(
                 archive_path=archive_path,
-                hash_value=archive_hash,
-                framework_name=self.framework_name,
+                archive_hash=archive_hash,
+                framework=self.framework_name,
                 commit_hash=framework_config['commit_hash']
             )
             
