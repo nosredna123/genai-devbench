@@ -174,6 +174,11 @@ try:
         print(f"   Steps updated: {report['steps_with_tokens']}/{report['total_steps']}")
     elif report['status'] == 'already_reconciled':
         print(f"ℹ️  Run already reconciled at {report['reconciled_at']}")
+    elif report['status'] == 'data_not_available':
+        print(f"⏳ Token data not available yet from OpenAI Usage API")
+        print(f"   This is normal - Usage API has a 5-60 minute reporting delay")
+        print(f"   Run will remain pending for automatic retry on next reconciliation")
+        print(f"   Try again in 30-60 minutes")
     else:
         print(f"⚠️  Reconciliation completed with status: {report['status']}")
 except Exception as e:
@@ -214,11 +219,13 @@ results = reconciler.reconcile_all_pending(
 
 if results:
     success_count = sum(1 for r in results if r['status'] == 'success')
+    deferred_count = sum(1 for r in results if r['status'] == 'data_not_available')
     error_count = sum(1 for r in results if r['status'] == 'error')
     
     print(f"Processed {len(results)} runs:")
-    print(f"  ✅ Success: {success_count}")
-    print(f"  ❌ Errors:  {error_count}")
+    print(f"  ✅ Success:  {success_count}")
+    print(f"  ⏳ Deferred: {deferred_count} (data not available yet)")
+    print(f"  ❌ Errors:   {error_count}")
     print("")
     
     for report in results:
@@ -230,10 +237,13 @@ if results:
             steps = report.get('steps_with_tokens', 0)
             total_steps = report.get('total_steps', 0)
             
-            print(f"  {framework}/{run_id}")
+            print(f"  ✅ {framework}/{run_id}")
             print(f"    Input:  {tokens_in:,} tokens")
             print(f"    Output: {tokens_out:,} tokens")
             print(f"    Steps:  {steps}/{total_steps} updated")
+            print("")
+        elif report['status'] == 'data_not_available':
+            print(f"  ⏳ {report['framework']}/{report['run_id']}: Data not available yet (will retry)")
             print("")
         elif report['status'] == 'error':
             print(f"  ❌ {report['framework']}/{report['run_id']}: {report.get('error', 'Unknown error')}")

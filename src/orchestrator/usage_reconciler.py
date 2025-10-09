@@ -254,26 +254,45 @@ class UsageReconciler:
         reconciliation_report['steps_with_tokens'] = steps_with_tokens
         reconciliation_report['total_steps'] = len(metrics.get('steps', []))
         
-        metrics['usage_api_reconciliation'] = reconciliation_report
-        
-        # 6. Save updated metrics
-        with open(metrics_file, 'w', encoding='utf-8') as f:
-            json.dump(metrics, f, indent=2)
-        
-        logger.info(
-            f"Reconciled {framework}/{run_id}: {total_tokens_in:,} input, {total_tokens_out:,} output tokens",
-            extra={
-                'run_id': run_id,
-                'framework': framework,
-                'event': 'reconciliation_complete',
-                'metadata': {
-                    'total_tokens_in': total_tokens_in,
-                    'total_tokens_out': total_tokens_out,
-                    'steps_with_tokens': steps_with_tokens,
-                    'total_steps': len(metrics.get('steps', []))
+        # Only save reconciliation data if we got actual tokens
+        # This ensures the run remains "pending" for future reconciliation attempts
+        if total_tokens_in > 0 or total_tokens_out > 0 or force:
+            metrics['usage_api_reconciliation'] = reconciliation_report
+            
+            # 6. Save updated metrics
+            with open(metrics_file, 'w', encoding='utf-8') as f:
+                json.dump(metrics, f, indent=2)
+            
+            logger.info(
+                f"Reconciled {framework}/{run_id}: {total_tokens_in:,} input, {total_tokens_out:,} output tokens",
+                extra={
+                    'run_id': run_id,
+                    'framework': framework,
+                    'event': 'reconciliation_complete',
+                    'metadata': {
+                        'total_tokens_in': total_tokens_in,
+                        'total_tokens_out': total_tokens_out,
+                        'steps_with_tokens': steps_with_tokens,
+                        'total_steps': len(metrics.get('steps', []))
+                    }
                 }
-            }
-        )
+            )
+            reconciliation_report['status'] = 'success'
+        else:
+            # No token data available yet - don't mark as reconciled
+            logger.info(
+                f"No token data available yet for {framework}/{run_id} - will retry on next reconciliation",
+                extra={
+                    'run_id': run_id,
+                    'framework': framework,
+                    'event': 'reconciliation_deferred',
+                    'metadata': {
+                        'reason': 'zero_tokens_from_api',
+                        'total_steps': len(metrics.get('steps', []))
+                    }
+                }
+            )
+            reconciliation_report['status'] = 'data_not_available'
         
         return reconciliation_report
     
