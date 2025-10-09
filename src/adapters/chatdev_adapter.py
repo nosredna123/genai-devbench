@@ -591,11 +591,14 @@ class ChatDevAdapter(BaseAdapter):
                 }
             )
             
+            # Fetch token usage from OpenAI Usage API
+            # Note: Model filtering not used as OpenAI Usage API doesn't always populate model field
+            # The tight time window (step start to end) ensures we only get tokens for this step
             tokens_in, tokens_out = self.fetch_usage_from_openai(
                 api_key_env_var='OPEN_AI_KEY_ADM',
                 start_timestamp=self._step_start_time,
                 end_timestamp=end_timestamp,
-                model=model_config
+                model=None  # Don't filter by model - time window is sufficient
             )
             
             # T068: Detect HITL events (should be 0 with Default config)
