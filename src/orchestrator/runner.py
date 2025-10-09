@@ -257,6 +257,11 @@ class OrchestratorRunner:
             )
             
             # Initialize framework adapter
+            # Get framework configuration and add global model config
+            framework_config = self.config['frameworks'][self.framework_name]
+            framework_config['model'] = self.config.get('model')  # Add global model to framework config
+            
+            # Initialize appropriate adapter based on framework
             if self.framework_name == 'baes':
                 self.adapter = BAeSAdapter(framework_config, self.run_id, 
                                           self.workspace_path)

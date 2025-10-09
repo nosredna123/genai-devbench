@@ -6,8 +6,11 @@ Defines the contract that all framework adapters must implement.
 
 from abc import ABC, abstractmethod
 import subprocess
+import time
+import os
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Tuple, Optional
+from datetime import datetime, timezone
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -29,6 +32,126 @@ class BaseAdapter(ABC):
         self.run_id = run_id
         self.workspace_path = workspace_path
         self.current_step = 0
+        self._step_start_time: Optional[float] = None  # Track step execution start time
+    
+    def fetch_usage_from_openai(
+        self,
+        api_key_env_var: str,
+        start_timestamp: int,
+        end_timestamp: Optional[int] = None,
+        model: Optional[str] = None
+    ) -> Tuple[int, int]:
+        """
+        Fetch token usage from OpenAI Usage API.
+        
+        This is a general, DRY method that works for ALL frameworks (ChatDev, GHSpec, BAEs)
+        by querying OpenAI's Usage API directly instead of parsing framework-specific logs.
+        
+        Args:
+            api_key_env_var: Environment variable name containing the OpenAI API key
+            start_timestamp: Unix timestamp (seconds) when step execution started
+            end_timestamp: Unix timestamp (seconds) when step execution ended (defaults to now)
+            model: Optional model filter (e.g., "gpt-4o-mini", "gpt-5-mini")
+            
+        Returns:
+            Tuple of (tokens_in, tokens_out)
+            
+        Note:
+            - Uses organization/usage/completions endpoint
+            - Aggregates all API calls within the time window
+            - Returns (0, 0) if API call fails or no usage found
+        """
+        try:
+            import requests
+            
+            # Get API key from environment
+            api_key = os.getenv(api_key_env_var)
+            if not api_key:
+                logger.warning(
+                    f"API key not found in environment variable: {api_key_env_var}",
+                    extra={'run_id': self.run_id}
+                )
+                return 0, 0
+            
+            # Use current time if end_timestamp not provided
+            if end_timestamp is None:
+                end_timestamp = int(time.time())
+            
+            # Build API request
+            url = "https://api.openai.com/v1/organization/usage/completions"
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            params = {
+                "start_time": start_timestamp,
+                "end_time": end_timestamp,
+                "bucket_width": "1d",  # Use daily bucket
+                "limit": 31  # Get last month of data
+            }
+            
+            # Add model filter if specified
+            if model:
+                params["models"] = [model]
+            
+            logger.debug(
+                "Querying OpenAI Usage API",
+                extra={
+                    'run_id': self.run_id,
+                    'metadata': {
+                        'start_time': start_timestamp,
+                        'end_time': end_timestamp,
+                        'start_dt': datetime.fromtimestamp(start_timestamp, tz=timezone.utc).isoformat(),
+                        'end_dt': datetime.fromtimestamp(end_timestamp, tz=timezone.utc).isoformat(),
+                        'model': model
+                    }
+                }
+            )
+            
+            # Make API request
+            response = requests.get(url, headers=headers, params=params, timeout=30)
+            response.raise_for_status()
+            
+            usage_data = response.json()
+            
+            # Aggregate tokens from all buckets
+            total_input_tokens = 0
+            total_output_tokens = 0
+            
+            for bucket in usage_data.get("data", []):
+                for result in bucket.get("results", []):
+                    total_input_tokens += result.get("input_tokens", 0)
+                    total_output_tokens += result.get("output_tokens", 0)
+            
+            logger.info(
+                "Token usage fetched from OpenAI Usage API",
+                extra={
+                    'run_id': self.run_id,
+                    'step': self.current_step,
+                    'metadata': {
+                        'tokens_in': total_input_tokens,
+                        'tokens_out': total_output_tokens,
+                        'buckets_count': len(usage_data.get("data", [])),
+                        'model': model
+                    }
+                }
+            )
+            
+            return total_input_tokens, total_output_tokens
+            
+        except Exception as e:
+            logger.error(
+                f"Failed to fetch usage from OpenAI API: {e}",
+                extra={
+                    'run_id': self.run_id,
+                    'metadata': {
+                        'error': str(e),
+                        'error_type': type(e).__name__
+                    }
+                }
+            )
+            # Return 0, 0 on error - non-critical for test execution
+            return 0, 0
     
     def verify_commit_hash(self, repo_path: Path, expected_hash: str) -> None:
         """

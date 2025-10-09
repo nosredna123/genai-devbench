@@ -471,7 +471,10 @@ class ChatDevAdapter(BaseAdapter):
             Dictionary with execution results
         """
         self.current_step = step_num
-        start_time = time.time()
+        
+        # Record step start time for Usage API query (Unix timestamp)
+        self._step_start_time = int(time.time())
+        start_time = time.time()  # For duration calculation
         
         logger.info("Executing step",
                    extra={'run_id': self.run_id, 'step': step_num, 
@@ -557,6 +560,7 @@ class ChatDevAdapter(BaseAdapter):
             
             success = result.returncode == 0
             duration = time.time() - start_time
+            end_timestamp = int(time.time())
             
             # Log stderr if execution failed
             if not success:
@@ -568,8 +572,30 @@ class ChatDevAdapter(BaseAdapter):
                                      'stdout_preview': result.stdout[:500] if result.stdout else ''
                                  }})
             
-            # T067: Parse token usage from output (likely returns 0, will use Usage API)
-            tokens_in, tokens_out = self._parse_token_usage(result.stdout, result.stderr)
+            # Fetch token usage from OpenAI Usage API
+            # This replaces framework-specific log parsing with a general DRY approach
+            api_key_env = self.config.get('api_key_env', 'OPENAI_API_KEY_CHATDEV')
+            model_config = self.config.get('model')  # From experiment.yaml
+            
+            logger.info(
+                "Fetching token usage from OpenAI Usage API",
+                extra={
+                    'run_id': self.run_id,
+                    'step': step_num,
+                    'metadata': {
+                        'start_timestamp': self._step_start_time,
+                        'end_timestamp': end_timestamp,
+                        'model': model_config
+                    }
+                }
+            )
+            
+            tokens_in, tokens_out = self.fetch_usage_from_openai(
+                api_key_env_var=api_key_env,
+                start_timestamp=self._step_start_time,
+                end_timestamp=end_timestamp,
+                model=model_config
+            )
             
             # T068: Detect HITL events (should be 0 with Default config)
             hitl_count = self._detect_hitl_events(result.stdout)
