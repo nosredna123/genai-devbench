@@ -110,8 +110,25 @@ class BaseAdapter(ABC):
             
             # Make API request
             response = requests.get(url, headers=headers, params=params, timeout=30)
-            response.raise_for_status()
             
+            # Check for permission errors before raising
+            if response.status_code == 401:
+                error_data = response.json()
+                if "api.usage.read" in error_data.get("error", {}).get("message", ""):
+                    logger.error(
+                        "API key lacks 'api.usage.read' scope for Usage API",
+                        extra={
+                            'run_id': self.run_id,
+                            'metadata': {
+                                'api_key_env_var': api_key_env_var,
+                                'error': error_data.get("error", {}).get("message", ""),
+                                'fix': 'Grant api.usage.read scope to the API key in OpenAI dashboard'
+                            }
+                        }
+                    )
+                    return 0, 0  # Return zeros instead of failing
+            
+            response.raise_for_status()
             usage_data = response.json()
             
             # Aggregate tokens from all buckets
