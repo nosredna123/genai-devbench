@@ -5,11 +5,11 @@
 random_seed: 42
 
 # Model configuration - ALL frameworks must use the same model for fair comparison
-# Supported models: gpt-4o-mini, o1-mini, o1-preview, gpt-5-mini
+# Supported models: gpt-4o-mini, o1-mini, o1-preview
 # - gpt-4o-mini: Native ChatDev support (commit 52edb89)
-# - o1-mini, o1-preview, gpt-5-mini: Added via runtime patch (see src/adapters/chatdev_adapter.py::_patch_o1_model_support)
-# Note: O1 models have better reasoning; GPT-5 mini is faster and cheaper
-model: "gpt-5-mini"
+# - o1-mini, o1-preview: Added via runtime patch (see src/adapters/chatdev_adapter.py::_patch_o1_model_support)
+# Note: O1 models have better reasoning; GPT-4o-mini is faster and cheaper
+model: "gpt-4o-mini"
 
 # Framework configurations
 frameworks:
