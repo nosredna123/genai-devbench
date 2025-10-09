@@ -11,7 +11,7 @@ This project uses a **two-tier API key system**:
 ### 1. Admin Key (Organization-Level)
 - **Variable**: `OPEN_AI_KEY_ADM`
 - **Purpose**: Query the OpenAI Usage API for token counting
-- **Permissions**: Organization-level access required
+- **Permissions**: Organization-level access required (`api.usage.read` scope)
 - **Used by**: All adapters (ChatDev, GHSpec, BAEs) for token tracking
 
 ### 2. Framework Keys (Project-Level)
@@ -22,8 +22,23 @@ This project uses a **two-tier API key system**:
 
 **Why Two Tiers?**
 - Usage API requires **organization-level permissions** that framework keys don't have
-- Separating keys allows independent tracking and billing per framework
-- Admin key aggregates usage across all frameworks
+- Framework keys are used to MAKE the API calls
+- Admin key is used to MEASURE the API calls
+- Per-framework attribution is achieved through **time window isolation**, not API key filtering
+
+**Time Window Isolation Strategy:**
+Since OpenAI Usage API doesn't reliably filter by `api_key_id` or `model`, we use tight time windows:
+1. Record start timestamp when framework step begins
+2. Execute framework (uses framework-specific API key)
+3. Record end timestamp when framework step completes
+4. Query Usage API for that exact time window
+5. All tokens in that window belong to that framework execution
+
+This works because:
+- ✅ Sequential execution (one framework at a time)
+- ✅ Tight time windows (4-5 minutes per step)
+- ✅ No concurrent API calls
+- ✅ Precise attribution without API key filtering
 
 ## Problem Statement
 

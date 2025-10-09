@@ -1,7 +1,8 @@
 # Run artifacts (not version controlled)
 runs/
+logs/
+*.log
 .env
-experiment_output.log
 .copilot/
 
 # Python

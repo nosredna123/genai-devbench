@@ -573,10 +573,20 @@ class ChatDevAdapter(BaseAdapter):
                                  }})
             
             # Fetch token usage from OpenAI Usage API
-            # This replaces framework-specific log parsing with a general DRY approach
-            # Note: Uses OPEN_AI_KEY_ADM (admin key) which has organization-level permissions
-            model_config = self.config.get('model')  # From experiment.yaml
-            
+            # 
+            # IMPORTANT: Per-Framework Attribution Strategy
+            # =============================================
+            # We use TIME WINDOW ISOLATION instead of API key filtering because:
+            # 1. Framework keys (OPENAI_API_KEY_CHATDEV) lack api.usage.read scope
+            # 2. Usage API doesn't reliably populate api_key_id or model fields
+            # 3. Sequential execution ensures no concurrent API calls
+            # 4. Tight time window (step start → step end) = precise attribution
+            #
+            # How it works:
+            # - ChatDev MAKES API calls using OPENAI_API_KEY_CHATDEV
+            # - We MEASURE those calls using OPEN_AI_KEY_ADM (admin key with usage.read scope)
+            # - Time window filtering ensures we only count THIS framework's tokens
+            #
             logger.info(
                 "Fetching token usage from OpenAI Usage API",
                 extra={
@@ -585,17 +595,17 @@ class ChatDevAdapter(BaseAdapter):
                     'metadata': {
                         'start_timestamp': self._step_start_time,
                         'end_timestamp': end_timestamp,
-                        'model': model_config,
-                        'api_key_env': 'OPEN_AI_KEY_ADM'
+                        'duration_seconds': end_timestamp - self._step_start_time,
+                        'framework_api_key': api_key_env,  # Key used to MAKE API calls
+                        'usage_api_key': 'OPEN_AI_KEY_ADM'  # Key used to MEASURE API calls
                     }
                 }
             )
             
-            # Fetch token usage from OpenAI Usage API
-            # Note: Model filtering not used as OpenAI Usage API doesn't always populate model field
-            # The tight time window (step start to end) ensures we only get tokens for this step
+            # Query Usage API for tokens in this time window
+            # No model/API key filtering - time window isolation is sufficient
             tokens_in, tokens_out = self.fetch_usage_from_openai(
-                api_key_env_var='OPEN_AI_KEY_ADM',
+                api_key_env_var='OPEN_AI_KEY_ADM',  # Admin key with usage.read scope
                 start_timestamp=self._step_start_time,
                 end_timestamp=end_timestamp,
                 model=None  # Don't filter by model - time window is sufficient

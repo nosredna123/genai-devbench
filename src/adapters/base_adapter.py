@@ -132,13 +132,14 @@ class BaseAdapter(ABC):
             usage_data = response.json()
             
             # Aggregate tokens from all buckets
+            # Note: OpenAI Usage API uses n_context_tokens_total and n_generated_tokens_total
             total_input_tokens = 0
             total_output_tokens = 0
             
             for bucket in usage_data.get("data", []):
                 for result in bucket.get("results", []):
-                    total_input_tokens += result.get("input_tokens", 0)
-                    total_output_tokens += result.get("output_tokens", 0)
+                    total_input_tokens += result.get("n_context_tokens_total", 0)
+                    total_output_tokens += result.get("n_generated_tokens_total", 0)
             
             logger.info(
                 "Token usage fetched from OpenAI Usage API",
