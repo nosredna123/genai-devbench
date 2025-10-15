@@ -1,11 +1,11 @@
 {
   "version": "1.0",
-  "last_updated": "2025-10-15T17:54:53.801188Z",
-  "total_runs": 4,
+  "last_updated": "2025-10-15T18:10:03.528884Z",
+  "total_runs": 2,
   "frameworks": {
     "chatdev": 1,
     "baes": 0,
-    "ghspec": 3
+    "ghspec": 1
   },
   "runs": [
     {
@@ -19,31 +19,11 @@
       "total_tokens_out": 78915
     },
     {
-      "run_id": "8f6f7f74-7401-406a-a6cf-5877993aff79",
+      "run_id": "66d1dbec-762b-47cf-bd23-4e7bd714abf5",
       "framework": "ghspec",
-      "path": "ghspec/8f6f7f74-7401-406a-a6cf-5877993aff79",
-      "start_time": "2025-10-15T17:32:27.202091Z",
-      "end_time": "2025-10-15T17:34:39.003519Z",
-      "verification_status": "pending",
-      "total_tokens_in": 0,
-      "total_tokens_out": 0
-    },
-    {
-      "run_id": "2531852e-f9da-46c4-b92d-1210a09ff279",
-      "framework": "ghspec",
-      "path": "ghspec/2531852e-f9da-46c4-b92d-1210a09ff279",
-      "start_time": "2025-10-15T17:40:07.540686Z",
-      "end_time": "2025-10-15T17:42:01.708776Z",
-      "verification_status": "pending",
-      "total_tokens_in": 0,
-      "total_tokens_out": 0
-    },
-    {
-      "run_id": "7b863b79-ff22-468e-ab63-dce02b9883fb",
-      "framework": "ghspec",
-      "path": "ghspec/7b863b79-ff22-468e-ab63-dce02b9883fb",
-      "start_time": "2025-10-15T17:53:28.759750Z",
-      "end_time": "2025-10-15T17:54:48.795104Z",
+      "path": "ghspec/66d1dbec-762b-47cf-bd23-4e7bd714abf5",
+      "start_time": "2025-10-15T17:58:08.304091Z",
+      "end_time": "2025-10-15T18:10:02.824381Z",
       "verification_status": "pending",
       "total_tokens_in": 0,
       "total_tokens_out": 0
