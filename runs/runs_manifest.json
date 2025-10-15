@@ -1,9 +1,9 @@
 {
   "version": "1.0",
-  "last_updated": "2025-10-15T19:25:27.133720Z",
-  "total_runs": 1,
+  "last_updated": "2025-10-15T21:03:48.572048Z",
+  "total_runs": 2,
   "frameworks": {
-    "chatdev": 0,
+    "chatdev": 1,
     "baes": 0,
     "ghspec": 1
   },
@@ -15,8 +15,18 @@
       "start_time": "2025-10-15T19:11:10.927510Z",
       "end_time": "2025-10-15T19:23:09.657030Z",
       "verification_status": "pending",
-      "total_tokens_in": 53677,
-      "total_tokens_out": 20129
+      "total_tokens_in": 59040,
+      "total_tokens_out": 23542
+    },
+    {
+      "run_id": "d8d76027-1d25-4e86-a316-83551f024173",
+      "framework": "chatdev",
+      "path": "chatdev/d8d76027-1d25-4e86-a316-83551f024173",
+      "start_time": "2025-10-15T19:30:51.894401Z",
+      "end_time": "2025-10-15T20:00:00.241792Z",
+      "verification_status": "pending",
+      "total_tokens_in": 217055,
+      "total_tokens_out": 74482
     }
   ]
 }
