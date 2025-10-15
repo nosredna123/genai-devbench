@@ -102,5 +102,101 @@
     "discrepancy_pct_in": 0,
     "discrepancy_pct_out": 0,
     "error": null
+  },
+  "usage_api_reconciliation": {
+    "verification_status": "data_not_available",
+    "attempts": [
+      {
+        "timestamp": "2025-10-15T18:16:20.088205+00:00",
+        "steps": [
+          {
+            "step": 1,
+            "status": "missing_timestamps",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 2,
+            "status": "missing_timestamps",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 3,
+            "status": "missing_timestamps",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 4,
+            "status": "missing_timestamps",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 5,
+            "status": "missing_timestamps",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 6,
+            "status": "missing_timestamps",
+            "tokens_in": 0,
+            "tokens_out": 0
+          }
+        ],
+        "total_tokens_in": 0,
+        "total_tokens_out": 0,
+        "steps_with_tokens": 0,
+        "total_steps": 6
+      },
+      {
+        "timestamp": "2025-10-15T18:22:01.079459+00:00",
+        "steps": [
+          {
+            "step": 1,
+            "status": "missing_timestamps",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 2,
+            "status": "missing_timestamps",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 3,
+            "status": "missing_timestamps",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 4,
+            "status": "missing_timestamps",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 5,
+            "status": "missing_timestamps",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 6,
+            "status": "missing_timestamps",
+            "tokens_in": 0,
+            "tokens_out": 0
+          }
+        ],
+        "total_tokens_in": 0,
+        "total_tokens_out": 0,
+        "steps_with_tokens": 0,
+        "total_steps": 6
+      }
+    ],
+    "verification_message": "No token data available yet (attempt 2)"
   }
 }
