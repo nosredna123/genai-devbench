@@ -217,10 +217,15 @@ class GHSpecAdapter(BaseAdapter):
                 
             # Phase 4: Task-by-task implementation (steps 4-5)
             elif step_num in [4, 5]:
-                # TODO: Implement task-by-task code generation
-                logger.warning("Phase 4 not yet implemented",
-                             extra={'run_id': self.run_id, 'step': step_num})
-                success = False
+                # Implement tasks from tasks.md
+                if not self.tasks_md_path.exists():
+                    raise RuntimeError("tasks.md not found - run steps 1-3 first")
+                
+                hitl_count, tokens_in, tokens_out = self._execute_task_implementation(command_text)
+                
+                # Success if at least some files were created
+                created_files = list(self.src_dir.rglob('*.py')) + list(self.src_dir.rglob('*.md'))
+                success = len(created_files) > 0
                 
             # Phase 5: Bugfix cycle (step 6)
             elif step_num == 6:
@@ -366,21 +371,57 @@ class GHSpecAdapter(BaseAdapter):
         with open(template_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # Extract system prompt (between ## System Prompt and next ##)
-        system_match = re.search(
-            r'## System Prompt\s*```\s*(.*?)\s*```',
-            content,
-            re.DOTALL
-        )
-        system_prompt = system_match.group(1).strip() if system_match else ""
+        # Split by ## headers to isolate sections
+        lines = content.split('\n')
         
-        # Extract user prompt template
-        user_match = re.search(
-            r'## User Prompt Template\s*```\s*(.*?)\s*```',
-            content,
-            re.DOTALL
-        )
-        user_prompt_template = user_match.group(1).strip() if user_match else ""
+        system_prompt = ""
+        user_prompt_template = ""
+        current_section = None
+        in_code_block = False
+        code_block_content = []
+        
+        for line in lines:
+            # Detect section headers
+            if line.strip().startswith('## System Prompt'):
+                current_section = 'system'
+                in_code_block = False
+                code_block_content = []
+            elif line.strip().startswith('## User Prompt Template'):
+                current_section = 'user'
+                in_code_block = False
+                code_block_content = []
+            elif line.strip().startswith('##') and line.strip() != '##':
+                # Different section, stop capturing
+                if current_section and in_code_block and code_block_content:
+                    # Save what we captured
+                    if current_section == 'system':
+                        system_prompt = '\n'.join(code_block_content).strip()
+                    elif current_section == 'user':
+                        user_prompt_template = '\n'.join(code_block_content).strip()
+                current_section = None
+                in_code_block = False
+                code_block_content = []
+            elif current_section:
+                # Handle code blocks
+                if line.strip().startswith('```'):
+                    if not in_code_block:
+                        # Starting code block
+                        in_code_block = True
+                        code_block_content = []
+                    else:
+                        # Ending code block - save content
+                        if current_section == 'system' and not system_prompt:
+                            system_prompt = '\n'.join(code_block_content).strip()
+                        elif current_section == 'user' and not user_prompt_template:
+                            user_prompt_template = '\n'.join(code_block_content).strip()
+                        in_code_block = False
+                elif in_code_block:
+                    code_block_content.append(line)
+        
+        # Handle case where file ends while in code block
+        if in_code_block and code_block_content:
+            if current_section == 'user' and not user_prompt_template:
+                user_prompt_template = '\n'.join(code_block_content).strip()
         
         if not system_prompt or not user_prompt_template:
             raise ValueError(f"Invalid template format in {template_path}")
@@ -523,6 +564,318 @@ class GHSpecAdapter(BaseAdapter):
                    extra={'run_id': self.run_id, 'step': self.current_step,
                          'metadata': {
                              'path': str(output_path),
+                             'size_bytes': len(content.encode('utf-8'))
+                         }})
+    
+    def _execute_task_implementation(self, command_text: str) -> Tuple[int, int, int]:
+        """
+        Execute task-by-task code generation (Phase 4).
+        
+        Workflow:
+        1. Parse tasks.md into structured task list
+        2. For each task:
+           a. Build context-rich prompt (spec excerpt + plan excerpt + current file)
+           b. Call OpenAI API
+           c. Handle clarifications if needed
+           d. Save generated code to file
+        3. Aggregate token usage across all tasks
+        
+        Args:
+            command_text: User's original feature request (for logging)
+            
+        Returns:
+            Tuple of (total_hitl_count, total_tokens_in, total_tokens_out)
+        """
+        logger.info("Starting task-by-task implementation",
+                   extra={'run_id': self.run_id, 'step': self.current_step})
+        
+        # Parse tasks from tasks.md
+        tasks = self._parse_tasks()
+        
+        logger.info(f"Found {len(tasks)} tasks to implement",
+                   extra={'run_id': self.run_id, 'step': self.current_step,
+                         'metadata': {'task_count': len(tasks)}})
+        
+        # Load spec and plan content once (for excerpting)
+        spec_content = self.spec_md_path.read_text(encoding='utf-8')
+        plan_content = self.plan_md_path.read_text(encoding='utf-8')
+        
+        # Load implement template
+        template_path = Path("docs/ghspec/prompts/implement_template.md")
+        system_prompt, user_prompt_template = self._load_prompt_template(template_path)
+        
+        total_hitl_count = 0
+        total_tokens_in = 0
+        total_tokens_out = 0
+        
+        # Process each task
+        for i, task in enumerate(tasks, 1):
+            logger.info(f"Processing task {i}/{len(tasks)}: {task['id']}",
+                       extra={'run_id': self.run_id, 'step': self.current_step,
+                             'metadata': {'task_id': task['id'], 'file': task['file']}})
+            
+            # Build task-specific prompt
+            user_prompt = self._build_task_prompt(
+                task, spec_content, plan_content, user_prompt_template
+            )
+            
+            # Track start time for Usage API
+            api_call_start = int(time.time())
+            
+            # Call OpenAI API
+            response_text = self._call_openai(system_prompt, user_prompt)
+            
+            # Check for clarification
+            hitl_count = 0
+            if self._needs_clarification(response_text):
+                logger.info(f"Clarification needed for task {task['id']}",
+                           extra={'run_id': self.run_id, 'step': self.current_step})
+                
+                clarification_text = self._handle_clarification(response_text)
+                user_prompt_with_hitl = f"{user_prompt}\n\n---\n\n{clarification_text}"
+                
+                response_text = self._call_openai(system_prompt, user_prompt_with_hitl)
+                hitl_count = 1
+            
+            # Save generated code
+            self._save_code_file(task['file'], response_text)
+            
+            # Fetch token usage
+            api_call_end = int(time.time())
+            tokens_in, tokens_out = self.fetch_usage_from_openai(
+                api_key_env_var=self.config['api_key_env'],
+                start_timestamp=api_call_start,
+                end_timestamp=api_call_end,
+                model='gpt-4o-mini'
+            )
+            
+            # Aggregate totals
+            total_hitl_count += hitl_count
+            total_tokens_in += tokens_in
+            total_tokens_out += tokens_out
+            
+            logger.info(f"Task {task['id']} completed",
+                       extra={'run_id': self.run_id, 'step': self.current_step,
+                             'metadata': {
+                                 'file': task['file'],
+                                 'tokens_in': tokens_in,
+                                 'tokens_out': tokens_out,
+                                 'hitl': hitl_count
+                             }})
+        
+        logger.info("Task implementation completed",
+                   extra={'run_id': self.run_id, 'step': self.current_step,
+                         'metadata': {
+                             'tasks_completed': len(tasks),
+                             'total_hitl': total_hitl_count,
+                             'total_tokens_in': total_tokens_in,
+                             'total_tokens_out': total_tokens_out
+                         }})
+        
+        return total_hitl_count, total_tokens_in, total_tokens_out
+    
+    def _parse_tasks(self) -> list:
+        """
+        Parse tasks.md into structured task list.
+        
+        Expected format (from tasks template):
+        - [ ] **TASK-001** [labels] Task description
+          - **File**: path/to/file.py
+          - **Goal**: What this task achieves
+          - **Dependencies**: TASK-XXX (optional)
+          - **Test**: How to verify (optional)
+        
+        Returns:
+            List of task dictionaries with keys: id, description, file, goal
+        """
+        tasks_content = self.tasks_md_path.read_text(encoding='utf-8')
+        tasks = []
+        
+        # Regex to match task blocks
+        # Pattern: - [ ] **TASK-NNN** [labels] Description
+        task_pattern = re.compile(
+            r'- \[ \] \*\*([A-Z]+-\d+)\*\* .*?\n'  # Task ID line
+            r'(?:.*?- \*\*File\*\*: `?([^\n`]+)`?\n)?'  # File (optional backticks)
+            r'(?:.*?- \*\*Goal\*\*: ([^\n]+)\n)?',  # Goal
+            re.MULTILINE
+        )
+        
+        for match in task_pattern.finditer(tasks_content):
+            task_id = match.group(1)
+            file_path = match.group(2).strip() if match.group(2) else None
+            goal = match.group(3).strip() if match.group(3) else "Implement task"
+            
+            # Skip tasks without file paths (they might be organizational)
+            if not file_path:
+                continue
+            
+            # Extract description from the task line
+            task_line_start = match.start()
+            task_line_end = tasks_content.find('\n', task_line_start)
+            task_line = tasks_content[task_line_start:task_line_end]
+            
+            # Description is after the closing **
+            desc_match = re.search(r'\*\*[A-Z]+-\d+\*\* (.+)$', task_line)
+            description = desc_match.group(1).strip() if desc_match else goal
+            
+            tasks.append({
+                'id': task_id,
+                'description': description,
+                'file': file_path,
+                'goal': goal
+            })
+        
+        return tasks
+    
+    def _build_task_prompt(
+        self, 
+        task: dict, 
+        spec_content: str, 
+        plan_content: str,
+        template: str
+    ) -> str:
+        """
+        Build context-rich prompt for a specific task.
+        
+        Context includes:
+        - Task details (id, description, goal, file)
+        - Relevant spec excerpt (extracted via keywords)
+        - Relevant plan excerpt (extracted via keywords)
+        - Current file content (if file exists)
+        
+        Args:
+            task: Task dictionary from _parse_tasks()
+            spec_content: Full specification text
+            plan_content: Full technical plan text
+            template: User prompt template from implement_template.md
+            
+        Returns:
+            Complete user prompt with all context filled in
+        """
+        # Extract relevant sections from spec and plan
+        spec_excerpt = self._extract_relevant_section(spec_content, task)
+        plan_excerpt = self._extract_relevant_section(plan_content, task)
+        
+        # Read current file content if it exists
+        file_full_path = self.src_dir / task['file']
+        current_file_content = self._read_file_if_exists(file_full_path)
+        
+        if not current_file_content:
+            current_file_content = "# File does not exist yet - create from scratch"
+        
+        # Fill template with context
+        prompt = (template
+                 .replace('{task_description}', task['description'])
+                 .replace('{file_path}', task['file'])
+                 .replace('{task_goal}', task['goal'])
+                 .replace('{spec_excerpt}', spec_excerpt)
+                 .replace('{plan_excerpt}', plan_excerpt)
+                 .replace('{current_file_content}', current_file_content))
+        
+        return prompt
+    
+    def _extract_relevant_section(self, full_content: str, task: dict) -> str:
+        """
+        Extract relevant excerpt from spec/plan for this specific task.
+        
+        Uses keyword matching to find sections related to:
+        - File name/path keywords (e.g., "user", "auth", "model")
+        - Task description keywords
+        - Task goal keywords
+        
+        Strategy:
+        1. Split document into sections (by ## headers)
+        2. Score each section based on keyword matches
+        3. Return top 2-3 sections concatenated
+        4. Limit to ~500 words to manage context window
+        
+        Args:
+            full_content: Complete spec.md or plan.md content
+            task: Task dictionary with description, file, goal
+            
+        Returns:
+            Relevant excerpt (truncated if needed)
+        """
+        # Extract keywords from task
+        keywords = set()
+        
+        # From file path: "backend/models/user.py" → ["user", "model"]
+        file_parts = task['file'].lower().replace('/', ' ').replace('.', ' ').split()
+        keywords.update(file_parts)
+        
+        # From description and goal
+        desc_words = task['description'].lower().split()
+        goal_words = task['goal'].lower().split()
+        keywords.update(w for w in desc_words if len(w) > 3)
+        keywords.update(w for w in goal_words if len(w) > 3)
+        
+        # Split content into sections by headers
+        sections = re.split(r'\n##+ ', full_content)
+        
+        # Score each section
+        scored_sections = []
+        for section in sections:
+            section_lower = section.lower()
+            score = sum(1 for keyword in keywords if keyword in section_lower)
+            if score > 0:
+                scored_sections.append((score, section))
+        
+        # Sort by score and take top 3
+        scored_sections.sort(reverse=True, key=lambda x: x[0])
+        top_sections = [s[1] for s in scored_sections[:3]]
+        
+        # Concatenate and truncate
+        excerpt = '\n\n## '.join(top_sections)
+        
+        # Limit to ~2000 characters (~500 words)
+        if len(excerpt) > 2000:
+            excerpt = excerpt[:2000] + "\n\n[... excerpt truncated ...]"
+        
+        return excerpt if excerpt else "No relevant sections found - use general context"
+    
+    def _read_file_if_exists(self, file_path: Path) -> str:
+        """
+        Read file content if it exists in workspace.
+        
+        Args:
+            file_path: Absolute path to file
+            
+        Returns:
+            File content as string, or empty string if doesn't exist
+        """
+        if file_path.exists():
+            try:
+                return file_path.read_text(encoding='utf-8')
+            except Exception as e:
+                logger.warning(f"Could not read {file_path}: {e}",
+                             extra={'run_id': self.run_id, 'step': self.current_step})
+                return ""
+        return ""
+    
+    def _save_code_file(self, relative_path: str, content: str) -> None:
+        """
+        Save generated code to workspace file.
+        
+        Creates parent directories if needed.
+        Handles both absolute paths and relative paths from src/.
+        
+        Args:
+            relative_path: Path relative to src_dir (e.g., "backend/models/user.py")
+            content: File content to write
+        """
+        # Resolve path relative to src_dir
+        file_path = self.src_dir / relative_path
+        
+        # Create parent directories
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Write content
+        file_path.write_text(content, encoding='utf-8')
+        
+        logger.info(f"Code file saved: {relative_path}",
+                   extra={'run_id': self.run_id, 'step': self.current_step,
+                         'metadata': {
+                             'path': str(file_path),
                              'size_bytes': len(content.encode('utf-8'))
                          }})
         
