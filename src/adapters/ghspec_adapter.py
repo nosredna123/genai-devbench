@@ -34,25 +34,46 @@ class GHSpecAdapter(BaseAdapter):
         
     def start(self) -> None:
         """
-        Initialize GitHub Spec-kit framework environment.
+        Clone GitHub Spec-kit repository and setup workspace structure.
         
-        Clones repository, sets up environment, starts services.
+        Phase 2 Implementation:
+        - Clone spec-kit repository from configured URL
+        - Checkout and verify specific commit hash
+        - Setup workspace directory structure for artifacts
+        - Initialize feature directory (specs/001-baes-experiment/)
+        - GHSpec is CLI-based (bash scripts), no services to start
+        
+        The workspace will have this structure:
+            workspace_path/
+                ghspec_framework/        # Cloned spec-kit repo
+                specs/                   # Artifact storage
+                    001-baes-experiment/ # Feature directory
+                        spec.md          # Generated specification
+                        plan.md          # Generated technical plan
+                        tasks.md         # Generated task list
+                        src/             # Generated code files
         """
         logger.info("Starting GitHub Spec-kit framework",
                    extra={'run_id': self.run_id, 'event': 'framework_start'})
         
-        # Clone repository
         repo_url = self.config['repo_url']
         commit_hash = self.config['commit_hash']
+        
+        # Create framework directory for cloned repo
         self.framework_dir = Path(self.workspace_path) / "ghspec_framework"
         
         try:
             # Clone repository
+            logger.info("Cloning GitHub Spec-kit repository",
+                       extra={'run_id': self.run_id,
+                             'metadata': {'repo': repo_url, 'commit': commit_hash}})
+            
             subprocess.run(
                 ['git', 'clone', repo_url, str(self.framework_dir)],
                 check=True,
                 capture_output=True,
-                timeout=300
+                stdin=subprocess.DEVNULL,
+                timeout=120
             )
             
             # Checkout specific commit
@@ -61,29 +82,87 @@ class GHSpecAdapter(BaseAdapter):
                 cwd=self.framework_dir,
                 check=True,
                 capture_output=True,
+                stdin=subprocess.DEVNULL,
                 timeout=60
             )
             
-            # Verify commit hash matches config (T038 - reproducibility)
+            # Verify commit hash matches config (reproducibility requirement)
             self.verify_commit_hash(self.framework_dir, commit_hash)
             
             logger.info("GitHub Spec-kit repository cloned and verified",
-                       extra={'run_id': self.run_id, 
+                       extra={'run_id': self.run_id,
                              'metadata': {'commit': commit_hash}})
             
-            # TODO: Set up virtual environment and install dependencies
-            # TODO: Start framework services (API, UI)
-            # This will be framework-specific implementation
+            # Setup workspace directory structure for artifacts
+            self._setup_workspace_structure()
+            
+            # GHSpec is CLI-based (bash scripts + direct OpenAI API calls)
+            # No virtual environment needed - we call OpenAI API directly
+            # No persistent services to start - we invoke bash scripts per phase
+            
+            logger.info("GitHub Spec-kit framework ready",
+                       extra={'run_id': self.run_id,
+                             'metadata': {
+                                 'framework_dir': str(self.framework_dir),
+                                 'specs_dir': str(self.specs_dir),
+                                 'feature_dir': str(self.feature_dir)
+                             }})
             
         except subprocess.CalledProcessError as e:
-            logger.error("Failed to clone GitHub Spec-kit repository",
+            logger.error("Failed to initialize GitHub Spec-kit",
                         extra={'run_id': self.run_id,
-                              'metadata': {'error': str(e)}})
+                              'metadata': {'error': str(e),
+                                         'stderr': e.stderr.decode() if e.stderr else ''}})
             raise RuntimeError("GitHub Spec-kit initialization failed") from e
         except subprocess.TimeoutExpired as e:
-            logger.error("Repository clone timed out",
+            logger.error("GitHub Spec-kit initialization timed out",
                         extra={'run_id': self.run_id})
             raise RuntimeError("GitHub Spec-kit initialization timed out") from e
+    
+    def _setup_workspace_structure(self) -> None:
+        """
+        Create workspace directory structure for GHSpec artifacts.
+        
+        Creates:
+            workspace_path/
+                specs/                      # Root for all feature specifications
+                    001-baes-experiment/    # Feature directory (fixed name for experiment)
+                        spec.md             # Will be generated in Phase 3
+                        plan.md             # Will be generated in Phase 3
+                        tasks.md            # Will be generated in Phase 3
+                        src/                # Will contain generated code (Phase 4)
+        
+        The feature number and name follow spec-kit conventions:
+        - NNN format for feature numbers (001, 002, etc.)
+        - Kebab-case for feature names
+        - For this experiment, we use "001-baes-experiment" consistently
+        """
+        # Create specs root directory
+        self.specs_dir = Path(self.workspace_path) / "specs"
+        self.specs_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create feature directory with fixed name for reproducibility
+        # Using "baes-experiment" as the feature name for all runs
+        self.feature_dir = self.specs_dir / "001-baes-experiment"
+        self.feature_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create src directory for generated code (used in Phase 4)
+        self.src_dir = self.feature_dir / "src"
+        self.src_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Store artifact paths for easy access in later phases
+        self.spec_md_path = self.feature_dir / "spec.md"
+        self.plan_md_path = self.feature_dir / "plan.md"
+        self.tasks_md_path = self.feature_dir / "tasks.md"
+        
+        logger.info("Workspace structure created",
+                   extra={'run_id': self.run_id,
+                         'metadata': {
+                             'specs_dir': str(self.specs_dir),
+                             'feature_dir': str(self.feature_dir),
+                             'src_dir': str(self.src_dir)
+                         }})
+
             
     def execute_step(self, step_num: int, command_text: str) -> Dict[str, Any]:
         """
