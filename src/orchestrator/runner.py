@@ -370,6 +370,21 @@ class OrchestratorRunner:
             import json
             with open(metrics_file, 'w', encoding='utf-8') as f:
                 json.dump(metrics, f, indent=2)
+            
+            # Update manifest with run information
+            from src.orchestrator.manifest_manager import update_manifest
+            run_data = {
+                'run_id': self.run_id,
+                'framework': self.framework_name,
+                'start_time': metrics.get('start_timestamp'),
+                'end_time': metrics.get('end_timestamp'),
+                'verification_status': metrics.get('verification_status', 'pending'),
+                'total_tokens_in': metrics.get('total_tokens_in', 0),
+                'total_tokens_out': metrics.get('total_tokens_out', 0)
+            }
+            update_manifest(run_data)
+            logger.info("Updated runs manifest",
+                       extra={'run_id': self.run_id, 'event': 'manifest_updated'})
                 
             # Create archive
             logs_dir = Path(run_dir) / "logs"

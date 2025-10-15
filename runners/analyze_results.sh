@@ -94,6 +94,7 @@ from src.analysis.visualizations import (
     timeline_chart
 )
 from src.utils.logger import get_logger
+from src.orchestrator.manifest_manager import get_manifest, find_runs
 
 logger = get_logger(__name__)
 
@@ -101,61 +102,75 @@ logger = get_logger(__name__)
 RUNS_DIR = Path(os.environ['RUNS_DIR'])
 OUTPUT_DIR = Path(os.environ['OUTPUT_DIR'])
 
-# Step 1: Load all run data
-logger.info("Loading run data from %s", RUNS_DIR)
+# Step 1: Load all run data from manifest
+logger.info("Loading run data from manifest...")
 frameworks_data = defaultdict(list)
 timeline_data = defaultdict(dict)
 
-if not RUNS_DIR.exists():
-    logger.error("Runs directory not found: %s", RUNS_DIR)
+# Get manifest
+try:
+    manifest = get_manifest()
+    logger.info("Manifest loaded: %d total runs across %d frameworks", 
+                manifest['total_runs'], len(manifest['frameworks']))
+except FileNotFoundError:
+    logger.error("Manifest file not found. Run experiments first or rebuild manifest.")
+    sys.exit(1)
+except Exception as e:
+    logger.error("Failed to load manifest: %s", e)
     sys.exit(1)
 
-for framework_dir in RUNS_DIR.iterdir():
-    if not framework_dir.is_dir():
+# Query all runs from manifest
+all_runs = find_runs()
+
+if not all_runs:
+    logger.error("No runs found in manifest")
+    sys.exit(1)
+
+logger.info("Found %d runs in manifest", len(all_runs))
+
+# Load metrics for each run
+for run_entry in all_runs:
+    framework_name = run_entry['framework']
+    run_id = run_entry['run_id']
+    
+    # Build path to metrics file
+    run_dir = RUNS_DIR / framework_name / run_id
+    metrics_file = run_dir / "metrics.json"
+    
+    if not metrics_file.exists():
+        logger.warning("Metrics file not found for run %s: %s", run_id, metrics_file)
         continue
     
-    framework_name = framework_dir.name
-    logger.info("Processing framework: %s", framework_name)
+    try:
+        with open(metrics_file, 'r', encoding='utf-8') as f:
+            metrics = json.load(f)
+        
+        frameworks_data[framework_name].append(metrics)
+        
+        # Load step-by-step data for timeline chart
+        # Check if step_metrics.json exists (optional)
+        step_metrics_file = run_dir / "step_metrics.json"
+        if step_metrics_file.exists():
+            with open(step_metrics_file, 'r', encoding='utf-8') as f:
+                step_metrics = json.load(f)
+            
+            for step_num, step_data in step_metrics.items():
+                step_int = int(step_num)
+                if step_int not in timeline_data[framework_name]:
+                    timeline_data[framework_name][step_int] = {
+                        'CRUDe': step_data.get('CRUDe', 0),
+                        'ZDI': step_data.get('ZDI', 0)
+                    }
     
-    for run_dir in framework_dir.iterdir():
-        if not run_dir.is_dir():
-            continue
-        
-        metrics_file = run_dir / "metrics.json"
-        if not metrics_file.exists():
-            logger.warning("Metrics file not found: %s", metrics_file)
-            continue
-        
-        try:
-            with open(metrics_file, 'r', encoding='utf-8') as f:
-                metrics = json.load(f)
-            
-            frameworks_data[framework_name].append(metrics)
-            
-            # Load step-by-step data for timeline chart
-            # Check if step_metrics.json exists (optional)
-            step_metrics_file = run_dir / "step_metrics.json"
-            if step_metrics_file.exists():
-                with open(step_metrics_file, 'r', encoding='utf-8') as f:
-                    step_metrics = json.load(f)
-                
-                for step_num, step_data in step_metrics.items():
-                    step_int = int(step_num)
-                    if step_int not in timeline_data[framework_name]:
-                        timeline_data[framework_name][step_int] = {
-                            'CRUDe': step_data.get('CRUDe', 0),
-                            'ZDI': step_data.get('ZDI', 0)
-                        }
-        
-        except json.JSONDecodeError as e:
-            logger.error("Failed to parse %s: %s", metrics_file, e)
-            continue
-        except Exception as e:
-            logger.error("Error loading %s: %s", metrics_file, e)
-            continue
+    except json.JSONDecodeError as e:
+        logger.error("Failed to parse %s: %s", metrics_file, e)
+        continue
+    except Exception as e:
+        logger.error("Error loading %s: %s", metrics_file, e)
+        continue
 
 if not frameworks_data:
-    logger.error("No valid run data found")
+    logger.error("No valid metrics loaded from manifest runs")
     sys.exit(1)
 
 logger.info("Loaded data for %d frameworks", len(frameworks_data))

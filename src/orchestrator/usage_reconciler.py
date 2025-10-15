@@ -16,6 +16,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from src.utils.logger import get_logger
+from src.orchestrator.manifest_manager import find_runs
 
 logger = get_logger(__name__)
 
@@ -213,7 +214,20 @@ class UsageReconciler:
         with open(metrics_file, 'w', encoding='utf-8') as f:
             json.dump(metrics, f, indent=2)
         
-        # 7. Build response report
+        # 7. Update manifest with latest verification status
+        from src.orchestrator.manifest_manager import update_manifest
+        run_data = {
+            'run_id': run_id,
+            'framework': framework,
+            'start_time': metrics.get('start_timestamp'),
+            'end_time': metrics.get('end_timestamp'),
+            'verification_status': verification_result['status'],
+            'total_tokens_in': total_tokens_in,
+            'total_tokens_out': total_tokens_out
+        }
+        update_manifest(run_data)
+        
+        # 8. Build response report
         report = {
             'run_id': run_id,
             'framework': framework,
@@ -463,86 +477,81 @@ class UsageReconciler:
             }
         )
         
-        if not self.runs_dir.exists():
-            logger.warning(f"Runs directory not found: {self.runs_dir}")
+        # Get all runs from manifest
+        try:
+            all_runs = find_runs(framework=framework)
+        except Exception as e:
+            logger.error(f"Failed to query manifest: {e}")
             return results
         
-        # Iterate through framework directories
-        for framework_dir in self.runs_dir.iterdir():
-            if not framework_dir.is_dir():
+        if not all_runs:
+            logger.warning("No runs found in manifest")
+            return results
+        
+        # Process each run
+        for run_entry in all_runs:
+            run_id = run_entry['run_id']
+            framework_name = run_entry['framework']
+            
+            # Build path to metrics file
+            run_dir = self.runs_dir / framework_name / run_id
+            metrics_file = run_dir / "metrics.json"
+            
+            if not metrics_file.exists():
+                logger.debug(f"Metrics file not found: {framework_name}/{run_id}")
                 continue
             
-            framework_name = framework_dir.name
+            # Check file age
+            file_mtime = metrics_file.stat().st_mtime
             
-            # Apply framework filter
-            if framework and framework_name != framework:
+            if file_mtime > min_cutoff:
+                logger.debug(
+                    f"Run too recent: {framework_name}/{run_id} "
+                    f"({(current_time - file_mtime) / 60:.1f} minutes old)"
+                )
                 continue
             
-            logger.debug(f"Scanning framework: {framework_name}")
+            if file_mtime < max_cutoff:
+                logger.debug(
+                    f"Run too old: {framework_name}/{run_id} "
+                    f"({(current_time - file_mtime) / 3600:.1f} hours old)"
+                )
+                continue
             
-            # Iterate through run directories
-            for run_dir in framework_dir.iterdir():
-                if not run_dir.is_dir():
+            # Check if already reconciled or has token data
+            try:
+                with open(metrics_file, 'r', encoding='utf-8') as f:
+                    metrics = json.load(f)
+                
+                # Skip if already verified (not just reconciled)
+                reconciliation = metrics.get('usage_api_reconciliation', {})
+                verification_status = reconciliation.get('verification_status', 'pending')
+                
+                if verification_status == 'verified':
+                    logger.debug(f"Already verified: {framework_name}/{run_id}")
                     continue
                 
-                run_id = run_dir.name
-                metrics_file = run_dir / "metrics.json"
+                # This run needs reconciliation/verification!
+                logger.info(f"Reconciling: {framework_name}/{run_id} (status: {verification_status})")
                 
-                if not metrics_file.exists():
-                    logger.debug(f"Metrics file not found: {framework_name}/{run_id}")
-                    continue
+                report = self.reconcile_run(run_id, framework_name)
+                results.append(report)
                 
-                # Check file age
-                file_mtime = metrics_file.stat().st_mtime
-                
-                if file_mtime > min_cutoff:
-                    logger.debug(
-                        f"Run too recent: {framework_name}/{run_id} "
-                        f"({(current_time - file_mtime) / 60:.1f} minutes old)"
-                    )
-                    continue
-                
-                if file_mtime < max_cutoff:
-                    logger.debug(
-                        f"Run too old: {framework_name}/{run_id} "
-                        f"({(current_time - file_mtime) / 3600:.1f} hours old)"
-                    )
-                    continue
-                
-                # Check if already reconciled or has token data
-                try:
-                    with open(metrics_file, 'r', encoding='utf-8') as f:
-                        metrics = json.load(f)
-                    
-                    # Skip if already verified (not just reconciled)
-                    reconciliation = metrics.get('usage_api_reconciliation', {})
-                    verification_status = reconciliation.get('verification_status', 'pending')
-                    
-                    if verification_status == 'verified':
-                        logger.debug(f"Already verified: {framework_name}/{run_id}")
-                        continue
-                    
-                    # This run needs reconciliation/verification!
-                    logger.info(f"Reconciling: {framework_name}/{run_id} (status: {verification_status})")
-                    
-                    report = self.reconcile_run(run_id, framework_name)
-                    results.append(report)
-                    
-                except Exception as e:
-                    logger.error(
-                        f"Failed to reconcile {framework_name}/{run_id}: {e}",
-                        extra={
-                            'framework': framework_name,
-                            'run_id': run_id,
-                            'metadata': {'error': str(e)}
-                        }
-                    )
-                    results.append({
-                        'run_id': run_id,
+            except Exception as e:
+                logger.error(
+                    f"Failed to reconcile {framework_name}/{run_id}: {e}",
+                    extra={
                         'framework': framework_name,
-                        'status': 'error',
-                        'error': str(e)
-                    })
+                        'run_id': run_id,
+                        'metadata': {'error': str(e)}
+                    }
+                )
+                results.append({
+                    'run_id': run_id,
+                    'framework': framework_name,
+                    'status': 'error',
+                    'error': str(e)
+                })
         
         logger.info(
             f"Reconciliation scan complete: {len(results)} runs processed",
@@ -574,59 +583,58 @@ class UsageReconciler:
         current_time = time.time()
         min_cutoff = current_time - (min_age_minutes * 60)
         
-        if not self.runs_dir.exists():
+        # Get all runs from manifest
+        try:
+            all_runs = find_runs(framework=framework)
+        except Exception as e:
+            logger.error("Failed to query manifest: %s", e)
             return pending
         
-        for framework_dir in self.runs_dir.iterdir():
-            if not framework_dir.is_dir():
+        for run_entry in all_runs:
+            run_id = run_entry['run_id']
+            framework_name = run_entry['framework']
+            
+            # Build path to metrics file
+            run_dir = self.runs_dir / framework_name / run_id
+            metrics_file = run_dir / "metrics.json"
+            
+            if not metrics_file.exists():
+                logger.warning("Metrics file not found for run %s: %s", run_id, metrics_file)
                 continue
             
-            framework_name = framework_dir.name
+            file_mtime = metrics_file.stat().st_mtime
             
-            if framework and framework_name != framework:
+            # Skip if too recent
+            if file_mtime > min_cutoff:
                 continue
             
-            for run_dir in framework_dir.iterdir():
-                if not run_dir.is_dir():
+            try:
+                with open(metrics_file, 'r', encoding='utf-8') as f:
+                    metrics = json.load(f)
+                
+                # Check verification status
+                reconciliation = metrics.get('usage_api_reconciliation', {})
+                verification_status = reconciliation.get('verification_status', 'pending')
+                
+                # Skip if already verified
+                if verification_status == 'verified':
                     continue
                 
-                run_id = run_dir.name
-                metrics_file = run_dir / "metrics.json"
+                age_minutes = (current_time - file_mtime) / 60
+                attempts = reconciliation.get('attempts', [])
                 
-                if not metrics_file.exists():
-                    continue
-                
-                file_mtime = metrics_file.stat().st_mtime
-                
-                if file_mtime > min_cutoff:
-                    continue
-                
-                try:
-                    with open(metrics_file, 'r', encoding='utf-8') as f:
-                        metrics = json.load(f)
+                pending.append({
+                    'run_id': run_id,
+                    'framework': framework_name,
+                    'age_minutes': age_minutes,
+                    'metrics_file': str(metrics_file),
+                    'end_timestamp': metrics.get('end_timestamp'),
+                    'verification_status': verification_status,
+                    'attempts': len(attempts),
+                    'message': reconciliation.get('verification_message', 'Not yet reconciled')
+                })
                     
-                    # Check verification status
-                    reconciliation = metrics.get('usage_api_reconciliation', {})
-                    verification_status = reconciliation.get('verification_status', 'pending')
-                    
-                    if verification_status == 'verified':
-                        continue
-                    
-                    age_minutes = (current_time - file_mtime) / 60
-                    attempts = reconciliation.get('attempts', [])
-                    
-                    pending.append({
-                        'run_id': run_id,
-                        'framework': framework_name,
-                        'age_minutes': age_minutes,
-                        'metrics_file': str(metrics_file),
-                        'end_timestamp': metrics.get('end_timestamp'),
-                        'verification_status': verification_status,
-                        'attempts': len(attempts),
-                        'message': reconciliation.get('verification_message', 'Not yet reconciled')
-                    })
-                    
-                except Exception as e:
-                    logger.warning(f"Error checking {framework_name}/{run_id}: {e}")
+            except Exception as e:
+                logger.warning(f"Error checking {framework_name}/{run_id}: {e}")
         
         return pending
