@@ -11,6 +11,7 @@ import json
 import math
 import time
 import os
+import subprocess
 import requests
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -21,7 +22,8 @@ from src.orchestrator.manifest_manager import find_runs
 logger = get_logger(__name__)
 
 # Default minimum interval between verification attempts (in minutes)
-DEFAULT_VERIFICATION_INTERVAL_MIN = int(os.getenv('RECONCILIATION_VERIFICATION_INTERVAL_MIN', '60'))
+# Set to 0 for testing/development, increase to 60 for production
+DEFAULT_VERIFICATION_INTERVAL_MIN = int(os.getenv('RECONCILIATION_VERIFICATION_INTERVAL_MIN', '0'))
 
 
 class UsageReconciler:
@@ -242,6 +244,17 @@ class UsageReconciler:
         
         if verification_result['status'] == 'verified':
             report['verified_at'] = current_attempt['timestamp']
+            
+            # Trigger analysis regeneration when data is verified
+            logger.info(
+                "Data verified - triggering analysis regeneration",
+                extra={
+                    'run_id': run_id,
+                    'framework': framework,
+                    'event': 'analysis_triggered'
+                }
+            )
+            self._trigger_analysis()
         
         logger.info(
             f"Reconciliation attempt for {framework}/{run_id}: {verification_result['status']}",
@@ -638,3 +651,56 @@ class UsageReconciler:
                 logger.warning(f"Error checking {framework_name}/{run_id}: {e}")
         
         return pending
+    
+    def _trigger_analysis(self) -> None:
+        """
+        Trigger analysis regeneration after data verification.
+        
+        Runs the analyze_results.sh script to regenerate visualizations
+        and statistical reports with verified token data.
+        """
+        try:
+            # Get project root (parent of src/)
+            project_root = Path(__file__).parent.parent.parent
+            analysis_script = project_root / "runners" / "analyze_results.sh"
+            
+            if not analysis_script.exists():
+                logger.warning(f"Analysis script not found: {analysis_script}")
+                return
+            
+            logger.info("Starting analysis regeneration...")
+            
+            # Run analysis script
+            result = subprocess.run(
+                [str(analysis_script)],
+                cwd=str(project_root),
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5 minute timeout
+                check=False  # Don't raise exception on non-zero exit
+            )
+            
+            if result.returncode == 0:
+                logger.info(
+                    "Analysis regeneration completed successfully",
+                    extra={
+                        'event': 'analysis_completed',
+                        'metadata': {'exit_code': 0}
+                    }
+                )
+            else:
+                logger.error(
+                    f"Analysis regeneration failed with exit code {result.returncode}",
+                    extra={
+                        'event': 'analysis_failed',
+                        'metadata': {
+                            'exit_code': result.returncode,
+                            'stderr': result.stderr[:500]  # First 500 chars
+                        }
+                    }
+                )
+                
+        except subprocess.TimeoutExpired:
+            logger.error("Analysis regeneration timed out (5 minutes)")
+        except Exception as e:
+            logger.error(f"Failed to trigger analysis: {e}")

@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "last_updated": "2025-10-15T12:03:56.886160Z",
+  "last_updated": "2025-10-15T12:29:15.109274Z",
   "total_runs": 1,
   "frameworks": {
     "chatdev": 1,
@@ -14,7 +14,7 @@
       "path": "chatdev/2ddc87a6-0848-42be-9d6e-4d7d746acc19",
       "start_time": "2025-10-15T11:10:32.861672Z",
       "end_time": "2025-10-15T11:44:15.986745Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 219917,
       "total_tokens_out": 78915
     }
