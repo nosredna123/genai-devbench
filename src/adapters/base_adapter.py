@@ -293,7 +293,9 @@ class BaseAdapter(ABC):
                     'duration_seconds': float,
                     'hitl_count': int,
                     'tokens_in': int,
-                    'tokens_out': int
+                    'tokens_out': int,
+                    'start_timestamp': int,  # Unix timestamp when API calls started
+                    'end_timestamp': int     # Unix timestamp when API calls ended
                 }
                 
         Raises:

@@ -192,27 +192,29 @@ class GHSpecAdapter(BaseAdapter):
         hitl_count = 0
         tokens_in = 0
         tokens_out = 0
+        start_timestamp = 0
+        end_timestamp = 0
         success = False
         
         try:
             # Phase 3: Spec/Plan/Tasks generation (steps 1-3)
             if step_num == 1:
                 # Generate specification
-                hitl_count, tokens_in, tokens_out = self._execute_phase('specify', command_text)
+                hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp = self._execute_phase('specify', command_text)
                 success = self.spec_md_path.exists()
                 
             elif step_num == 2:
                 # Generate technical plan (requires spec.md)
                 if not self.spec_md_path.exists():
                     raise RuntimeError("spec.md not found - run step 1 first")
-                hitl_count, tokens_in, tokens_out = self._execute_phase('plan', command_text)
+                hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp = self._execute_phase('plan', command_text)
                 success = self.plan_md_path.exists()
                 
             elif step_num == 3:
                 # Generate task breakdown (requires spec.md and plan.md)
                 if not self.spec_md_path.exists() or not self.plan_md_path.exists():
                     raise RuntimeError("spec.md or plan.md not found - run steps 1-2 first")
-                hitl_count, tokens_in, tokens_out = self._execute_phase('tasks', command_text)
+                hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp = self._execute_phase('tasks', command_text)
                 success = self.tasks_md_path.exists()
                 
             # Phase 4: Task-by-task implementation (steps 4-5)
@@ -221,7 +223,7 @@ class GHSpecAdapter(BaseAdapter):
                 if not self.tasks_md_path.exists():
                     raise RuntimeError("tasks.md not found - run steps 1-3 first")
                 
-                hitl_count, tokens_in, tokens_out = self._execute_task_implementation(command_text)
+                hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp = self._execute_task_implementation(command_text)
                 
                 # Success if at least some files were created
                 created_files = list(self.src_dir.rglob('*.py')) + list(self.src_dir.rglob('*.md'))
@@ -247,6 +249,9 @@ class GHSpecAdapter(BaseAdapter):
                 hitl_count = 0
                 tokens_in = 0
                 tokens_out = 0
+                # For step 6 (stub), use current time as timestamps
+                start_timestamp = int(time.time())
+                end_timestamp = start_timestamp
                 
             else:
                 raise ValueError(f"Invalid step number: {step_num}")
@@ -278,10 +283,12 @@ class GHSpecAdapter(BaseAdapter):
             'hitl_count': hitl_count,
             'tokens_in': tokens_in,
             'tokens_out': tokens_out,
+            'start_timestamp': start_timestamp,
+            'end_timestamp': end_timestamp,
             'retry_count': 0
         }
     
-    def _execute_phase(self, phase: str, command_text: str) -> Tuple[int, int, int]:
+    def _execute_phase(self, phase: str, command_text: str) -> Tuple[int, int, int, int, int]:
         """
         Execute a single GHSpec phase (specify, plan, or tasks).
         
@@ -299,7 +306,7 @@ class GHSpecAdapter(BaseAdapter):
             command_text: User's feature request (used in specify phase)
             
         Returns:
-            Tuple of (hitl_count, tokens_in, tokens_out)
+            Tuple of (hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp)
         """
         logger.info(f"Executing {phase} phase",
                    extra={'run_id': self.run_id, 'step': self.current_step,
@@ -359,7 +366,7 @@ class GHSpecAdapter(BaseAdapter):
                              'tokens_out': tokens_out
                          }})
         
-        return hitl_count, tokens_in, tokens_out
+        return hitl_count, tokens_in, tokens_out, api_call_start, api_call_end
     
     def _load_prompt_template(self, template_path: Path) -> Tuple[str, str]:
         """
@@ -581,7 +588,7 @@ class GHSpecAdapter(BaseAdapter):
                              'size_bytes': len(content.encode('utf-8'))
                          }})
     
-    def _execute_task_implementation(self, command_text: str) -> Tuple[int, int, int]:
+    def _execute_task_implementation(self, command_text: str) -> Tuple[int, int, int, int, int]:
         """
         Execute task-by-task code generation (Phase 4).
         
@@ -598,7 +605,8 @@ class GHSpecAdapter(BaseAdapter):
             command_text: User's original feature request (for logging)
             
         Returns:
-            Tuple of (total_hitl_count, total_tokens_in, total_tokens_out)
+            Tuple of (total_hitl_count, total_tokens_in, total_tokens_out, 
+                     overall_start_timestamp, overall_end_timestamp)
         """
         logger.info("Starting task-by-task implementation",
                    extra={'run_id': self.run_id, 'step': self.current_step})
@@ -621,6 +629,9 @@ class GHSpecAdapter(BaseAdapter):
         total_hitl_count = 0
         total_tokens_in = 0
         total_tokens_out = 0
+        
+        # Track overall start time (before first task)
+        overall_start_timestamp = int(time.time())
         
         # Process each task
         for i, task in enumerate(tasks, 1):
@@ -686,7 +697,10 @@ class GHSpecAdapter(BaseAdapter):
                              'total_tokens_out': total_tokens_out
                          }})
         
-        return total_hitl_count, total_tokens_in, total_tokens_out
+        # Track overall end time (after last task)
+        overall_end_timestamp = int(time.time())
+        
+        return total_hitl_count, total_tokens_in, total_tokens_out, overall_start_timestamp, overall_end_timestamp
     
     def _parse_tasks(self) -> list:
         """

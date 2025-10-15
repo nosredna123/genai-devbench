@@ -97,6 +97,7 @@ class BAeSAdapter(BaseAdapter):
         """
         self.current_step = step_num
         start_time = time.time()
+        start_timestamp = int(time.time())
         
         logger.info(f"Executing step {step_num}",
                    extra={'run_id': self.run_id, 'step': step_num, 
@@ -117,13 +118,16 @@ class BAeSAdapter(BaseAdapter):
         # 4. Wait for completion
         
         duration = time.time() - start_time
+        end_timestamp = int(time.time())
         
         return {
             'success': True,  # Placeholder
             'duration_seconds': duration,
             'hitl_count': hitl_count,
             'tokens_in': tokens_in,
-            'tokens_out': tokens_out
+            'tokens_out': tokens_out,
+            'start_timestamp': start_timestamp,
+            'end_timestamp': end_timestamp
         }
         
     def health_check(self) -> bool:

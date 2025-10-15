@@ -291,7 +291,7 @@ CURRENT: {current_file_content}
         
         # Execute implementation
         adapter_with_artifacts.current_step = 4
-        hitl_count, tokens_in, tokens_out = adapter_with_artifacts._execute_task_implementation("Build todo app")
+        hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp = adapter_with_artifacts._execute_task_implementation("Build todo app")
         
         # Verify all tasks were processed
         assert mock_call_openai.call_count == 5
@@ -300,6 +300,12 @@ CURRENT: {current_file_content}
         assert tokens_in == 200 * 5  # 5 tasks
         assert tokens_out == 400 * 5
         assert hitl_count == 0  # No clarifications
+        
+        # Verify timestamps
+        assert isinstance(start_timestamp, int)
+        assert isinstance(end_timestamp, int)
+        assert start_timestamp > 0
+        assert end_timestamp >= start_timestamp
         
         # Verify files were created
         assert (adapter_with_artifacts.src_dir / "README.md").exists()
@@ -326,13 +332,19 @@ CURRENT: {current_file_content}
         mock_fetch_usage.return_value = (150, 350)
         
         adapter_with_artifacts.current_step = 4
-        hitl_count, tokens_in, tokens_out = adapter_with_artifacts._execute_task_implementation("Build todo app")
+        hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp = adapter_with_artifacts._execute_task_implementation("Build todo app")
         
         # Should have made 6 API calls (5 tasks + 1 clarification)
         assert mock_call_openai.call_count == 6
         
         # Should have 1 HITL intervention
         assert hitl_count == 1
+        
+        # Verify timestamps
+        assert isinstance(start_timestamp, int)
+        assert isinstance(end_timestamp, int)
+        assert start_timestamp > 0
+        assert end_timestamp >= start_timestamp
         
         # README should exist with final content (no clarification marker)
         readme_content = (adapter_with_artifacts.src_dir / "README.md").read_text()

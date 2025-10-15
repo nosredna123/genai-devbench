@@ -186,7 +186,7 @@ A simple todo list application for task management.
         mock_fetch_usage.return_value = (150, 350)
         
         # Execute specify phase
-        hitl_count, tokens_in, tokens_out = adapter_with_workspace._execute_phase(
+        hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp = adapter_with_workspace._execute_phase(
             'specify',
             'Build a todo list application'
         )
@@ -198,6 +198,13 @@ A simple todo list application for task management.
         # Verify results
         assert hitl_count == 0  # No clarification needed
         assert tokens_in == 150
+        assert tokens_out == 350
+        
+        # Verify timestamps are valid Unix timestamps
+        assert isinstance(start_timestamp, int)
+        assert isinstance(end_timestamp, int)
+        assert start_timestamp > 0
+        assert end_timestamp >= start_timestamp
         assert tokens_out == 350
         
         # Verify artifact was saved
@@ -236,7 +243,7 @@ User authentication system using JWT tokens.
         mock_fetch_usage.return_value = (200, 400)
         
         # Execute phase
-        hitl_count, tokens_in, tokens_out = adapter_with_workspace._execute_phase(
+        hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp = adapter_with_workspace._execute_phase(
             'specify',
             'Build an authentication system'
         )
@@ -244,6 +251,12 @@ User authentication system using JWT tokens.
         # Verify HITL handling
         assert hitl_count == 1  # One clarification
         assert mock_call_openai.call_count == 2  # Called twice (initial + after HITL)
+        
+        # Verify timestamps
+        assert isinstance(start_timestamp, int)
+        assert isinstance(end_timestamp, int)
+        assert start_timestamp > 0
+        assert end_timestamp >= start_timestamp
         
         # Verify final artifact doesn't have clarification marker
         spec_content = adapter_with_workspace.spec_md_path.read_text()
