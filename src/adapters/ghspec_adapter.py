@@ -704,114 +704,86 @@ class GHSpecAdapter(BaseAdapter):
     
     def _parse_tasks(self) -> list:
         """
-        Parse tasks.md into structured task list.
+        Parse tasks.md into structured task list using a robust two-pass approach.
         
-        Expected format (from tasks template):
-        - [ ] **TASK-001** [labels] Task description
-          - **File**: path/to/file.py
-          - **Goal**: What this task achieves
-          - **Dependencies**: TASK-XXX (optional)
-          - **Test**: How to verify (optional)
+        Strategy:
+        1. First pass: Find all checkbox lines with task markers (- [ ] **Task...)
+        2. Second pass: Extract file path from lines following each task marker
         
-        Alternative format (AI may generate):
-        ## Task 1: Setup Development Environment
-        - **File Path**: `/setup/setup_environment.js`
-        - **Description**: Initialize project...
-        - [ ] Setup Node.js project
+        Handles various AI-generated formats:
+        - [ ] **TASK-001** Description
+        - [ ] **Task 1**: Description  
+        - [ ] **Task 1.1**: Description (nested)
+        - [ ] Task 1: Description (no bold)
+        
+        File path formats supported:
+        - **File**: /path/to/file.ext
+        - **File Path**: /path/to/file.ext
+        - - **File**: /path/to/file.ext (bullet point)
         
         Returns:
             List of task dictionaries with keys: id, description, file, goal
         """
         tasks_content = self.tasks_md_path.read_text(encoding='utf-8')
         tasks = []
+        lines = tasks_content.split('\n')
         
-        # Try spec-kit format first
-        # Pattern: - [ ] **TASK-NNN** [labels] Description
-        task_pattern = re.compile(
-            r'- \[ \] \*\*([A-Z]+-\d+)\*\* .*?\n'  # Task ID line
-            r'(?:.*?- \*\*File\*\*: `?([^\n`]+)`?\n)?'  # File (optional backticks)
-            r'(?:.*?- \*\*Goal\*\*: ([^\n]+)\n)?',  # Goal
-            re.MULTILINE
-        )
-        
-        for match in task_pattern.finditer(tasks_content):
-            task_id = match.group(1)
-            file_path = match.group(2).strip() if match.group(2) else None
-            goal = match.group(3).strip() if match.group(3) else "Implement task"
+        # Two-pass approach for robustness
+        task_count = 0
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
             
-            # Skip tasks without file paths (they might be organizational)
-            if not file_path:
-                continue
-            
-            # Extract description from the task line
-            task_line_start = match.start()
-            task_line_end = tasks_content.find('\n', task_line_start)
-            task_line = tasks_content[task_line_start:task_line_end]
-            
-            # Description is after the closing **
-            desc_match = re.search(r'\*\*[A-Z]+-\d+\*\* (.+)$', task_line)
-            description = desc_match.group(1).strip() if desc_match else goal
-            
-            tasks.append({
-                'id': task_id,
-                'description': description,
-                'file': file_path,
-                'goal': goal
-            })
-        
-        # If no tasks found, try alternative format
-        if not tasks:
-            # Pattern: ## Task N: Description\n- **File Path**: path\n- **Description**: desc
-            alt_pattern = re.compile(
-                r'## Task (\d+): ([^\n]+)\n'  # Task header
-                r'(?:.*?- \*\*File Path\*\*: `?([^\n`]+)`?\n)?'  # File path
-                r'(?:.*?- \*\*Description\*\*: ([^\n]+)\n)?',  # Description
-                re.MULTILINE | re.DOTALL
-            )
-            
-            for match in alt_pattern.finditer(tasks_content):
-                task_num = match.group(1)
-                task_title = match.group(2).strip()
-                file_path = match.group(3).strip() if match.group(3) else None
-                description = match.group(4).strip() if match.group(4) else task_title
+            # Pass 1: Detect checkbox task line
+            # Pattern: - [ ] followed by some task indicator
+            if line.startswith('- [ ]'):
+                task_count += 1
                 
-                # Skip tasks without file paths
-                if not file_path:
-                    continue
+                # Extract task description (everything after checkbox)
+                # Remove checkbox and clean up
+                desc_text = line[5:].strip()  # Remove '- [ ]'
                 
-                tasks.append({
-                    'id': f"TASK-{task_num.zfill(3)}",
-                    'description': description,
-                    'file': file_path,
-                    'goal': task_title
-                })
-        
-        # If still no tasks, try checkbox-first format
-        if not tasks:
-            # Pattern: - [ ] **Task N**: Title\n  **File:** path
-            # Note: Colon is OUTSIDE the bold markup: **Task 1**: not **Task 1:**
-            checkbox_pattern = re.compile(
-                r'- \[ \] \*\*Task (\d+)\*\*:\s*([^\n]+)\n'  # Checkbox + Task title (colon outside bold)
-                r'\s+\*\*File\*\*:\s*`?([^\n`\s]+)`?',  # **File:** format
-                re.MULTILINE
-            )
+                # Remove bold markers and extract core description
+                # Handle: **Task N**: desc, **TASK-NNN** desc, Task N: desc
+                desc_text = re.sub(r'\*\*Task \d+(\.\d+)?\*\*:?\s*', '', desc_text, flags=re.IGNORECASE)
+                desc_text = re.sub(r'\*\*TASK-\d+\*\*:?\s*', '', desc_text, flags=re.IGNORECASE)
+                desc_text = re.sub(r'Task \d+(\.\d+)?:?\s*', '', desc_text, flags=re.IGNORECASE)
+                desc_text = desc_text.strip()
+                
+                # Pass 2: Look ahead for file path (within next 10 lines)
+                file_path = None
+                for j in range(i + 1, min(i + 11, len(lines))):
+                    next_line = lines[j].strip()
+                    
+                    # Stop if we hit another task
+                    if next_line.startswith('- [ ]'):
+                        break
+                    
+                    # Look for file indicators
+                    # Pattern: **File**: path or **File Path**: path or - **File**: path
+                    file_match = re.search(
+                        r'\*\*File(?:\s+Path)?\*\*:\s*`?([^\s`\n]+)',
+                        next_line,
+                        re.IGNORECASE
+                    )
+                    
+                    if file_match:
+                        file_path = file_match.group(1).strip()
+                        break
+                
+                # Only add tasks with file paths
+                if file_path and desc_text:
+                    # Generate consistent task ID
+                    task_id = f"TASK-{str(task_count).zfill(3)}"
+                    
+                    tasks.append({
+                        'id': task_id,
+                        'description': desc_text,
+                        'file': file_path,
+                        'goal': desc_text  # Use description as goal
+                    })
             
-            for match in checkbox_pattern.finditer(tasks_content):
-                task_num = match.group(1)
-                task_title = match.group(2).strip()
-                file_path = match.group(3).strip() if match.group(3) else None
-                description = task_title  # Use title as description
-                
-                # Skip tasks without file paths
-                if not file_path:
-                    continue
-                
-                tasks.append({
-                    'id': f"TASK-{task_num.zfill(3)}",
-                    'description': description,
-                    'file': file_path,
-                    'goal': task_title
-                })
+            i += 1
         
         return tasks
     
