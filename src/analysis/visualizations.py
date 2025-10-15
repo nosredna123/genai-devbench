@@ -221,8 +221,9 @@ def pareto_plot(
     # Add grid
     ax.grid(True, linestyle='--', alpha=0.5)
     
-    # Add legend
-    ax.legend(loc='best', fontsize=12)
+    # Add legend outside plot area (upper right, outside)
+    ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1), fontsize=12, 
+              frameon=True, fancybox=True, shadow=True)
     
     # Format axes
     ax.tick_params(labelsize=12)
