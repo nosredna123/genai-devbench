@@ -46,7 +46,7 @@ echo ""
 # Handle command line arguments
 case "${1:-}" in
   --help|-h)
-    echo "Reconcile token usage data from OpenAI Usage API"
+    echo "Reconcile token usage data from OpenAI Usage API with double-check verification"
     echo ""
     echo "Usage:"
     echo "  $0                      # Reconcile all pending runs (>30 min old)"
@@ -58,18 +58,29 @@ case "${1:-}" in
     echo "Options:"
     echo "  --min-age MINUTES       # Only reconcile runs older than this (default: 30)"
     echo "  --max-age HOURS         # Don't reconcile runs older than this (default: 24)"
-    echo "  --force                 # Force reconciliation even if already done"
+    echo "  --force                 # Force reconciliation even if already verified"
     echo ""
     echo "Examples:"
     echo "  $0                                    # Reconcile all pending"
     echo "  $0 chatdev                            # Reconcile ChatDev runs"
     echo "  $0 chatdev test_run_123               # Reconcile specific run"
-    echo "  $0 --list                             # Show what needs reconciliation"
+    echo "  $0 --list                             # Show what needs verification"
     echo "  $0 --min-age 60                       # Wait 60 minutes before reconciling"
+    echo ""
+    echo "Double-Check Verification:"
+    echo "  Runs are marked 'verified' only when TWO consecutive reconciliation"
+    echo "  attempts return identical token counts with at least 60 minutes between them."
+    echo "  This ensures Usage API data has fully stabilized."
+    echo ""
+    echo "  Status progression:"
+    echo "    🕐 data_not_available → ⏳ pending → ✅ verified"
+    echo ""
+    echo "  Configure interval: RECONCILIATION_VERIFICATION_INTERVAL_MIN=60 in .env"
     echo ""
     echo "Environment:"
     echo "  OPEN_AI_KEY_ADM must be set in .env file"
     echo "  This key requires api.usage.read scope"
+    echo "  RECONCILIATION_VERIFICATION_INTERVAL_MIN (default: 60)"
     echo ""
     exit 0
     ;;
@@ -88,21 +99,33 @@ reconciler = UsageReconciler()
 pending = reconciler.get_pending_runs(min_age_minutes=30)
 
 if pending:
-    print(f"Found {len(pending)} runs pending reconciliation:")
+    print(f"Found {len(pending)} runs pending verification:")
     print("")
     for run in pending:
         age_hours = run['age_minutes'] / 60
-        print(f"  {run['framework']}/{run['run_id']}")
+        status = run.get('verification_status', 'unknown')
+        attempts = run.get('attempts', 0)
+        message = run.get('message', 'No message')
+        
+        # Status emoji
+        status_icon = {
+            'pending': '⏳',
+            'data_not_available': '🕐',
+            'warning': '⚠️',
+            'verified': '✅'
+        }.get(status, '❓')
+        
+        print(f"  {status_icon} {run['framework']}/{run['run_id']}")
+        print(f"    Status: {status} (attempt {attempts})")
         print(f"    Age: {age_hours:.1f} hours")
-        print(f"    File: {run['metrics_file']}")
+        print(f"    Message: {message}")
         print("")
 else:
-    print("No runs need reconciliation")
+    print("✅ No runs need reconciliation - all verified!")
     print("")
     print("Reasons a run might not be listed:")
     print("  - Too recent (< 30 minutes old)")
-    print("  - Already reconciled")
-    print("  - Already has token data")
+    print("  - Already verified (double-check complete)")
     print("  - Too old (> 24 hours)")
 EOF
     ;;
@@ -167,20 +190,44 @@ try:
         force=$FORCE_PYTHON
     )
     
-    if report['status'] == 'success':
-        print(f"✅ Reconciliation successful!")
+    status = report['status']
+    
+    # Status-specific output
+    if status == 'verified':
+        print(f"✅ Reconciliation VERIFIED!")
+        print(f"   Data confirmed stable across multiple checks")
         print(f"   Input tokens:  {report['total_tokens_in']:,}")
         print(f"   Output tokens: {report['total_tokens_out']:,}")
-        print(f"   Steps updated: {report['steps_with_tokens']}/{report['total_steps']}")
-    elif report['status'] == 'already_reconciled':
-        print(f"ℹ️  Run already reconciled at {report['reconciled_at']}")
-    elif report['status'] == 'data_not_available':
-        print(f"⏳ Token data not available yet from OpenAI Usage API")
+        print(f"   Verified at: {report.get('verified_at', 'N/A')}")
+        
+    elif status == 'pending':
+        print(f"⏳ Reconciliation pending verification")
+        print(f"   Input tokens:  {report['total_tokens_in']:,}")
+        print(f"   Output tokens: {report['total_tokens_out']:,}")
+        print(f"   Attempt: {report.get('attempt_number', 'N/A')}")
+        print(f"   Message: {report.get('verification_message', 'N/A')}")
+        
+    elif status == 'warning':
+        print(f"⚠️  WARNING: {report.get('verification_message', 'Unknown issue')}")
+        print(f"   Input tokens:  {report['total_tokens_in']:,}")
+        print(f"   Output tokens: {report['total_tokens_out']:,}")
+        print(f"   This may indicate an API issue - investigate!")
+        
+    elif status == 'already_verified':
+        print(f"✅ Run already verified at {report.get('verified_at', 'N/A')}")
+        print(f"   Use --force to re-verify")
+        
+    elif status == 'data_not_available':
+        print(f"🕐 Token data not available yet from OpenAI Usage API")
         print(f"   This is normal - Usage API has a 5-60 minute reporting delay")
-        print(f"   Run will remain pending for automatic retry on next reconciliation")
+        print(f"   Run will remain pending for automatic retry")
         print(f"   Try again in 30-60 minutes")
+        
     else:
-        print(f"⚠️  Reconciliation completed with status: {report['status']}")
+        print(f"❓ Reconciliation completed with status: {status}")
+        if 'verification_message' in report:
+            print(f"   Message: {report['verification_message']}")
+            
 except Exception as e:
     logger.error(f"Reconciliation failed: {e}")
     print(f"❌ Error: {e}")
@@ -218,38 +265,62 @@ results = reconciler.reconcile_all_pending(
 )
 
 if results:
-    success_count = sum(1 for r in results if r['status'] == 'success')
+    # Count by status
+    verified_count = sum(1 for r in results if r['status'] == 'verified')
+    pending_count = sum(1 for r in results if r['status'] == 'pending')
     deferred_count = sum(1 for r in results if r['status'] == 'data_not_available')
+    warning_count = sum(1 for r in results if r['status'] == 'warning')
     error_count = sum(1 for r in results if r['status'] == 'error')
     
     print(f"Processed {len(results)} runs:")
-    print(f"  ✅ Success:  {success_count}")
-    print(f"  ⏳ Deferred: {deferred_count} (data not available yet)")
-    print(f"  ❌ Errors:   {error_count}")
+    if verified_count > 0:
+        print(f"  ✅ Verified:   {verified_count}")
+    if pending_count > 0:
+        print(f"  ⏳ Pending:    {pending_count}")
+    if deferred_count > 0:
+        print(f"  🕐 Deferred:   {deferred_count} (data not available yet)")
+    if warning_count > 0:
+        print(f"  ⚠️  Warnings:   {warning_count}")
+    if error_count > 0:
+        print(f"  ❌ Errors:     {error_count}")
     print("")
     
     for report in results:
-        if report['status'] == 'success':
-            framework = report['framework']
-            run_id = report['run_id']
-            tokens_in = report.get('total_tokens_in', 0)
-            tokens_out = report.get('total_tokens_out', 0)
-            steps = report.get('steps_with_tokens', 0)
-            total_steps = report.get('total_steps', 0)
-            
-            print(f"  ✅ {framework}/{run_id}")
+        status = report['status']
+        framework = report['framework']
+        run_id = report['run_id']
+        tokens_in = report.get('total_tokens_in', 0)
+        tokens_out = report.get('total_tokens_out', 0)
+        message = report.get('verification_message', '')
+        
+        if status == 'verified':
+            print(f"  ✅ {framework}/{run_id} - VERIFIED")
             print(f"    Input:  {tokens_in:,} tokens")
             print(f"    Output: {tokens_out:,} tokens")
-            print(f"    Steps:  {steps}/{total_steps} updated")
+            print(f"    {message}")
             print("")
-        elif report['status'] == 'data_not_available':
-            print(f"  ⏳ {report['framework']}/{report['run_id']}: Data not available yet (will retry)")
+            
+        elif status == 'pending':
+            print(f"  ⏳ {framework}/{run_id} - Pending")
+            print(f"    Input:  {tokens_in:,} tokens")
+            print(f"    Output: {tokens_out:,} tokens")
+            print(f"    {message}")
             print("")
-        elif report['status'] == 'error':
-            print(f"  ❌ {report['framework']}/{report['run_id']}: {report.get('error', 'Unknown error')}")
+            
+        elif status == 'warning':
+            print(f"  ⚠️  {framework}/{run_id} - WARNING")
+            print(f"    {message}")
+            print("")
+            
+        elif status == 'data_not_available':
+            print(f"  🕐 {framework}/{run_id} - Data not available yet (will retry)")
+            print("")
+            
+        elif status == 'error':
+            print(f"  ❌ {framework}/{run_id}: {report.get('error', 'Unknown error')}")
             print("")
 else:
-    print("No runs need reconciliation")
+    print("✅ No runs need reconciliation - all verified!")
     print("")
     print("To see what runs exist, use: $0 --list")
 EOF

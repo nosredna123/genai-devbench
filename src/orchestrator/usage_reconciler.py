@@ -3,6 +3,8 @@ Usage API Reconciliation for token counts.
 
 Updates metrics.json files with accurate token counts from OpenAI Usage API
 after the API reporting delay (5-60 minutes).
+
+Supports double-check verification to ensure data stability.
 """
 
 import json
@@ -10,12 +12,15 @@ import math
 import time
 import os
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Default minimum interval between verification attempts (in minutes)
+DEFAULT_VERIFICATION_INTERVAL_MIN = int(os.getenv('RECONCILIATION_VERIFICATION_INTERVAL_MIN', '60'))
 
 
 class UsageReconciler:
@@ -124,13 +129,17 @@ class UsageReconciler:
         """
         Update a single run's metrics with Usage API data.
         
+        Implements double-check verification: data is marked as "verified" 
+        only when two consecutive reconciliation attempts return identical 
+        token counts with at least VERIFICATION_INTERVAL_MIN minutes between them.
+        
         Args:
             run_id: Run identifier
             framework: Framework name (baes, chatdev, ghspec)
-            force: Force reconciliation even if already done
+            force: Force reconciliation even if already verified
             
         Returns:
-            Reconciliation report with updated counts
+            Reconciliation report with updated counts and verification status
             
         Raises:
             FileNotFoundError: If metrics.json doesn't exist
@@ -146,45 +155,121 @@ class UsageReconciler:
         with open(metrics_file, 'r', encoding='utf-8') as f:
             metrics = json.load(f)
         
-        # Check if already reconciled
-        if metrics.get('usage_api_reconciliation') and not force:
+        # Check if already verified (not just reconciled)
+        reconciliation = metrics.get('usage_api_reconciliation', {})
+        verification_status = reconciliation.get('verification_status', 'pending')
+        
+        if verification_status == 'verified' and not force:
             logger.info(
-                f"Run already reconciled: {framework}/{run_id}",
+                f"Run already verified: {framework}/{run_id}",
                 extra={'run_id': run_id, 'framework': framework}
             )
             return {
                 'run_id': run_id,
                 'framework': framework,
-                'status': 'already_reconciled',
-                'reconciled_at': metrics['usage_api_reconciliation']['reconciled_at']
+                'status': 'already_verified',
+                'verified_at': reconciliation.get('verified_at')
             }
         
-        # 2. Prepare reconciliation report
-        reconciliation_report = {
+        # 2. Query Usage API for current token counts
+        current_attempt = self._reconcile_steps(metrics, run_id, framework, force)
+        
+        # 3. Check verification status against previous attempts
+        verification_result = self._check_verification_status(
+            metrics, 
+            current_attempt,
+            framework,
+            run_id
+        )
+        
+        # 4. Update reconciliation data structure
+        if 'usage_api_reconciliation' not in metrics:
+            metrics['usage_api_reconciliation'] = {
+                'verification_status': 'pending',
+                'attempts': []
+            }
+        
+        # Store this attempt
+        metrics['usage_api_reconciliation']['attempts'].append(current_attempt)
+        metrics['usage_api_reconciliation']['verification_status'] = verification_result['status']
+        metrics['usage_api_reconciliation']['verification_message'] = verification_result['message']
+        
+        if verification_result['status'] == 'verified':
+            metrics['usage_api_reconciliation']['verified_at'] = current_attempt['timestamp']
+        
+        # 5. Update aggregate metrics
+        total_tokens_in = current_attempt['total_tokens_in']
+        total_tokens_out = current_attempt['total_tokens_out']
+        
+        metrics['aggregate_metrics']['TOK_IN'] = total_tokens_in
+        metrics['aggregate_metrics']['TOK_OUT'] = total_tokens_out
+        
+        # Recompute AEI (Autonomy Efficiency Index)
+        autr = metrics['aggregate_metrics'].get('AUTR', 0)
+        aei = autr / math.log(1 + total_tokens_in) if total_tokens_in > 0 else 0.0
+        metrics['aggregate_metrics']['AEI'] = aei
+        
+        # 6. Save updated metrics
+        with open(metrics_file, 'w', encoding='utf-8') as f:
+            json.dump(metrics, f, indent=2)
+        
+        # 7. Build response report
+        report = {
             'run_id': run_id,
             'framework': framework,
-            'reconciled_at': datetime.now(timezone.utc).isoformat(),
-            'steps_updated': [],
-            'status': 'success'
+            'status': verification_result['status'],
+            'total_tokens_in': total_tokens_in,
+            'total_tokens_out': total_tokens_out,
+            'steps_with_tokens': current_attempt['steps_with_tokens'],
+            'total_steps': current_attempt['total_steps'],
+            'verification_message': verification_result['message'],
+            'attempt_number': len(metrics['usage_api_reconciliation']['attempts'])
         }
         
-        # 3. Update each step with Usage API data
-        steps_with_tokens = 0
-        total_tokens_in = 0
-        total_tokens_out = 0
+        if verification_result['status'] == 'verified':
+            report['verified_at'] = current_attempt['timestamp']
+        
+        logger.info(
+            f"Reconciliation attempt for {framework}/{run_id}: {verification_result['status']}",
+            extra={
+                'run_id': run_id,
+                'framework': framework,
+                'event': 'reconciliation_attempt',
+                'metadata': {
+                    'status': verification_result['status'],
+                    'total_tokens_in': total_tokens_in,
+                    'total_tokens_out': total_tokens_out,
+                    'message': verification_result['message']
+                }
+            }
+        )
+        
+        return report
+    
+    def _reconcile_steps(
+        self,
+        metrics: Dict[str, Any],
+        run_id: str,
+        framework: str,
+        force: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Query Usage API and update step token counts.
+        
+        Returns:
+            Attempt data with timestamp and token counts
+        """
+        attempt = {
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'steps': [],
+            'total_tokens_in': 0,
+            'total_tokens_out': 0,
+            'steps_with_tokens': 0,
+            'total_steps': len(metrics.get('steps', []))
+        }
         
         for step in metrics.get('steps', []):
             step_num = step['step_number']
-            
-            # Skip if already has significant tokens (unless force)
-            if not force and (step.get('tokens_in', 0) > 0 or step.get('tokens_out', 0) > 0):
-                logger.debug(
-                    f"Step {step_num} already has tokens, skipping",
-                    extra={'run_id': run_id, 'step': step_num}
-                )
-                total_tokens_in += step['tokens_in']
-                total_tokens_out += step['tokens_out']
-                continue
             
             # Get time window from step
             start_timestamp = step.get('start_timestamp')
@@ -195,7 +280,7 @@ class UsageReconciler:
                     f"Step {step_num} missing timestamps, cannot reconcile",
                     extra={'run_id': run_id, 'step': step_num}
                 )
-                reconciliation_report['steps_updated'].append({
+                attempt['steps'].append({
                     'step': step_num,
                     'status': 'missing_timestamps',
                     'tokens_in': 0,
@@ -204,15 +289,14 @@ class UsageReconciler:
                 continue
             
             # Query Usage API for this time window
-            logger.info(
+            logger.debug(
                 f"Querying Usage API for step {step_num}",
                 extra={
                     'run_id': run_id,
                     'step': step_num,
                     'metadata': {
                         'start_timestamp': start_timestamp,
-                        'end_timestamp': end_timestamp,
-                        'duration_seconds': end_timestamp - start_timestamp
+                        'end_timestamp': end_timestamp
                     }
                 }
             )
@@ -227,30 +311,25 @@ class UsageReconciler:
                 step['tokens_in'] = tokens_in
                 step['tokens_out'] = tokens_out
                 
-                total_tokens_in += tokens_in
-                total_tokens_out += tokens_out
+                attempt['total_tokens_in'] += tokens_in
+                attempt['total_tokens_out'] += tokens_out
                 
                 if tokens_in > 0 or tokens_out > 0:
-                    steps_with_tokens += 1
+                    attempt['steps_with_tokens'] += 1
                 
-                reconciliation_report['steps_updated'].append({
+                attempt['steps'].append({
                     'step': step_num,
                     'status': 'success',
                     'tokens_in': tokens_in,
                     'tokens_out': tokens_out
                 })
                 
-                logger.info(
-                    f"Step {step_num} updated: {tokens_in:,} input, {tokens_out:,} output tokens",
-                    extra={'run_id': run_id, 'step': step_num}
-                )
-                
             except Exception as e:
                 logger.error(
                     f"Failed to fetch usage for step {step_num}: {e}",
                     extra={'run_id': run_id, 'step': step_num, 'metadata': {'error': str(e)}}
                 )
-                reconciliation_report['steps_updated'].append({
+                attempt['steps'].append({
                     'step': step_num,
                     'status': 'error',
                     'error': str(e),
@@ -258,63 +337,98 @@ class UsageReconciler:
                     'tokens_out': 0
                 })
         
-        # 4. Recompute aggregate metrics
-        metrics['aggregate_metrics']['TOK_IN'] = total_tokens_in
-        metrics['aggregate_metrics']['TOK_OUT'] = total_tokens_out
+        return attempt
+    
+    def _check_verification_status(
+        self,
+        metrics: Dict[str, Any],
+        current_attempt: Dict[str, Any],
+        framework: str,
+        run_id: str
+    ) -> Dict[str, str]:
+        """
+        Check if reconciliation can be verified based on double-check criteria.
         
-        # Recompute AEI (Autonomy Efficiency Index)
-        # AEI = AUTR / log(1 + TOK_IN)
-        autr = metrics['aggregate_metrics'].get('AUTR', 0)
-        aei = autr / math.log(1 + total_tokens_in) if total_tokens_in > 0 else 0.0
-        metrics['aggregate_metrics']['AEI'] = aei
+        Verification requires:
+        1. At least 2 attempts
+        2. Time gap >= VERIFICATION_INTERVAL_MIN between last two attempts
+        3. Identical token counts in last two attempts
         
-        # 5. Add reconciliation metadata
-        reconciliation_report['total_tokens_in'] = total_tokens_in
-        reconciliation_report['total_tokens_out'] = total_tokens_out
-        reconciliation_report['steps_with_tokens'] = steps_with_tokens
-        reconciliation_report['total_steps'] = len(metrics.get('steps', []))
+        Also detects anomalies (decreasing token counts).
         
-        # Only save reconciliation data if we got actual tokens
-        # This ensures the run remains "pending" for future reconciliation attempts
-        if total_tokens_in > 0 or total_tokens_out > 0 or force:
-            metrics['usage_api_reconciliation'] = reconciliation_report
-            
-            # 6. Save updated metrics
-            with open(metrics_file, 'w', encoding='utf-8') as f:
-                json.dump(metrics, f, indent=2)
-            
-            logger.info(
-                f"Reconciled {framework}/{run_id}: {total_tokens_in:,} input, {total_tokens_out:,} output tokens",
-                extra={
-                    'run_id': run_id,
-                    'framework': framework,
-                    'event': 'reconciliation_complete',
-                    'metadata': {
-                        'total_tokens_in': total_tokens_in,
-                        'total_tokens_out': total_tokens_out,
-                        'steps_with_tokens': steps_with_tokens,
-                        'total_steps': len(metrics.get('steps', []))
-                    }
+        Returns:
+            Dict with 'status' and 'message' keys
+        """
+        reconciliation = metrics.get('usage_api_reconciliation', {})
+        attempts = reconciliation.get('attempts', [])
+        
+        # No previous attempts - this is the first
+        if len(attempts) == 0:
+            if current_attempt['total_tokens_in'] == 0 and current_attempt['total_tokens_out'] == 0:
+                return {
+                    'status': 'data_not_available',
+                    'message': 'No token data available from Usage API yet (first attempt)'
                 }
-            )
-            reconciliation_report['status'] = 'success'
+            return {
+                'status': 'pending',
+                'message': 'First reconciliation attempt successful, awaiting verification'
+            }
+        
+        # Get previous attempt
+        previous_attempt = attempts[-1]
+        
+        # Parse timestamps
+        current_time = datetime.fromisoformat(current_attempt['timestamp'])
+        previous_time = datetime.fromisoformat(previous_attempt['timestamp'])
+        time_diff_minutes = (current_time - previous_time).total_seconds() / 60
+        
+        current_in = current_attempt['total_tokens_in']
+        current_out = current_attempt['total_tokens_out']
+        previous_in = previous_attempt['total_tokens_in']
+        previous_out = previous_attempt['total_tokens_out']
+        
+        # Check for data availability
+        if current_in == 0 and current_out == 0:
+            return {
+                'status': 'data_not_available',
+                'message': f'No token data available yet (attempt {len(attempts) + 1})'
+            }
+        
+        # ANOMALY DETECTION: Token count decreased
+        if current_in < previous_in or current_out < previous_out:
+            decrease_in = previous_in - current_in
+            decrease_out = previous_out - current_out
+            return {
+                'status': 'warning',
+                'message': f'⚠️ Token count DECREASED (in: -{decrease_in}, out: -{decrease_out}) - possible API issue!'
+            }
+        
+        # Check if data is identical
+        data_identical = (current_in == previous_in and current_out == previous_out)
+        
+        if data_identical:
+            # Check time gap
+            if time_diff_minutes >= DEFAULT_VERIFICATION_INTERVAL_MIN:
+                # ✅ VERIFIED!
+                return {
+                    'status': 'verified',
+                    'message': f'✅ Data stable across {time_diff_minutes:.0f} minute interval ({current_in:,} in, {current_out:,} out)'
+                }
+            else:
+                # Data matches but too soon
+                wait_more = DEFAULT_VERIFICATION_INTERVAL_MIN - time_diff_minutes
+                return {
+                    'status': 'pending',
+                    'message': f'Data matches but interval too short ({time_diff_minutes:.0f}m < {DEFAULT_VERIFICATION_INTERVAL_MIN}m), wait {wait_more:.0f}m more'
+                }
         else:
-            # No token data available yet - don't mark as reconciled
-            logger.info(
-                f"No token data available yet for {framework}/{run_id} - will retry on next reconciliation",
-                extra={
-                    'run_id': run_id,
-                    'framework': framework,
-                    'event': 'reconciliation_deferred',
-                    'metadata': {
-                        'reason': 'zero_tokens_from_api',
-                        'total_steps': len(metrics.get('steps', []))
-                    }
-                }
-            )
-            reconciliation_report['status'] = 'data_not_available'
-        
-        return reconciliation_report
+            # Data still changing (normal - API data arriving)
+            increase_in = current_in - previous_in
+            increase_out = current_out - previous_out
+            return {
+                'status': 'pending',
+                'message': f'Data still arriving (+{increase_in:,} in, +{increase_out:,} out tokens since last attempt)'
+            }
     
     def reconcile_all_pending(
         self,
@@ -400,19 +514,16 @@ class UsageReconciler:
                     with open(metrics_file, 'r', encoding='utf-8') as f:
                         metrics = json.load(f)
                     
-                    # Skip if already reconciled
-                    if metrics.get('usage_api_reconciliation'):
-                        logger.debug(f"Already reconciled: {framework_name}/{run_id}")
+                    # Skip if already verified (not just reconciled)
+                    reconciliation = metrics.get('usage_api_reconciliation', {})
+                    verification_status = reconciliation.get('verification_status', 'pending')
+                    
+                    if verification_status == 'verified':
+                        logger.debug(f"Already verified: {framework_name}/{run_id}")
                         continue
                     
-                    # Check if has token data
-                    total_tokens = metrics.get('aggregate_metrics', {}).get('TOK_IN', 0)
-                    if total_tokens > 0:
-                        logger.debug(f"Already has tokens: {framework_name}/{run_id}")
-                        continue
-                    
-                    # This run needs reconciliation!
-                    logger.info(f"Reconciling: {framework_name}/{run_id}")
+                    # This run needs reconciliation/verification!
+                    logger.info(f"Reconciling: {framework_name}/{run_id} (status: {verification_status})")
                     
                     report = self.reconcile_run(run_id, framework_name)
                     results.append(report)
@@ -446,7 +557,11 @@ class UsageReconciler:
         min_age_minutes: int = 30
     ) -> List[Dict[str, Any]]:
         """
-        List all runs that need reconciliation (without reconciling them).
+        List all runs that need reconciliation/verification (without reconciling them).
+        
+        A run is pending if:
+        - Not yet verified (verification_status != 'verified')
+        - Old enough (> min_age_minutes)
         
         Args:
             framework: Specific framework to check (None = all frameworks)
@@ -490,21 +605,25 @@ class UsageReconciler:
                     with open(metrics_file, 'r', encoding='utf-8') as f:
                         metrics = json.load(f)
                     
-                    if metrics.get('usage_api_reconciliation'):
-                        continue
+                    # Check verification status
+                    reconciliation = metrics.get('usage_api_reconciliation', {})
+                    verification_status = reconciliation.get('verification_status', 'pending')
                     
-                    total_tokens = metrics.get('aggregate_metrics', {}).get('TOK_IN', 0)
-                    if total_tokens > 0:
+                    if verification_status == 'verified':
                         continue
                     
                     age_minutes = (current_time - file_mtime) / 60
+                    attempts = reconciliation.get('attempts', [])
                     
                     pending.append({
                         'run_id': run_id,
                         'framework': framework_name,
                         'age_minutes': age_minutes,
                         'metrics_file': str(metrics_file),
-                        'end_timestamp': metrics.get('end_timestamp')
+                        'end_timestamp': metrics.get('end_timestamp'),
+                        'verification_status': verification_status,
+                        'attempts': len(attempts),
+                        'message': reconciliation.get('verification_message', 'Not yet reconciled')
                     })
                     
                 except Exception as e:
