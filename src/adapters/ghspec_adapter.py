@@ -935,8 +935,13 @@ class GHSpecAdapter(BaseAdapter):
         
         Args:
             relative_path: Path relative to src_dir (e.g., "backend/models/user.py")
+                          Can start with / which will be stripped
             content: File content to write
         """
+        # Strip leading / if present (AI often generates absolute paths)
+        if relative_path.startswith('/'):
+            relative_path = relative_path.lstrip('/')
+        
         # Resolve path relative to src_dir
         file_path = self.src_dir / relative_path
         
