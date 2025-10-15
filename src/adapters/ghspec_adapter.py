@@ -6,8 +6,10 @@ Integrates with GitHub Spec-kit (ghspec) framework for experiment execution.
 
 import subprocess
 import time
+import os
+import re
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Tuple
 import requests
 from src.adapters.base_adapter import BaseAdapter
 from src.utils.logger import get_logger
@@ -28,7 +30,6 @@ class GHSpecAdapter(BaseAdapter):
             workspace_path: Isolated workspace directory
         """
         super().__init__(config, run_id, workspace_path)
-        self.process = None
         self.framework_dir = None
         self.hitl_text = None
         
@@ -166,66 +167,383 @@ class GHSpecAdapter(BaseAdapter):
             
     def execute_step(self, step_num: int, command_text: str) -> Dict[str, Any]:
         """
-        Execute a step by sending command to GitHub Spec-kit framework.
+        Execute a step by generating spec/plan/tasks or implementing code.
+        
+        Phase 3 Implementation (steps 1-3):
+        - Step 1: Generate specification (specify phase)
+        - Step 2: Generate technical plan (plan phase)
+        - Step 3: Generate task breakdown (tasks phase)
         
         Args:
             step_num: Step number (1-6)
-            command_text: Natural language command
+            command_text: Natural language command (user's feature request)
             
         Returns:
-            Dictionary with execution results
+            Dictionary with execution results including tokens and HITL count
         """
         self.current_step = step_num
-        start_time = time.time()
+        self._step_start_time = time.time()
         
         logger.info("Executing step",
                    extra={'run_id': self.run_id, 'step': step_num, 
                          'event': 'step_start', 
-                         'metadata': {'framework': 'ghspec'}})
-        
-        # TODO: Implement actual GitHub Spec-kit command execution
-        # This is a placeholder implementation
+                         'metadata': {'framework': 'ghspec', 'command': command_text[:100]}})
         
         hitl_count = 0
         tokens_in = 0
         tokens_out = 0
+        success = False
         
-        # Simulate step execution
-        # In real implementation, this would:
-        # 1. Send command to GitHub Spec-kit CLI/API
-        # 2. Monitor for HITL requests
-        # 3. Track token usage
-        # 4. Wait for completion
+        try:
+            # Phase 3: Spec/Plan/Tasks generation (steps 1-3)
+            if step_num == 1:
+                # Generate specification
+                hitl_count, tokens_in, tokens_out = self._execute_phase('specify', command_text)
+                success = self.spec_md_path.exists()
+                
+            elif step_num == 2:
+                # Generate technical plan (requires spec.md)
+                if not self.spec_md_path.exists():
+                    raise RuntimeError("spec.md not found - run step 1 first")
+                hitl_count, tokens_in, tokens_out = self._execute_phase('plan', command_text)
+                success = self.plan_md_path.exists()
+                
+            elif step_num == 3:
+                # Generate task breakdown (requires spec.md and plan.md)
+                if not self.spec_md_path.exists() or not self.plan_md_path.exists():
+                    raise RuntimeError("spec.md or plan.md not found - run steps 1-2 first")
+                hitl_count, tokens_in, tokens_out = self._execute_phase('tasks', command_text)
+                success = self.tasks_md_path.exists()
+                
+            # Phase 4: Task-by-task implementation (steps 4-5)
+            elif step_num in [4, 5]:
+                # TODO: Implement task-by-task code generation
+                logger.warning("Phase 4 not yet implemented",
+                             extra={'run_id': self.run_id, 'step': step_num})
+                success = False
+                
+            # Phase 5: Bugfix cycle (step 6)
+            elif step_num == 6:
+                # TODO: Implement validation-driven bugfix
+                logger.warning("Phase 5 not yet implemented",
+                             extra={'run_id': self.run_id, 'step': step_num})
+                success = False
+                
+            else:
+                raise ValueError(f"Invalid step number: {step_num}")
+                
+        except Exception as e:
+            logger.error("Step execution failed",
+                        extra={'run_id': self.run_id, 'step': step_num,
+                              'metadata': {'error': str(e)}})
+            success = False
+            # Re-raise to let orchestrator handle
+            raise
         
-        duration = time.time() - start_time
+        duration = time.time() - self._step_start_time
+        
+        logger.info("Step completed",
+                   extra={'run_id': self.run_id, 'step': step_num,
+                         'event': 'step_complete',
+                         'metadata': {
+                             'success': success,
+                             'duration': duration,
+                             'hitl_count': hitl_count,
+                             'tokens_in': tokens_in,
+                             'tokens_out': tokens_out
+                         }})
         
         return {
-            'success': True,  # Placeholder
+            'success': success,
             'duration_seconds': duration,
             'hitl_count': hitl_count,
             'tokens_in': tokens_in,
             'tokens_out': tokens_out,
             'retry_count': 0
         }
+    
+    def _execute_phase(self, phase: str, command_text: str) -> Tuple[int, int, int]:
+        """
+        Execute a single GHSpec phase (specify, plan, or tasks).
+        
+        Phase 3 Implementation:
+        1. Load prompt template for this phase
+        2. Build complete prompt with context
+        3. Call OpenAI API (with timestamp tracking)
+        4. Check for clarification requests
+        5. Handle HITL if needed
+        6. Save artifact to workspace
+        7. Fetch token usage from OpenAI Usage API
+        
+        Args:
+            phase: Phase name ('specify', 'plan', or 'tasks')
+            command_text: User's feature request (used in specify phase)
+            
+        Returns:
+            Tuple of (hitl_count, tokens_in, tokens_out)
+        """
+        logger.info(f"Executing {phase} phase",
+                   extra={'run_id': self.run_id, 'step': self.current_step,
+                         'metadata': {'phase': phase}})
+        
+        # Load prompt template
+        template_path = Path(f"docs/ghspec/prompts/{phase}_template.md")
+        system_prompt, user_prompt_template = self._load_prompt_template(template_path)
+        
+        # Build complete user prompt with context
+        user_prompt = self._build_phase_prompt(phase, user_prompt_template, command_text)
+        
+        # Track start time for Usage API query
+        api_call_start = int(time.time())
+        
+        # Call OpenAI API
+        response_text = self._call_openai(system_prompt, user_prompt)
+        
+        # Check for clarification requests
+        hitl_count = 0
+        if self._needs_clarification(response_text):
+            logger.info(f"Clarification needed in {phase} phase",
+                       extra={'run_id': self.run_id, 'step': self.current_step})
+            
+            # Handle HITL by appending guidelines and regenerating
+            clarification_text = self._handle_clarification(response_text)
+            user_prompt_with_hitl = f"{user_prompt}\n\n---\n\n{clarification_text}"
+            
+            # Regenerate with clarification
+            response_text = self._call_openai(system_prompt, user_prompt_with_hitl)
+            hitl_count = 1
+        
+        # Save artifact
+        output_path = {
+            'specify': self.spec_md_path,
+            'plan': self.plan_md_path,
+            'tasks': self.tasks_md_path
+        }[phase]
+        
+        self._save_artifact(output_path, response_text)
+        
+        # Fetch token usage from OpenAI Usage API
+        api_call_end = int(time.time())
+        tokens_in, tokens_out = self.fetch_usage_from_openai(
+            api_key_env_var=self.config['api_key_env'],
+            start_timestamp=api_call_start,
+            end_timestamp=api_call_end,
+            model='gpt-4o-mini'  # From experiment.yaml
+        )
+        
+        logger.info(f"Phase {phase} completed",
+                   extra={'run_id': self.run_id, 'step': self.current_step,
+                         'metadata': {
+                             'output_path': str(output_path),
+                             'hitl_count': hitl_count,
+                             'tokens_in': tokens_in,
+                             'tokens_out': tokens_out
+                         }})
+        
+        return hitl_count, tokens_in, tokens_out
+    
+    def _load_prompt_template(self, template_path: Path) -> Tuple[str, str]:
+        """
+        Load system and user prompt templates from markdown file.
+        
+        Expects template structure:
+        ## System Prompt
+        ```
+        system prompt text
+        ```
+        
+        ## User Prompt Template
+        ```
+        user prompt with {placeholders}
+        ```
+        
+        Args:
+            template_path: Path to prompt template markdown file
+            
+        Returns:
+            Tuple of (system_prompt, user_prompt_template)
+        """
+        with open(template_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Extract system prompt (between ## System Prompt and next ##)
+        system_match = re.search(
+            r'## System Prompt\s*```\s*(.*?)\s*```',
+            content,
+            re.DOTALL
+        )
+        system_prompt = system_match.group(1).strip() if system_match else ""
+        
+        # Extract user prompt template
+        user_match = re.search(
+            r'## User Prompt Template\s*```\s*(.*?)\s*```',
+            content,
+            re.DOTALL
+        )
+        user_prompt_template = user_match.group(1).strip() if user_match else ""
+        
+        if not system_prompt or not user_prompt_template:
+            raise ValueError(f"Invalid template format in {template_path}")
+        
+        return system_prompt, user_prompt_template
+    
+    def _build_phase_prompt(self, phase: str, template: str, command_text: str) -> str:
+        """
+        Build complete user prompt by filling template with context.
+        
+        Args:
+            phase: Phase name ('specify', 'plan', or 'tasks')
+            template: User prompt template with placeholders
+            command_text: User's feature request
+            
+        Returns:
+            Complete user prompt with all placeholders filled
+        """
+        if phase == 'specify':
+            # Specify phase: just substitute user command
+            return template.replace('{user_command}', command_text)
+            
+        elif phase == 'plan':
+            # Plan phase: substitute spec content
+            spec_content = self.spec_md_path.read_text(encoding='utf-8')
+            return template.replace('{spec_content}', spec_content)
+            
+        elif phase == 'tasks':
+            # Tasks phase: substitute spec + plan content
+            spec_content = self.spec_md_path.read_text(encoding='utf-8')
+            plan_content = self.plan_md_path.read_text(encoding='utf-8')
+            return (template
+                   .replace('{spec_content}', spec_content)
+                   .replace('{plan_content}', plan_content))
+        
+        else:
+            raise ValueError(f"Unknown phase: {phase}")
+    
+    def _call_openai(self, system_prompt: str, user_prompt: str) -> str:
+        """
+        Call OpenAI API directly with chat completion.
+        
+        Uses configuration from experiment.yaml:
+        - API key from environment variable (api_key_env)
+        - Model: gpt-4o-mini (from model config)
+        - Temperature: 0 (deterministic)
+        
+        Args:
+            system_prompt: System role instructions
+            user_prompt: User message/request
+            
+        Returns:
+            Response text from assistant
+        """
+        api_key = os.getenv(self.config['api_key_env'])
+        if not api_key:
+            raise RuntimeError(f"API key not found in {self.config['api_key_env']}")
+        
+        url = "https://api.openai.com/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "gpt-4o-mini",  # From experiment.yaml
+            "temperature": 0,  # Deterministic
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+        }
+        
+        logger.debug("Calling OpenAI API",
+                    extra={'run_id': self.run_id, 'step': self.current_step,
+                          'metadata': {
+                              'model': 'gpt-4o-mini',
+                              'system_prompt_length': len(system_prompt),
+                              'user_prompt_length': len(user_prompt)
+                          }})
+        
+        response = requests.post(url, headers=headers, json=payload, timeout=120)
+        response.raise_for_status()
+        
+        result = response.json()
+        assistant_message = result['choices'][0]['message']['content']
+        
+        return assistant_message
+    
+    def _needs_clarification(self, response_text: str) -> bool:
+        """
+        Detect if model response contains clarification requests.
+        
+        Looks for pattern: [NEEDS CLARIFICATION: ...]
+        
+        Args:
+            response_text: Model's response
+            
+        Returns:
+            True if clarification is needed, False otherwise
+        """
+        return '[NEEDS CLARIFICATION:' in response_text
+    
+    def _handle_clarification(self, response_text: str) -> str:
+        """
+        Return clarification guidelines from HITL file.
+        
+        This method is called when the model requests clarification.
+        It loads the fixed clarification guidelines and returns them.
+        
+        Note: This delegates to handle_hitl() which manages the HITL text cache.
+        
+        Args:
+            response_text: Model's response containing clarification request
+            
+        Returns:
+            Fixed clarification guidelines text
+        """
+        # Extract the specific question (for logging)
+        clarification_match = re.search(
+            r'\[NEEDS CLARIFICATION: (.*?)\]',
+            response_text,
+            re.DOTALL
+        )
+        question = clarification_match.group(1).strip() if clarification_match else "unclear"
+        
+        # Get fixed HITL response
+        return self.handle_hitl(question)
+    
+    def _save_artifact(self, output_path: Path, content: str) -> None:
+        """
+        Save generated artifact to workspace.
+        
+        Args:
+            output_path: Path to save artifact
+            content: Artifact content (markdown)
+        """
+        output_path.write_text(content, encoding='utf-8')
+        
+        logger.info("Artifact saved",
+                   extra={'run_id': self.run_id, 'step': self.current_step,
+                         'metadata': {
+                             'path': str(output_path),
+                             'size_bytes': len(content.encode('utf-8'))
+                         }})
         
     def health_check(self) -> bool:
         """
-        Check if GitHub Spec-kit framework services are responding.
+        Check if GitHub Spec-kit framework is ready.
+        
+        GHSpec is CLI-based with no persistent services, so we just verify:
+        - Framework directory exists
+        - Workspace structure is set up
         
         Returns:
             True if healthy, False otherwise
         """
-        api_port = self.config['api_port']
-        ui_port = self.config['ui_port']
-        
-        try:
-            api_response = requests.get(f"http://localhost:{api_port}/health", 
-                                       timeout=5)
-            ui_response = requests.get(f"http://localhost:{ui_port}/", 
-                                      timeout=5)
-            return api_response.status_code == 200 and ui_response.status_code == 200
-        except requests.RequestException:
+        if not self.framework_dir or not self.framework_dir.exists():
             return False
+        
+        if not hasattr(self, 'specs_dir') or not self.specs_dir.exists():
+            return False
+            
+        return True
             
     def handle_hitl(self, query: str) -> str:
         """
@@ -258,22 +576,15 @@ class GHSpecAdapter(BaseAdapter):
         """
         Gracefully shutdown GitHub Spec-kit framework.
         
-        Stops services and cleans up resources.
+        GHSpec is CLI-based with no persistent services, so cleanup is minimal:
+        - Log shutdown event
+        - Workspace artifacts are preserved (intentional)
         """
         logger.info("Stopping GitHub Spec-kit framework",
                    extra={'run_id': self.run_id, 'event': 'framework_stop'})
         
-        # TODO: Implement graceful shutdown
-        # - Stop API/UI services
-        # - Terminate framework processes
-        # - Clean up temporary files (keep workspace)
+        # No services to terminate - GHSpec uses direct OpenAI API calls
+        # Workspace and artifacts are intentionally preserved for analysis
         
-        if self.process:
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=30)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                
         logger.info("GitHub Spec-kit framework stopped",
                    extra={'run_id': self.run_id, 'event': 'framework_stopped'})
