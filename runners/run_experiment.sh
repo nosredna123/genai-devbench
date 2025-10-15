@@ -75,7 +75,10 @@ echo -e "${GREEN}✓${NC} Dependencies installed"
 if [ -f "$PROJECT_ROOT/.env" ]; then
     echo "Loading environment variables from .env..."
     # Export all variables from .env file
-    export $(grep -v '^#' "$PROJECT_ROOT/.env" | xargs)
+    # Use set -a to automatically export all variables
+    set -a
+    source "$PROJECT_ROOT/.env"
+    set +a
     echo -e "${GREEN}✓${NC} Environment variables loaded"
 else
     echo -e "${YELLOW}Warning: .env file not found${NC}"
@@ -102,7 +105,7 @@ if [ "$FRAMEWORK" == "all" ]; then
     for fw in baes chatdev ghspec; do
         echo ""
         echo -e "${YELLOW}Running framework: $fw${NC}"
-        python3 -m src.orchestrator.runner "$fw" || {
+        python3 -m src.orchestrator "$fw" || {
             echo -e "${RED}✗ Framework $fw failed${NC}"
             exit 1
         }
@@ -110,7 +113,7 @@ if [ "$FRAMEWORK" == "all" ]; then
     done
 else
     # Run single framework
-    python3 -m src.orchestrator.runner "$FRAMEWORK" || {
+    python3 -m src.orchestrator "$FRAMEWORK" || {
         echo -e "${RED}✗ Experiment failed${NC}"
         exit 1
     }
