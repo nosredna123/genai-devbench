@@ -1,11 +1,11 @@
 {
   "version": "1.0",
-  "last_updated": "2025-10-15T12:33:46.512934Z",
-  "total_runs": 1,
+  "last_updated": "2025-10-15T17:34:42.255058Z",
+  "total_runs": 2,
   "frameworks": {
     "chatdev": 1,
     "baes": 0,
-    "ghspec": 0
+    "ghspec": 1
   },
   "runs": [
     {
@@ -17,6 +17,16 @@
       "verification_status": "verified",
       "total_tokens_in": 219917,
       "total_tokens_out": 78915
+    },
+    {
+      "run_id": "8f6f7f74-7401-406a-a6cf-5877993aff79",
+      "framework": "ghspec",
+      "path": "ghspec/8f6f7f74-7401-406a-a6cf-5877993aff79",
+      "start_time": "2025-10-15T17:32:27.202091Z",
+      "end_time": "2025-10-15T17:34:39.003519Z",
+      "verification_status": "pending",
+      "total_tokens_in": 0,
+      "total_tokens_out": 0
     }
   ]
 }

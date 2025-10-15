@@ -772,6 +772,33 @@ class GHSpecAdapter(BaseAdapter):
                     'goal': task_title
                 })
         
+        # If still no tasks, try checkbox-first format
+        if not tasks:
+            # Pattern: - [ ] **Task N: Title**\n  - **File Path**: path
+            checkbox_pattern = re.compile(
+                r'- \[ \] \*\*Task (\d+): ([^\*]+)\*\*\s*\n'  # Checkbox + Task title
+                r'(?:.*?- \*\*File Path\*\*: `?([^\n`]+)`?\n)?'  # File path
+                r'(?:.*?- \*\*Description\*\*: ([^\n]+))?',  # Description (optional)
+                re.MULTILINE | re.DOTALL
+            )
+            
+            for match in checkbox_pattern.finditer(tasks_content):
+                task_num = match.group(1)
+                task_title = match.group(2).strip()
+                file_path = match.group(3).strip() if match.group(3) else None
+                description = match.group(4).strip() if match.group(4) else task_title
+                
+                # Skip tasks without file paths
+                if not file_path:
+                    continue
+                
+                tasks.append({
+                    'id': f"TASK-{task_num.zfill(3)}",
+                    'description': description,
+                    'file': file_path,
+                    'goal': task_title
+                })
+        
         return tasks
     
     def _build_task_prompt(
