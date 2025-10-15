@@ -67,6 +67,11 @@ python3 -c "import matplotlib" 2>/dev/null || {
 log_info "Creating output directory: $OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
+# Export environment variables for Python script
+export PROJECT_ROOT
+export RUNS_DIR
+export OUTPUT_DIR
+
 # Run analysis script
 log_info "Running analysis..."
 
@@ -145,7 +150,11 @@ for run_entry in all_runs:
         with open(metrics_file, 'r', encoding='utf-8') as f:
             metrics = json.load(f)
         
-        frameworks_data[framework_name].append(metrics)
+        # Extract aggregate metrics for analysis (only numeric metrics)
+        if 'aggregate_metrics' in metrics:
+            frameworks_data[framework_name].append(metrics['aggregate_metrics'])
+        else:
+            logger.warning("No aggregate_metrics found in run %s", run_id)
         
         # Load step-by-step data for timeline chart
         # Check if step_metrics.json exists (optional)
