@@ -774,12 +774,12 @@ class GHSpecAdapter(BaseAdapter):
         
         # If still no tasks, try checkbox-first format
         if not tasks:
-            # Pattern: - [ ] **Task N: Title**\n  - **File Path**: path
+            # Pattern: - [ ] **Task N: Title**\n  **File:** path
+            # Note: Markdown bold is **word:** which becomes **File:** not **File:**
             checkbox_pattern = re.compile(
-                r'- \[ \] \*\*Task (\d+): ([^\*]+)\*\*\s*\n'  # Checkbox + Task title
-                r'(?:.*?- \*\*File Path\*\*: `?([^\n`]+)`?\n)?'  # File path
-                r'(?:.*?- \*\*Description\*\*: ([^\n]+))?',  # Description (optional)
-                re.MULTILINE | re.DOTALL
+                r'- \[ \] \*\*Task (\d+): ([^\*]+)\*\*.*?\n'  # Checkbox + Task title
+                r'\s+\*\*File(?:\s+Path)?\:\*\*\s*`?([^\n`\s]+)`?',  # **File:** format
+                re.MULTILINE
             )
             
             for match in checkbox_pattern.finditer(tasks_content):
