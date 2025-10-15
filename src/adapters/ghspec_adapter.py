@@ -774,11 +774,11 @@ class GHSpecAdapter(BaseAdapter):
         
         # If still no tasks, try checkbox-first format
         if not tasks:
-            # Pattern: - [ ] **Task N: Title**\n  **File:** path
-            # Note: Markdown bold is **word:** which becomes **File:** not **File:**
+            # Pattern: - [ ] **Task N**: Title\n  **File:** path
+            # Note: Colon is OUTSIDE the bold markup: **Task 1**: not **Task 1:**
             checkbox_pattern = re.compile(
-                r'- \[ \] \*\*Task (\d+): ([^\*]+)\*\*.*?\n'  # Checkbox + Task title
-                r'\s+\*\*File(?:\s+Path)?\:\*\*\s*`?([^\n`\s]+)`?',  # **File:** format
+                r'- \[ \] \*\*Task (\d+)\*\*:\s*([^\n]+)\n'  # Checkbox + Task title (colon outside bold)
+                r'\s+\*\*File\*\*:\s*`?([^\n`\s]+)`?',  # **File:** format
                 re.MULTILINE
             )
             
@@ -786,7 +786,7 @@ class GHSpecAdapter(BaseAdapter):
                 task_num = match.group(1)
                 task_title = match.group(2).strip()
                 file_path = match.group(3).strip() if match.group(3) else None
-                description = match.group(4).strip() if match.group(4) else task_title
+                description = task_title  # Use title as description
                 
                 # Skip tasks without file paths
                 if not file_path:
