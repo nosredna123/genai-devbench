@@ -1,5 +1,24 @@
-# Run artifacts (not version controlled)
-runs/
+# Track lightweight metadata from runs, ignore heavy artifacts
+# First, don't ignore the runs directory itself
+!runs/
+
+# Track subdirectories
+!runs/*/
+!runs/*/*/
+
+# Track specific file types (metadata)
+!runs/*/*/*.json
+!runs/*/*/commit.txt
+!runs/*/*/*.md
+
+# Ignore large artifacts in runs
+runs/*/*/workspace/
+runs/*/*/artifacts/
+runs/*/*/*.tar.gz
+runs/*/*/*.zip
+runs/*/*/*.log
+
+# Logs and environment
 logs/
 *.log
 .env
