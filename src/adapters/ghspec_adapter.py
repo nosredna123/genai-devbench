@@ -344,7 +344,7 @@ class GHSpecAdapter(BaseAdapter):
         # Fetch token usage from OpenAI Usage API
         api_call_end = int(time.time())
         tokens_in, tokens_out = self.fetch_usage_from_openai(
-            api_key_env_var=self.config['api_key_env'],
+            api_key_env_var='OPEN_AI_KEY_ADM',  # Admin key for Usage API
             start_timestamp=api_call_start,
             end_timestamp=api_call_end,
             model='gpt-4o-mini'  # From experiment.yaml
@@ -657,7 +657,7 @@ class GHSpecAdapter(BaseAdapter):
             # Fetch token usage
             api_call_end = int(time.time())
             tokens_in, tokens_out = self.fetch_usage_from_openai(
-                api_key_env_var=self.config['api_key_env'],
+                api_key_env_var='OPEN_AI_KEY_ADM',  # Admin key for Usage API
                 start_timestamp=api_call_start,
                 end_timestamp=api_call_end,
                 model='gpt-4o-mini'
@@ -699,13 +699,19 @@ class GHSpecAdapter(BaseAdapter):
           - **Dependencies**: TASK-XXX (optional)
           - **Test**: How to verify (optional)
         
+        Alternative format (AI may generate):
+        ## Task 1: Setup Development Environment
+        - **File Path**: `/setup/setup_environment.js`
+        - **Description**: Initialize project...
+        - [ ] Setup Node.js project
+        
         Returns:
             List of task dictionaries with keys: id, description, file, goal
         """
         tasks_content = self.tasks_md_path.read_text(encoding='utf-8')
         tasks = []
         
-        # Regex to match task blocks
+        # Try spec-kit format first
         # Pattern: - [ ] **TASK-NNN** [labels] Description
         task_pattern = re.compile(
             r'- \[ \] \*\*([A-Z]+-\d+)\*\* .*?\n'  # Task ID line
@@ -738,6 +744,33 @@ class GHSpecAdapter(BaseAdapter):
                 'file': file_path,
                 'goal': goal
             })
+        
+        # If no tasks found, try alternative format
+        if not tasks:
+            # Pattern: ## Task N: Description\n- **File Path**: path\n- **Description**: desc
+            alt_pattern = re.compile(
+                r'## Task (\d+): ([^\n]+)\n'  # Task header
+                r'(?:.*?- \*\*File Path\*\*: `?([^\n`]+)`?\n)?'  # File path
+                r'(?:.*?- \*\*Description\*\*: ([^\n]+)\n)?',  # Description
+                re.MULTILINE | re.DOTALL
+            )
+            
+            for match in alt_pattern.finditer(tasks_content):
+                task_num = match.group(1)
+                task_title = match.group(2).strip()
+                file_path = match.group(3).strip() if match.group(3) else None
+                description = match.group(4).strip() if match.group(4) else task_title
+                
+                # Skip tasks without file paths
+                if not file_path:
+                    continue
+                
+                tasks.append({
+                    'id': f"TASK-{task_num.zfill(3)}",
+                    'description': description,
+                    'file': file_path,
+                    'goal': task_title
+                })
         
         return tasks
     
@@ -975,7 +1008,7 @@ class GHSpecAdapter(BaseAdapter):
             # Fetch token usage
             api_call_end = int(time.time())
             tokens_in, tokens_out = self.fetch_usage_from_openai(
-                api_key_env_var=self.config['api_key_env'],
+                api_key_env_var='OPEN_AI_KEY_ADM',  # Admin key for Usage API
                 start_timestamp=api_call_start,
                 end_timestamp=api_call_end,
                 model='gpt-4o-mini'
