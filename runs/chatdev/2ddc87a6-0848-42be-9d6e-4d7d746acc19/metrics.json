@@ -285,9 +285,54 @@
         "total_tokens_out": 78915,
         "steps_with_tokens": 6,
         "total_steps": 6
+      },
+      {
+        "timestamp": "2025-10-15T12:33:41.487281+00:00",
+        "steps": [
+          {
+            "step": 1,
+            "status": "success",
+            "tokens_in": 32335,
+            "tokens_out": 9984
+          },
+          {
+            "step": 2,
+            "status": "success",
+            "tokens_in": 43401,
+            "tokens_out": 13473
+          },
+          {
+            "step": 3,
+            "status": "success",
+            "tokens_in": 27466,
+            "tokens_out": 10924
+          },
+          {
+            "step": 4,
+            "status": "success",
+            "tokens_in": 29890,
+            "tokens_out": 11537
+          },
+          {
+            "step": 5,
+            "status": "success",
+            "tokens_in": 36563,
+            "tokens_out": 15601
+          },
+          {
+            "step": 6,
+            "status": "success",
+            "tokens_in": 50262,
+            "tokens_out": 17396
+          }
+        ],
+        "total_tokens_in": 219917,
+        "total_tokens_out": 78915,
+        "steps_with_tokens": 6,
+        "total_steps": 6
       }
     ],
-    "verification_message": "\u2705 Data stable across 2 minute interval (219,917 in, 78,915 out)",
-    "verified_at": "2025-10-15T12:29:10.453182+00:00"
+    "verification_message": "\u2705 Data stable across 5 minute interval (219,917 in, 78,915 out)",
+    "verified_at": "2025-10-15T12:33:41.487281+00:00"
   }
 }
