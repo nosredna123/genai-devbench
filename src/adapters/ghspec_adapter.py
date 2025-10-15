@@ -152,15 +152,19 @@ class GHSpecAdapter(BaseAdapter):
         """
         Return fixed HITL response for deterministic execution.
         
+        Note: GHSpec uses different HITL content than ChatDev/BAEs because it
+        generates specifications incrementally. This returns meta-guidelines
+        for handling ambiguous requirements, not a concrete specification.
+        
         Args:
             query: Framework's clarification question
             
         Returns:
-            Fixed clarification text
+            Fixed clarification guidelines text
         """
         if self.hitl_text is None:
-            # Load HITL text from config (should be done once)
-            hitl_path = Path("config/hitl/expanded_spec.txt")
+            # Load GHSpec-specific clarification guidelines
+            hitl_path = Path("config/hitl/ghspec_clarification_guidelines.txt")
             with open(hitl_path, 'r', encoding='utf-8') as f:
                 self.hitl_text = f.read().strip()
                 

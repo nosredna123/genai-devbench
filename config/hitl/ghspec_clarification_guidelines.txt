@@ -1,8 +1,17 @@
-# GHSpec HITL Expanded Specification
+# GHSpec HITL Clarification Guidelines
 
-**Purpose**: Comprehensive clarification response for when the model requests additional information
+**Purpose**: Meta-level guidelines for handling ambiguous requirements during specification generation
 
-**Usage**: When GHSpec adapter detects clarification requests (e.g., `[NEEDS CLARIFICATION: ...]`), respond with this text to maintain reproducibility across runs.
+**Why GHSpec Needs Different HITL Than ChatDev/BAEs**:
+- ChatDev/BAEs receive a complete specification upfront (`expanded_spec.txt`)
+- GHSpec **generates** the specification incrementally through phases (specify → plan → tasks)
+- When GHSpec's AI encounters unclear requirements during specification generation, it needs guidelines on:
+  - What assumptions to make
+  - What details to include/exclude
+  - When to mark something as needing clarification vs. using reasonable defaults
+
+**Usage**: When GHSpec adapter detects clarification requests during specification/planning phases 
+(e.g., `[NEEDS CLARIFICATION: ...]`), respond with these guidelines to maintain reproducibility.
 
 ---
 
