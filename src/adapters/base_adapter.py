@@ -84,8 +84,8 @@ class BaseAdapter(ABC):
                 "Content-Type": "application/json"
             }
             params = {
-                "start_time": start_timestamp,
-                "end_time": end_timestamp,
+                "start_time": str(int(start_timestamp)),  # Convert to string
+                "end_time": str(int(end_timestamp)),      # Convert to string
                 "bucket_width": "1d",  # Use daily bucket
                 "limit": 31  # Get last month of data
             }
