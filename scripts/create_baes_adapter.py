@@ -1,4 +1,7 @@
-"""
+#!/usr/bin/env python3
+"""Script to create baes_adapter.py file."""
+
+CONTENT = '''"""
 BAEs framework adapter implementation.
 
 Integrates the Business Autonomous Entities (BAEs) framework into the experiment orchestrator.
@@ -384,3 +387,12 @@ class BAeSAdapter(BaseAdapter):
         logger.info("HITL intervention", extra={'run_id': self.run_id, 'step': self.current_step})
         
         return self.hitl_text
+'''
+
+target = "/home/amg/projects/uece/baes/baes_experiment/src/adapters/baes_adapter.py"
+
+with open(target, 'w') as f:
+    f.write(CONTENT)
+
+print(f"Created {target}")
+print(f"File size: {len(CONTENT)} bytes")

@@ -14,10 +14,14 @@ model: "gpt-4o-mini"
 # Framework configurations
 frameworks:
   baes:
-    repo_url: "https://github.com/gesad-lab/baes_demo.git"
+    enabled: true
+    repo_url: "https://github.com/gesad-lab/baes_demo"
     commit_hash: "a34b207253ef4beecedac913264732a93f16e979"
-    api_port: 8000
-    ui_port: 3000
+    api_port: 8100
+    ui_port: 8600
+    max_retries: 3
+    auto_restart_servers: false
+    use_venv: true
     api_key_env: "OPENAI_API_KEY_BAES"
     
   chatdev:
