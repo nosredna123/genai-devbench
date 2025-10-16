@@ -323,6 +323,132 @@ def compute_composite_scores(metrics: Dict[str, float]) -> Dict[str, float]:
     }
 
 
+def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]]]) -> List[str]:
+    """
+    Generate executive summary section with key findings.
+    
+    Args:
+        frameworks_data: Dict mapping framework names to lists of run metrics
+    
+    Returns:
+        List of markdown lines for the executive summary section
+    """
+    lines = [
+        "## Executive Summary",
+        ""
+    ]
+    
+    # Calculate aggregate statistics for summary
+    aggregated = {}
+    for framework, runs in frameworks_data.items():
+        aggregated[framework] = {}
+        # Get mean values for each metric
+        all_metrics = set()
+        for run in runs:
+            all_metrics.update(run.keys())
+        
+        for metric in all_metrics:
+            values = [run[metric] for run in runs if metric in run]
+            if values:
+                aggregated[framework][metric] = sum(values) / len(values)
+    
+    # Best performers section
+    lines.extend([
+        "### 🏆 Best Performers",
+        ""
+    ])
+    
+    # Most efficient (AEI)
+    if all('AEI' in data for data in aggregated.values()):
+        best_aei = max(aggregated.items(), key=lambda x: x[1].get('AEI', 0))
+        lines.append(f"- **Most Efficient (AEI)**: {best_aei[0]} ({best_aei[1]['AEI']:.3f}) - best quality-per-token ratio")
+    
+    # Fastest (T_WALL_seconds)
+    if all('T_WALL_seconds' in data for data in aggregated.values()):
+        fastest = min(aggregated.items(), key=lambda x: x[1].get('T_WALL_seconds', float('inf')))
+        time_seconds = fastest[1]['T_WALL_seconds']
+        time_minutes = time_seconds / 60
+        lines.append(f"- **Fastest (T_WALL)**: {fastest[0]} ({time_seconds:.1f}s / {time_minutes:.1f} min)")
+    
+    # Lowest token usage
+    if all('TOK_IN' in data for data in aggregated.values()):
+        lowest_tokens = min(aggregated.items(), key=lambda x: x[1].get('TOK_IN', float('inf')))
+        tokens = lowest_tokens[1]['TOK_IN']
+        lines.append(f"- **Lowest Token Usage**: {lowest_tokens[0]} ({tokens:,.0f} input tokens)")
+    
+    lines.extend(["", "### 📊 Key Insights", ""])
+    
+    # Test automation analysis
+    if all('AUTR' in data for data in aggregated.values()):
+        autr_values = [data['AUTR'] for data in aggregated.values()]
+        if all(v == 1.0 for v in autr_values):
+            lines.append("- ✅ All frameworks achieved perfect test automation (AUTR = 1.0)")
+        else:
+            avg_autr = sum(autr_values) / len(autr_values)
+            lines.append(f"- Test automation varies across frameworks (average AUTR = {avg_autr:.2f})")
+    
+    # Quality metrics analysis
+    quality_metrics = ['Q_star', 'ESR', 'CRUDe', 'MC']
+    zero_quality_metrics = []
+    for metric in quality_metrics:
+        if all(metric in data and data[metric] == 0 for data in aggregated.values()):
+            zero_quality_metrics.append(metric)
+    
+    if zero_quality_metrics:
+        lines.append(f"- ⚠️ Quality metrics show zero values: {', '.join(zero_quality_metrics)} - may need verification")
+    
+    # Performance variation analysis
+    if all('T_WALL_seconds' in data for data in aggregated.values()):
+        times = [data['T_WALL_seconds'] for data in aggregated.values()]
+        if len(times) > 1:
+            max_time = max(times)
+            min_time = min(times)
+            if min_time > 0:
+                variation = max_time / min_time
+                lines.append(f"- Wall time varies {variation:.1f}x between fastest and slowest frameworks")
+    
+    if all('TOK_IN' in data for data in aggregated.values()):
+        tokens = [data['TOK_IN'] for data in aggregated.values()]
+        if len(tokens) > 1:
+            max_tok = max(tokens)
+            min_tok = min(tokens)
+            if min_tok > 0:
+                variation = max_tok / min_tok
+                lines.append(f"- Token consumption varies {variation:.1f}x across frameworks")
+    
+    # Data quality alerts section
+    lines.extend(["", "### ⚠️ Data Quality Alerts", ""])
+    
+    alerts = []
+    
+    # Check for all-zero metrics
+    all_metrics = set()
+    for data in aggregated.values():
+        all_metrics.update(data.keys())
+    
+    for metric in sorted(all_metrics):
+        values = [data.get(metric, None) for data in aggregated.values()]
+        if all(v == 0 for v in values if v is not None):
+            if metric not in ['HIT', 'HEU']:  # Expected to be zero
+                alerts.append(f"- All frameworks show zero for `{metric}` - verify metric calculation")
+    
+    # Check for missing data
+    for framework, data in aggregated.items():
+        expected_metrics = ['AUTR', 'TOK_IN', 'TOK_OUT', 'T_WALL_seconds', 'Q_star', 'AEI']
+        missing = [m for m in expected_metrics if m not in data]
+        if missing:
+            alerts.append(f"- Framework `{framework}` missing metrics: {', '.join(missing)}")
+    
+    if not alerts:
+        lines.append("- No data quality issues detected")
+    else:
+        lines.extend(alerts)
+    
+    lines.extend(["", "---", ""])
+    
+    return lines
+
+
 def generate_statistical_report(
     frameworks_data: Dict[str, List[Dict[str, float]]],
     output_path: str
@@ -390,6 +516,9 @@ def generate_statistical_report(
         "---",
         ""
     ])
+    
+    # Add Executive Summary
+    lines.extend(_generate_executive_summary(frameworks_data))
     
     # Collect all metrics
     all_metrics = set()

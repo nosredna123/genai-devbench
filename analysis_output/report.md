@@ -1,6 +1,6 @@
 # Statistical Analysis Report
 
-**Generated:** 2025-10-16 13:19:32 UTC
+**Generated:** 2025-10-16 13:22:36 UTC
 
 **Frameworks:** ghspec, chatdev, baes
 
@@ -23,6 +23,30 @@
 | **HIT** | Human-in-the-Loop Count | Manual interventions needed | 0-∞ | Lower ↓ |
 | **HEU** | Human Effort Units | Total manual effort required | 0-∞ | Lower ↓ |
 | **UTT** | User Task Total | Number of evolution steps | Fixed | 6 |
+
+---
+
+## Executive Summary
+
+### 🏆 Best Performers
+
+- **Most Efficient (AEI)**: ghspec (0.109) - best quality-per-token ratio
+- **Fastest (T_WALL)**: baes (238.5s / 4.0 min)
+- **Lowest Token Usage**: baes (25,607 input tokens)
+
+### 📊 Key Insights
+
+- ✅ All frameworks achieved perfect test automation (AUTR = 1.0)
+- ⚠️ Quality metrics show zero values: Q_star, ESR, CRUDe, MC - may need verification
+- Wall time varies 7.5x between fastest and slowest frameworks
+- Token consumption varies 9.4x across frameworks
+
+### ⚠️ Data Quality Alerts
+
+- All frameworks show zero for `CRUDe` - verify metric calculation
+- All frameworks show zero for `ESR` - verify metric calculation
+- All frameworks show zero for `MC` - verify metric calculation
+- All frameworks show zero for `Q_star` - verify metric calculation
 
 ---
 
