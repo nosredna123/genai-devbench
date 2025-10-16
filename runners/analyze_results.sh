@@ -50,6 +50,16 @@ if [ ! -d "$RUNS_DIR" ]; then
     exit 1
 fi
 
+# Activate virtual environment if it exists
+VENV_DIR="$PROJECT_ROOT/.venv"
+if [ -d "$VENV_DIR" ]; then
+    log_info "Activating virtual environment: $VENV_DIR"
+    source "$VENV_DIR/bin/activate"
+else
+    log_warn "Virtual environment not found at $VENV_DIR"
+    log_warn "Consider creating one with: python3 -m venv .venv"
+fi
+
 # Check Python availability
 if ! command -v python3 &> /dev/null; then
     log_error "python3 not found. Please install Python 3.11+"
@@ -157,7 +167,7 @@ for run_entry in all_runs:
             logger.warning("No aggregate_metrics found in run %s", run_id)
         
         # Load step-by-step data for timeline chart
-        # Check if step_metrics.json exists (optional)
+        # First check if step_metrics.json exists (legacy format)
         step_metrics_file = run_dir / "step_metrics.json"
         if step_metrics_file.exists():
             with open(step_metrics_file, 'r', encoding='utf-8') as f:
@@ -170,6 +180,16 @@ for run_entry in all_runs:
                         'CRUDe': step_data.get('CRUDe', 0),
                         'ZDI': step_data.get('ZDI', 0)
                     }
+        # Otherwise, extract from steps array in metrics.json
+        elif 'steps' in metrics and isinstance(metrics['steps'], list):
+            for step in metrics['steps']:
+                step_num = step.get('step_number')
+                if step_num is not None:
+                    if step_num not in timeline_data[framework_name]:
+                        timeline_data[framework_name][step_num] = {
+                            'CRUDe': step.get('CRUDe', 0),
+                            'ZDI': step.get('duration_seconds', 0)  # Use duration as downtime proxy
+                        }
     
     except json.JSONDecodeError as e:
         logger.error("Failed to parse %s: %s", metrics_file, e)
@@ -209,7 +229,7 @@ logger.info("Generating visualizations...")
 
 # Radar chart (6 key metrics)
 try:
-    radar_metrics = ['AUTR', 'TOK_IN', 'T_WALL', 'CRUDe', 'ESR', 'MC']
+    radar_metrics = ['AUTR', 'TOK_IN', 'T_WALL_seconds', 'CRUDe', 'ESR', 'MC']
     radar_data = {
         fw: {m: aggregated_data[fw][m] for m in radar_metrics if m in aggregated_data[fw]}
         for fw in aggregated_data

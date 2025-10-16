@@ -32,7 +32,7 @@ def radar_chart(
                             "ChatDev": {"AUTR": 0.72, "TOK_IN": 15000, ...}
                         }
         output_path: Path to save the SVG file.
-        metrics: List of metric names to plot. Defaults to [AUTR, TOK_IN, T_WALL, CRUDe, ESR, MC].
+        metrics: List of metric names to plot. Defaults to [AUTR, TOK_IN, T_WALL_seconds, CRUDe, ESR, MC].
         title: Chart title.
     
     Raises:
@@ -43,7 +43,7 @@ def radar_chart(
     
     # Default metrics: 6 key metrics from experiment spec
     if metrics is None:
-        metrics = ["AUTR", "TOK_IN", "T_WALL", "CRUDe", "ESR", "MC"]
+        metrics = ["AUTR", "TOK_IN", "T_WALL_seconds", "CRUDe", "ESR", "MC"]
     
     # Validate all frameworks have all metrics
     for framework, data in frameworks_data.items():
