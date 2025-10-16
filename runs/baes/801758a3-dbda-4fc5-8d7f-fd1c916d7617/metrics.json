@@ -195,8 +195,53 @@
         "total_tokens_out": 6694,
         "steps_with_tokens": 3,
         "total_steps": 6
+      },
+      {
+        "timestamp": "2025-10-16T12:49:44.473571+00:00",
+        "steps": [
+          {
+            "step": 1,
+            "status": "success",
+            "tokens_in": 16413,
+            "tokens_out": 4538
+          },
+          {
+            "step": 2,
+            "status": "success",
+            "tokens_in": 5483,
+            "tokens_out": 1648
+          },
+          {
+            "step": 3,
+            "status": "success",
+            "tokens_in": 3711,
+            "tokens_out": 508
+          },
+          {
+            "step": 4,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 5,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 6,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0
+          }
+        ],
+        "total_tokens_in": 25607,
+        "total_tokens_out": 6694,
+        "steps_with_tokens": 3,
+        "total_steps": 6
       }
     ],
-    "verification_message": "Data still arriving (+25,607 in, +6,694 out tokens since last attempt)"
+    "verification_message": "Data matches but interval too short (3m < 10m), wait 7m more"
   }
 }

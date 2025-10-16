@@ -1,8 +1,8 @@
 # Statistical Analysis Report
 
-**Generated:** 2025-10-16 00:07:28 UTC
+**Generated:** 2025-10-16 12:50:40 UTC
 
-**Frameworks:** ghspec, chatdev
+**Frameworks:** ghspec, chatdev, baes
 
 ---
 
@@ -14,6 +14,7 @@
 |-----------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|
 | ghspec | 0.109 [0.091, 0.128] | 1.000 [1.000, 1.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 30771.500 [2503.000, 59040.000] | 12233.500 [925.000, 23542.000] | 399.523 [80.316, 718.730] | 6.000 [6.000, 6.000] | 80.500 [17.000, 144.000] |
 | chatdev | 0.081 [0.080, 0.081] | 1.000 [1.000, 1.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 240714.000 [217055.000, 264373.000] | 75653.000 [74482.000, 76824.000] | 1781.509 [1748.347, 1814.670] | 6.000 [6.000, 6.000] | 356.500 [350.000, 363.000] |
+| baes | 0.099 [0.099, 0.099] | 1.000 [1.000, 1.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 25607.000 [25607.000, 25607.000] | 6694.000 [6694.000, 6694.000] | 238.486 [238.486, 238.486] | 6.000 [6.000, 6.000] | 48.000 [48.000, 48.000] |
 
 
 ## 2. Kruskal-Wallis H-Tests
@@ -22,19 +23,19 @@ Testing for significant differences across all frameworks.
 
 | Metric | H | p-value | Significant | Groups | N |
 |--------|---|---------|-------------|--------|---|
-| AEI | 0.000 | 1.0000 | ✗ No | 2 | 4 |
-| AUTR | 0.000 | 1.0000 | ✗ No | 2 | 4 |
-| CRUDe | 0.000 | 1.0000 | ✗ No | 2 | 4 |
-| ESR | 0.000 | 1.0000 | ✗ No | 2 | 4 |
-| HEU | 0.000 | 1.0000 | ✗ No | 2 | 4 |
-| HIT | 0.000 | 1.0000 | ✗ No | 2 | 4 |
-| MC | 0.000 | 1.0000 | ✗ No | 2 | 4 |
-| Q_star | 0.000 | 1.0000 | ✗ No | 2 | 4 |
-| TOK_IN | 0.000 | 1.0000 | ✗ No | 2 | 4 |
-| TOK_OUT | 0.000 | 1.0000 | ✗ No | 2 | 4 |
-| T_WALL_seconds | 0.000 | 1.0000 | ✗ No | 2 | 4 |
-| UTT | 0.000 | 1.0000 | ✗ No | 2 | 4 |
-| ZDI | 0.000 | 1.0000 | ✗ No | 2 | 4 |
+| AEI | 3.000 | 0.2231 | ✗ No | 3 | 5 |
+| AUTR | 0.000 | 1.0000 | ✗ No | 3 | 5 |
+| CRUDe | 0.000 | 1.0000 | ✗ No | 3 | 5 |
+| ESR | 0.000 | 1.0000 | ✗ No | 3 | 5 |
+| HEU | 0.000 | 1.0000 | ✗ No | 3 | 5 |
+| HIT | 0.000 | 1.0000 | ✗ No | 3 | 5 |
+| MC | 0.000 | 1.0000 | ✗ No | 3 | 5 |
+| Q_star | 0.000 | 1.0000 | ✗ No | 3 | 5 |
+| TOK_IN | 3.000 | 0.2231 | ✗ No | 3 | 5 |
+| TOK_OUT | 3.000 | 0.2231 | ✗ No | 3 | 5 |
+| T_WALL_seconds | 3.000 | 0.2231 | ✗ No | 3 | 5 |
+| UTT | 0.000 | 1.0000 | ✗ No | 3 | 5 |
+| ZDI | 3.000 | 0.2231 | ✗ No | 3 | 5 |
 
 
 ## 3. Pairwise Comparisons
@@ -46,6 +47,8 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | ghspec vs chatdev | 0.1213 | ✗ | 1.000 | large |
+| ghspec vs baes | 1.0000 | ✗ | 0.000 | negligible |
+| chatdev vs baes | 0.2207 | ✗ | -1.000 | large |
 
 
 ### AUTR
@@ -53,6 +56,8 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | ghspec vs chatdev | 0.1213 | ✗ | 0.000 | negligible |
+| ghspec vs baes | 0.2207 | ✗ | 0.000 | negligible |
+| chatdev vs baes | 0.2207 | ✗ | 0.000 | negligible |
 
 
 ### CRUDe
@@ -60,6 +65,8 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | ghspec vs chatdev | 0.1213 | ✗ | 0.000 | negligible |
+| ghspec vs baes | 0.2207 | ✗ | 0.000 | negligible |
+| chatdev vs baes | 0.2207 | ✗ | 0.000 | negligible |
 
 
 ### ESR
@@ -67,6 +74,8 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | ghspec vs chatdev | 0.1213 | ✗ | 0.000 | negligible |
+| ghspec vs baes | 0.2207 | ✗ | 0.000 | negligible |
+| chatdev vs baes | 0.2207 | ✗ | 0.000 | negligible |
 
 
 ### HEU
@@ -74,6 +83,8 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | ghspec vs chatdev | 0.1213 | ✗ | 0.000 | negligible |
+| ghspec vs baes | 0.2207 | ✗ | 0.000 | negligible |
+| chatdev vs baes | 0.2207 | ✗ | 0.000 | negligible |
 
 
 ### HIT
@@ -81,6 +92,8 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | ghspec vs chatdev | 0.1213 | ✗ | 0.000 | negligible |
+| ghspec vs baes | 0.2207 | ✗ | 0.000 | negligible |
+| chatdev vs baes | 0.2207 | ✗ | 0.000 | negligible |
 
 
 ### MC
@@ -88,6 +101,8 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | ghspec vs chatdev | 0.1213 | ✗ | 0.000 | negligible |
+| ghspec vs baes | 0.2207 | ✗ | 0.000 | negligible |
+| chatdev vs baes | 0.2207 | ✗ | 0.000 | negligible |
 
 
 ### Q_star
@@ -95,6 +110,8 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | ghspec vs chatdev | 0.1213 | ✗ | 0.000 | negligible |
+| ghspec vs baes | 0.2207 | ✗ | 0.000 | negligible |
+| chatdev vs baes | 0.2207 | ✗ | 0.000 | negligible |
 
 
 ### TOK_IN
@@ -102,6 +119,8 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | ghspec vs chatdev | 0.1213 | ✗ | -1.000 | large |
+| ghspec vs baes | 1.0000 | ✗ | 0.000 | negligible |
+| chatdev vs baes | 0.2207 | ✗ | 1.000 | large |
 
 
 ### TOK_OUT
@@ -109,6 +128,8 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | ghspec vs chatdev | 0.1213 | ✗ | -1.000 | large |
+| ghspec vs baes | 1.0000 | ✗ | 0.000 | negligible |
+| chatdev vs baes | 0.2207 | ✗ | 1.000 | large |
 
 
 ### T_WALL_seconds
@@ -116,6 +137,8 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | ghspec vs chatdev | 0.1213 | ✗ | -1.000 | large |
+| ghspec vs baes | 1.0000 | ✗ | 0.000 | negligible |
+| chatdev vs baes | 0.2207 | ✗ | 1.000 | large |
 
 
 ### UTT
@@ -123,6 +146,8 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | ghspec vs chatdev | 0.1213 | ✗ | 0.000 | negligible |
+| ghspec vs baes | 0.2207 | ✗ | 0.000 | negligible |
+| chatdev vs baes | 0.2207 | ✗ | 0.000 | negligible |
 
 
 ### ZDI
@@ -130,6 +155,8 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | ghspec vs chatdev | 0.1213 | ✗ | -1.000 | large |
+| ghspec vs baes | 1.0000 | ✗ | 0.000 | negligible |
+| chatdev vs baes | 0.2207 | ✗ | 1.000 | large |
 
 
 ## 4. Outlier Detection
@@ -148,4 +175,5 @@ No outliers detected.
 |-----------|---------|-------|----------|--------|
 | ghspec | 0.000 | [0.000, 0.000] | 0.109 | [0.091, 0.128] |
 | chatdev | 0.000 | [0.000, 0.000] | 0.081 | [0.080, 0.081] |
+| baes | 0.000 | [0.000, 0.000] | 0.099 | [0.099, 0.099] |
 
