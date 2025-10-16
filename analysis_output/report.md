@@ -1,6 +1,6 @@
 # Statistical Analysis Report
 
-**Generated:** 2025-10-16 21:56:12 UTC
+**Generated:** 2025-10-16 22:13:09 UTC
 
 **Frameworks:** baes, chatdev, ghspec
 
@@ -110,11 +110,12 @@ python run.py --task "<step_text>" --name "BAEs_Step1_<run_id>" \
 - HIT: Human-in-the-loop count (clarification requests detected in logs)
 - HEU: Human effort units (manual interventions required)
 
-**Quality Metrics (CRUDe, ESR, MC, Q\*)**:
-- CRUDe: CRUD operations implemented (validated via API endpoint inspection)
-- ESR: Emerging state rate (successful evolution steps / total steps)
-- MC: Model call efficiency (successful calls / total calls)
+**Quality Metrics (CRUDe, ESR, MC, Q\*)**: ⚠️ **NOT MEASURED IN CURRENT EXPERIMENTS**
+- CRUDe: CRUD operations implemented (requires running application servers)
+- ESR: Emerging state rate (requires endpoint validation)
+- MC: Model call efficiency (requires runtime testing)
 - Q\*: Composite quality score (0.4·ESR + 0.3·CRUDe/12 + 0.3·MC)
+- **Note**: These metrics always show zero because generated applications are not executed. Validation would require starting servers (`uvicorn`, `flask run`) and testing endpoints, which is not implemented. See `docs/QUALITY_METRICS_INVESTIGATION.md` for details.
 
 **Composite Scores (AEI)**:
 - AEI: Automation Efficiency Index = AUTR / log(1 + TOK_IN)
@@ -155,10 +156,11 @@ python run.py --task "<step_text>" --name "BAEs_Step1_<run_id>" \
 **Metric Interpretation:**
 - **Token Usage (TOK_IN/TOK_OUT)**: Measures cost, not necessarily code quality
   - *Caveat*: Lower tokens ≠ better software; high-quality output may justify higher consumption
-- **Quality Metrics (Q\*, ESR, CRUDe)**: May show zero values due to:
-  - Missing validation logic in current implementation
-  - Framework output formats not matching expected patterns
-  - *Action Required*: Verify metric calculation before quality-based decisions (see Data Quality Alerts)
+- **Quality Metrics (Q\*, ESR, CRUDe, MC)**: ⚠️ **Show zero values because runtime validation is not performed**
+  - Generated applications are not started during experiments (`auto_restart_servers: false`)
+  - Validation requires running servers and testing endpoints
+  - Current experiment scope: **Code generation efficiency**, not **runtime quality**
+  - *Action Required*: Implement server startup and endpoint testing for quality evaluation (see `docs/QUALITY_METRICS_INVESTIGATION.md`)
 - **AUTR (Automated Testing Rate)**: All frameworks achieve 100% but test quality not measured
   - *Limitation*: Presence of test files ≠ comprehensive test coverage
 
@@ -194,23 +196,25 @@ python run.py --task "<step_text>" --name "BAEs_Step1_<run_id>" \
 
 ## Metric Definitions
 
-| Metric | Full Name | Description | Range | Ideal Value |
-|--------|-----------|-------------|-------|-------------|
-| **AUTR** | Automated User Testing Rate | % of tests auto-generated | 0-1 | Higher ↑ |
-| **AEI** | Automation Efficiency Index | Quality per token consumed | 0-∞ | Higher ↑ |
-| **Q\*** | Quality Star | Composite quality score | 0-1 | Higher ↑ |
-| **ESR** | Emerging State Rate | % steps with successful evolution | 0-1 | Higher ↑ |
-| **CRUDe** | CRUD Evolution Coverage | CRUD operations implemented | 0-12 | Higher ↑ |
-| **MC** | Model Call Efficiency | Efficiency of LLM calls | 0-1 | Higher ↑ |
-| **TOK_IN** | Input Tokens | Total tokens sent to LLM | 0-∞ | Lower ↓ |
-| **TOK_OUT** | Output Tokens | Total tokens received from LLM | 0-∞ | Lower ↓ |
-| **API_CALLS** | API Call Count | Number of model requests to LLM | 0-∞ | Lower ↓ |
-| **CACHED_TOKENS** | Cached Input Tokens | Input tokens served from cache | 0-∞ | Higher ↑ |
-| **T_WALL_seconds** | Wall Clock Time | Total elapsed time (seconds) | 0-∞ | Lower ↓ |
-| **ZDI** | Zero-Downtime Intervals | Idle time between steps (seconds) | 0-∞ | Lower ↓ |
-| **HIT** | Human-in-the-Loop Count | Manual interventions needed | 0-∞ | Lower ↓ |
-| **HEU** | Human Effort Units | Total manual effort required | 0-∞ | Lower ↓ |
-| **UTT** | User Task Total | Number of evolution steps | Fixed | 6 |
+| Metric | Full Name | Description | Range | Ideal Value | Status |
+|--------|-----------|-------------|-------|-------------|--------|
+| **AUTR** | Automated User Testing Rate | % of tests auto-generated | 0-1 | Higher ↑ | ✅ Measured |
+| **AEI** | Automation Efficiency Index | Quality per token consumed | 0-∞ | Higher ↑ | ✅ Measured |
+| **Q\*** | Quality Star | Composite quality score | 0-1 | Higher ↑ | ⚠️ Not Measured* |
+| **ESR** | Emerging State Rate | % steps with successful evolution | 0-1 | Higher ↑ | ⚠️ Not Measured* |
+| **CRUDe** | CRUD Evolution Coverage | CRUD operations implemented | 0-12 | Higher ↑ | ⚠️ Not Measured* |
+| **MC** | Model Call Efficiency | Efficiency of LLM calls | 0-1 | Higher ↑ | ⚠️ Not Measured* |
+| **TOK_IN** | Input Tokens | Total tokens sent to LLM | 0-∞ | Lower ↓ | ✅ Measured |
+| **TOK_OUT** | Output Tokens | Total tokens received from LLM | 0-∞ | Lower ↓ | ✅ Measured |
+| **API_CALLS** | API Call Count | Number of model requests to LLM | 0-∞ | Lower ↓ | ✅ Measured |
+| **CACHED_TOKENS** | Cached Input Tokens | Input tokens served from cache | 0-∞ | Higher ↑ | ✅ Measured |
+| **T_WALL_seconds** | Wall Clock Time | Total elapsed time (seconds) | 0-∞ | Lower ↓ | ✅ Measured |
+| **ZDI** | Zero-Downtime Intervals | Idle time between steps (seconds) | 0-∞ | Lower ↓ | ✅ Measured |
+| **HIT** | Human-in-the-Loop Count | Manual interventions needed | 0-∞ | Lower ↓ | ✅ Measured |
+| **HEU** | Human Effort Units | Total manual effort required | 0-∞ | Lower ↓ | ✅ Measured |
+| **UTT** | User Task Total | Number of evolution steps | Fixed | 6 | ✅ Measured |
+
+**\* Quality Metrics Not Measured**: CRUDe, ESR, MC, and Q\* show zero values because **generated applications are not executed during experiments**. The validation logic requires running servers to test CRUD endpoints (`http://localhost:8000-8002`), but servers are deliberately not started (`auto_restart_servers: false` in config). This experiment measures **code generation efficiency** (tokens, time, automation), not **runtime code quality**. See `docs/QUALITY_METRICS_INVESTIGATION.md` for details.
 
 **New Metrics Added (Oct 2025)**:
 - **API_CALLS**: Number of LLM API requests - measures call efficiency (lower = better batching, fewer retries)
@@ -278,16 +282,24 @@ This report uses non-parametric statistics to compare frameworks robustly.
 ### 📊 Key Insights
 
 - ✅ All frameworks achieved perfect test automation (AUTR = 1.0)
-- ⚠️ Quality metrics show zero values: Q_star, ESR, CRUDe, MC - may need verification
+- ⚠️ Quality metrics (Q_star, ESR, CRUDe, MC) not measured - see Data Quality Alerts below
 - Wall time varies 10.0x between fastest and slowest frameworks
 - Token consumption varies 9.3x across frameworks
 
 ### ⚠️ Data Quality Alerts
 
-- All frameworks show zero for `CRUDe` - verify metric calculation
-- All frameworks show zero for `ESR` - verify metric calculation
-- All frameworks show zero for `MC` - verify metric calculation
-- All frameworks show zero for `Q_star` - verify metric calculation
+**Quality Metrics Not Measured**: `CRUDe`, `ESR`, `MC`, `Q_star`
+
+These metrics show zero values because **generated applications are not executed** during experiments:
+- The validation logic requires HTTP requests to `localhost:8000-8002`
+- Servers are not started (`auto_restart_servers: false` in config)
+- This is **expected behavior** - see `docs/QUALITY_METRICS_INVESTIGATION.md`
+
+**Current Experiment Scope**: Measures **code generation efficiency** (tokens, time, automation)
+**Not Measured**: Runtime code quality, endpoint correctness, application functionality
+
+**To Enable Quality Metrics**: Implement server startup and endpoint testing (20-40 hours estimated)
+
 
 ---
 
@@ -301,7 +313,7 @@ This report uses non-parametric statistics to compare frameworks robustly.
 
 | Framework | AEI | API_CALLS | AUTR | CACHED_TOKENS | CRUDe | ESR | HEU | HIT | MC | Q_star | TOK_IN | TOK_OUT | T_WALL_seconds | UTT | ZDI |
 |-----------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|
-| baes | 0.099 [0.098, 0.100] 🟢 | 14.80 [13.20, 16.20] 🔴 | 1.000 [1.000, 1.000] 🟢 | 2432.00 [0.00, 5248.00] 🟡 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 25,436 [22,500, 28,033] 🟢 | 7,058 [6,074, 8,172] 🟢 | 201.1 [188.8, 214.1] 🟢 | 6 [6, 6] 🟢 | 40 [38, 43] 🟢 |
+| baes | 0.099 [0.098, 0.100] 🟢 | 14.80 [13.20, 16.20] 🔴 | 1.000 [1.000, 1.000] 🟢 | 2432.00 [0.00, 5248.00] 🟡 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 25,436 [22,500, 27,881] 🟢 | 7,058 [6,063, 8,011] 🟢 | 201.1 [188.8, 214.5] 🟢 | 6 [6, 6] 🟢 | 40 [38, 43] 🟢 |
 | chatdev | 0.081 [0.081, 0.081] 🔴 | 138.50 [136.75, 139.75] 🟢 | 1.000 [1.000, 1.000] 🟢 | 37344.00 [28672.00, 46016.00] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 235,506 [225,015, 244,062] 🔴 | 83,207 [78,729, 88,194] 🔴 | 2008.6 [1858.1, 2219.3] 🔴 | 6 [6, 6] 🟢 | 402 [372, 444] 🔴 |
 | ghspec | 0.092 [0.091, 0.093] 🟡 | 61.50 [54.00, 69.00] 🟡 | 1.000 [1.000, 1.000] 🟢 | 768.00 [0.00, 2304.00] 🔴 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 50,967 [46,208, 56,960] 🟡 | 24,060 [19,216, 29,757] 🟡 | 623.2 [528.5, 725.3] 🟡 | 6 [6, 6] 🟢 | 125 [106, 145] 🟡 |
 
@@ -323,6 +335,8 @@ Performance normalized to best framework (100% = best performer).
 
 Testing for significant differences across all frameworks.
 
+*Note: Metrics with zero variance (all values identical) are excluded from statistical testing.*
+
 | Metric | H | p-value | Significant | Groups | N |
 |--------|---|---------|-------------|--------|---|
 | AEI | 10.681 | 0.0048 | ✓ Yes | 3 | 13 |
@@ -333,37 +347,9 @@ Testing for significant differences across all frameworks.
 
 💬 *Strong evidence that frameworks differ significantly on API_CALLS. See pairwise comparisons below.*
 
-| AUTR | 0.000 | 1.0000 | ✗ No | 3 | 13 |
-
-💬 *No evidence of differences - frameworks perform similarly on AUTR.*
-
 | CACHED_TOKENS | 7.900 | 0.0193 | ✓ Yes | 3 | 13 |
 
 💬 *Strong evidence that frameworks differ significantly on CACHED_TOKENS. See pairwise comparisons below.*
-
-| CRUDe | 0.000 | 1.0000 | ✗ No | 3 | 13 |
-
-💬 *No evidence of differences - frameworks perform similarly on CRUDe.*
-
-| ESR | 0.000 | 1.0000 | ✗ No | 3 | 13 |
-
-💬 *No evidence of differences - frameworks perform similarly on ESR.*
-
-| HEU | 0.000 | 1.0000 | ✗ No | 3 | 13 |
-
-💬 *No evidence of differences - frameworks perform similarly on HEU.*
-
-| HIT | 0.000 | 1.0000 | ✗ No | 3 | 13 |
-
-💬 *No evidence of differences - frameworks perform similarly on HIT.*
-
-| MC | 0.000 | 1.0000 | ✗ No | 3 | 13 |
-
-💬 *No evidence of differences - frameworks perform similarly on MC.*
-
-| Q_star | 0.000 | 1.0000 | ✗ No | 3 | 13 |
-
-💬 *No evidence of differences - frameworks perform similarly on Q_star.*
 
 | TOK_IN | 10.681 | 0.0048 | ✓ Yes | 3 | 13 |
 
@@ -377,19 +363,21 @@ Testing for significant differences across all frameworks.
 
 💬 *Strong evidence that frameworks differ significantly on T_WALL_seconds. See pairwise comparisons below.*
 
-| UTT | 0.000 | 1.0000 | ✗ No | 3 | 13 |
-
-💬 *No evidence of differences - frameworks perform similarly on UTT.*
-
 | ZDI | 10.681 | 0.0048 | ✓ Yes | 3 | 13 |
 
 💬 *Strong evidence that frameworks differ significantly on ZDI. See pairwise comparisons below.*
 
 
 
+**Metrics Excluded** (zero variance): `AUTR`, `CRUDe`, `ESR`, `HEU`, `HIT`, `MC`, `Q_star`, `UTT`
+
+*Note: CRUDe, ESR, MC, Q_star excluded because all values are identically zero (metrics not measured).*
+
 ## 4. Pairwise Comparisons
 
 Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
+
+*Note: Metrics with zero variance are excluded from pairwise comparisons.*
 
 ### AEI
 
@@ -417,18 +405,6 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
   *→ Large observed difference (δ=1.000) but not statistically significant - may be random variation*
 
 
-### AUTR
-
-| Comparison | p-value | Significant | Cliff's δ | Effect Size |
-|------------|---------|-------------|-----------|-------------|
-| baes vs chatdev | 0.0143 | ✓ | 0.000 | negligible |
-| baes vs ghspec | 0.0143 | ✓ | 0.000 | negligible |
-| chatdev vs ghspec | 0.0209 | ✗ | 0.000 | negligible |
-
-  *→ Statistically significant but practically negligible difference*
-  *→ Statistically significant but practically negligible difference*
-
-
 ### CACHED_TOKENS
 
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
@@ -439,78 +415,6 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 
   *→ baes has large lower CACHED_TOKENS than chatdev (δ=-1.000)*
   *→ Large observed difference (δ=1.000) but not statistically significant - may be random variation*
-
-
-### CRUDe
-
-| Comparison | p-value | Significant | Cliff's δ | Effect Size |
-|------------|---------|-------------|-----------|-------------|
-| baes vs chatdev | 0.0143 | ✓ | 0.000 | negligible |
-| baes vs ghspec | 0.0143 | ✓ | 0.000 | negligible |
-| chatdev vs ghspec | 0.0209 | ✗ | 0.000 | negligible |
-
-  *→ Statistically significant but practically negligible difference*
-  *→ Statistically significant but practically negligible difference*
-
-
-### ESR
-
-| Comparison | p-value | Significant | Cliff's δ | Effect Size |
-|------------|---------|-------------|-----------|-------------|
-| baes vs chatdev | 0.0143 | ✓ | 0.000 | negligible |
-| baes vs ghspec | 0.0143 | ✓ | 0.000 | negligible |
-| chatdev vs ghspec | 0.0209 | ✗ | 0.000 | negligible |
-
-  *→ Statistically significant but practically negligible difference*
-  *→ Statistically significant but practically negligible difference*
-
-
-### HEU
-
-| Comparison | p-value | Significant | Cliff's δ | Effect Size |
-|------------|---------|-------------|-----------|-------------|
-| baes vs chatdev | 0.0143 | ✓ | 0.000 | negligible |
-| baes vs ghspec | 0.0143 | ✓ | 0.000 | negligible |
-| chatdev vs ghspec | 0.0209 | ✗ | 0.000 | negligible |
-
-  *→ Statistically significant but practically negligible difference*
-  *→ Statistically significant but practically negligible difference*
-
-
-### HIT
-
-| Comparison | p-value | Significant | Cliff's δ | Effect Size |
-|------------|---------|-------------|-----------|-------------|
-| baes vs chatdev | 0.0143 | ✓ | 0.000 | negligible |
-| baes vs ghspec | 0.0143 | ✓ | 0.000 | negligible |
-| chatdev vs ghspec | 0.0209 | ✗ | 0.000 | negligible |
-
-  *→ Statistically significant but practically negligible difference*
-  *→ Statistically significant but practically negligible difference*
-
-
-### MC
-
-| Comparison | p-value | Significant | Cliff's δ | Effect Size |
-|------------|---------|-------------|-----------|-------------|
-| baes vs chatdev | 0.0143 | ✓ | 0.000 | negligible |
-| baes vs ghspec | 0.0143 | ✓ | 0.000 | negligible |
-| chatdev vs ghspec | 0.0209 | ✗ | 0.000 | negligible |
-
-  *→ Statistically significant but practically negligible difference*
-  *→ Statistically significant but practically negligible difference*
-
-
-### Q_star
-
-| Comparison | p-value | Significant | Cliff's δ | Effect Size |
-|------------|---------|-------------|-----------|-------------|
-| baes vs chatdev | 0.0143 | ✓ | 0.000 | negligible |
-| baes vs ghspec | 0.0143 | ✓ | 0.000 | negligible |
-| chatdev vs ghspec | 0.0209 | ✗ | 0.000 | negligible |
-
-  *→ Statistically significant but practically negligible difference*
-  *→ Statistically significant but practically negligible difference*
 
 
 ### TOK_IN
@@ -550,18 +454,6 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
   *→ baes has large lower T_WALL_seconds than chatdev (δ=-1.000)*
   *→ baes has large lower T_WALL_seconds than ghspec (δ=-1.000)*
   *→ Large observed difference (δ=1.000) but not statistically significant - may be random variation*
-
-
-### UTT
-
-| Comparison | p-value | Significant | Cliff's δ | Effect Size |
-|------------|---------|-------------|-----------|-------------|
-| baes vs chatdev | 0.0143 | ✓ | 0.000 | negligible |
-| baes vs ghspec | 0.0143 | ✓ | 0.000 | negligible |
-| chatdev vs ghspec | 0.0209 | ✗ | 0.000 | negligible |
-
-  *→ Statistically significant but practically negligible difference*
-  *→ Statistically significant but practically negligible difference*
 
 
 ### ZDI
@@ -628,7 +520,7 @@ The following charts provide visual insights into framework performance:
 
 - **🤖 Automation**: All frameworks achieve perfect test automation (AUTR = 1.0) - automation quality is not a differentiating factor.
 
-- **⚠️ Data Quality Alert**: Metrics Q_star, ESR, CRUDe, MC show zero values across all frameworks. Verify metric calculation before making quality-based decisions.
+- **⚠️ Quality Metrics Not Measured**: Q_star, ESR, CRUDe, MC show zero values because generated applications are not executed. This experiment measures **code generation efficiency** (tokens, time, automation), not **runtime quality**. See `docs/QUALITY_METRICS_INVESTIGATION.md` for details.
 
 ### 📋 Decision Matrix
 

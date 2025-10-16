@@ -648,7 +648,7 @@ def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]
             zero_quality_metrics.append(metric)
     
     if zero_quality_metrics:
-        lines.append(f"- ⚠️ Quality metrics show zero values: {', '.join(zero_quality_metrics)} - may need verification")
+        lines.append(f"- ⚠️ Quality metrics ({', '.join(zero_quality_metrics)}) not measured - see Data Quality Alerts below")
     
     # Performance variation analysis
     if all('T_WALL_seconds' in data for data in aggregated.values()):
@@ -674,20 +674,48 @@ def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]
     
     alerts = []
     
-    # Check for all-zero metrics
+    # Check for all-zero quality metrics (expected)
+    quality_metrics = ['CRUDe', 'ESR', 'MC', 'Q_star']
+    zero_quality = []
+    for metric in quality_metrics:
+        values = [data.get(metric, None) for data in aggregated.values()]
+        if all(v == 0 for v in values if v is not None):
+            zero_quality.append(metric)
+    
+    if zero_quality:
+        alerts.append(f"**Quality Metrics Not Measured**: {', '.join(f'`{m}`' for m in zero_quality)}")
+        alerts.append("")
+        alerts.append("These metrics show zero values because **generated applications are not executed** during experiments:")
+        alerts.append("- The validation logic requires HTTP requests to `localhost:8000-8002`")
+        alerts.append("- Servers are not started (`auto_restart_servers: false` in config)")
+        alerts.append("- This is **expected behavior** - see `docs/QUALITY_METRICS_INVESTIGATION.md`")
+        alerts.append("")
+        alerts.append("**Current Experiment Scope**: Measures **code generation efficiency** (tokens, time, automation)")
+        alerts.append("**Not Measured**: Runtime code quality, endpoint correctness, application functionality")
+        alerts.append("")
+        alerts.append("**To Enable Quality Metrics**: Implement server startup and endpoint testing (20-40 hours estimated)")
+        alerts.append("")
+    
+    # Check for other unexpected zero metrics
     all_metrics = set()
     for data in aggregated.values():
         all_metrics.update(data.keys())
     
+    unexpected_zeros = []
     for metric in sorted(all_metrics):
+        if metric in quality_metrics:
+            continue  # Already handled above
         values = [data.get(metric, None) for data in aggregated.values()]
         if all(v == 0 for v in values if v is not None):
-            if metric not in ['HIT', 'HEU']:  # Expected to be zero
-                alerts.append(f"- All frameworks show zero for `{metric}` - verify metric calculation")
+            if metric not in ['HIT', 'HEU']:  # Expected to be zero (no human intervention)
+                unexpected_zeros.append(metric)
+    
+    if unexpected_zeros:
+        alerts.append(f"**Unexpected Zero Values**: {', '.join(f'`{m}`' for m in unexpected_zeros)} - verify metric calculation")
     
     # Check for missing data
     for framework, data in aggregated.items():
-        expected_metrics = ['AUTR', 'TOK_IN', 'TOK_OUT', 'T_WALL_seconds', 'Q_star', 'AEI']
+        expected_metrics = ['AUTR', 'TOK_IN', 'TOK_OUT', 'T_WALL_seconds', 'AEI']
         missing = [m for m in expected_metrics if m not in data]
         if missing:
             alerts.append(f"- Framework `{framework}` missing metrics: {', '.join(missing)}")
@@ -852,11 +880,12 @@ def generate_statistical_report(
         "- HIT: Human-in-the-loop count (clarification requests detected in logs)",
         "- HEU: Human effort units (manual interventions required)",
         "",
-        "**Quality Metrics (CRUDe, ESR, MC, Q\\*)**:",
-        "- CRUDe: CRUD operations implemented (validated via API endpoint inspection)",
-        "- ESR: Emerging state rate (successful evolution steps / total steps)",
-        "- MC: Model call efficiency (successful calls / total calls)",
+        "**Quality Metrics (CRUDe, ESR, MC, Q\\*)**: ⚠️ **NOT MEASURED IN CURRENT EXPERIMENTS**",
+        "- CRUDe: CRUD operations implemented (requires running application servers)",
+        "- ESR: Emerging state rate (requires endpoint validation)",
+        "- MC: Model call efficiency (requires runtime testing)",
         "- Q\\*: Composite quality score (0.4·ESR + 0.3·CRUDe/12 + 0.3·MC)",
+        "- **Note**: These metrics always show zero because generated applications are not executed. Validation would require starting servers (`uvicorn`, `flask run`) and testing endpoints, which is not implemented. See `docs/QUALITY_METRICS_INVESTIGATION.md` for details.",
         "",
         "**Composite Scores (AEI)**:",
         "- AEI: Automation Efficiency Index = AUTR / log(1 + TOK_IN)",
@@ -897,10 +926,11 @@ def generate_statistical_report(
         "**Metric Interpretation:**",
         "- **Token Usage (TOK_IN/TOK_OUT)**: Measures cost, not necessarily code quality",
         "  - *Caveat*: Lower tokens ≠ better software; high-quality output may justify higher consumption",
-        "- **Quality Metrics (Q\\*, ESR, CRUDe)**: May show zero values due to:",
-        "  - Missing validation logic in current implementation",
-        "  - Framework output formats not matching expected patterns",
-        "  - *Action Required*: Verify metric calculation before quality-based decisions (see Data Quality Alerts)",
+        "- **Quality Metrics (Q\\*, ESR, CRUDe, MC)**: ⚠️ **Show zero values because runtime validation is not performed**",
+        "  - Generated applications are not started during experiments (`auto_restart_servers: false`)",
+        "  - Validation requires running servers and testing endpoints",
+        "  - Current experiment scope: **Code generation efficiency**, not **runtime quality**",
+        "  - *Action Required*: Implement server startup and endpoint testing for quality evaluation (see `docs/QUALITY_METRICS_INVESTIGATION.md`)",
         "- **AUTR (Automated Testing Rate)**: All frameworks achieve 100% but test quality not measured",
         "  - *Limitation*: Presence of test files ≠ comprehensive test coverage",
         "",
@@ -940,23 +970,25 @@ def generate_statistical_report(
     lines.extend([
         "## Metric Definitions",
         "",
-        "| Metric | Full Name | Description | Range | Ideal Value |",
-        "|--------|-----------|-------------|-------|-------------|",
-        "| **AUTR** | Automated User Testing Rate | % of tests auto-generated | 0-1 | Higher ↑ |",
-        "| **AEI** | Automation Efficiency Index | Quality per token consumed | 0-∞ | Higher ↑ |",
-        "| **Q\\*** | Quality Star | Composite quality score | 0-1 | Higher ↑ |",
-        "| **ESR** | Emerging State Rate | % steps with successful evolution | 0-1 | Higher ↑ |",
-        "| **CRUDe** | CRUD Evolution Coverage | CRUD operations implemented | 0-12 | Higher ↑ |",
-        "| **MC** | Model Call Efficiency | Efficiency of LLM calls | 0-1 | Higher ↑ |",
-        "| **TOK_IN** | Input Tokens | Total tokens sent to LLM | 0-∞ | Lower ↓ |",
-        "| **TOK_OUT** | Output Tokens | Total tokens received from LLM | 0-∞ | Lower ↓ |",
-        "| **API_CALLS** | API Call Count | Number of model requests to LLM | 0-∞ | Lower ↓ |",
-        "| **CACHED_TOKENS** | Cached Input Tokens | Input tokens served from cache | 0-∞ | Higher ↑ |",
-        "| **T_WALL_seconds** | Wall Clock Time | Total elapsed time (seconds) | 0-∞ | Lower ↓ |",
-        "| **ZDI** | Zero-Downtime Intervals | Idle time between steps (seconds) | 0-∞ | Lower ↓ |",
-        "| **HIT** | Human-in-the-Loop Count | Manual interventions needed | 0-∞ | Lower ↓ |",
-        "| **HEU** | Human Effort Units | Total manual effort required | 0-∞ | Lower ↓ |",
-        "| **UTT** | User Task Total | Number of evolution steps | Fixed | 6 |",
+        "| Metric | Full Name | Description | Range | Ideal Value | Status |",
+        "|--------|-----------|-------------|-------|-------------|--------|",
+        "| **AUTR** | Automated User Testing Rate | % of tests auto-generated | 0-1 | Higher ↑ | ✅ Measured |",
+        "| **AEI** | Automation Efficiency Index | Quality per token consumed | 0-∞ | Higher ↑ | ✅ Measured |",
+        "| **Q\\*** | Quality Star | Composite quality score | 0-1 | Higher ↑ | ⚠️ Not Measured* |",
+        "| **ESR** | Emerging State Rate | % steps with successful evolution | 0-1 | Higher ↑ | ⚠️ Not Measured* |",
+        "| **CRUDe** | CRUD Evolution Coverage | CRUD operations implemented | 0-12 | Higher ↑ | ⚠️ Not Measured* |",
+        "| **MC** | Model Call Efficiency | Efficiency of LLM calls | 0-1 | Higher ↑ | ⚠️ Not Measured* |",
+        "| **TOK_IN** | Input Tokens | Total tokens sent to LLM | 0-∞ | Lower ↓ | ✅ Measured |",
+        "| **TOK_OUT** | Output Tokens | Total tokens received from LLM | 0-∞ | Lower ↓ | ✅ Measured |",
+        "| **API_CALLS** | API Call Count | Number of model requests to LLM | 0-∞ | Lower ↓ | ✅ Measured |",
+        "| **CACHED_TOKENS** | Cached Input Tokens | Input tokens served from cache | 0-∞ | Higher ↑ | ✅ Measured |",
+        "| **T_WALL_seconds** | Wall Clock Time | Total elapsed time (seconds) | 0-∞ | Lower ↓ | ✅ Measured |",
+        "| **ZDI** | Zero-Downtime Intervals | Idle time between steps (seconds) | 0-∞ | Lower ↓ | ✅ Measured |",
+        "| **HIT** | Human-in-the-Loop Count | Manual interventions needed | 0-∞ | Lower ↓ | ✅ Measured |",
+        "| **HEU** | Human Effort Units | Total manual effort required | 0-∞ | Lower ↓ | ✅ Measured |",
+        "| **UTT** | User Task Total | Number of evolution steps | Fixed | 6 | ✅ Measured |",
+        "",
+        "**\\* Quality Metrics Not Measured**: CRUDe, ESR, MC, and Q\\* show zero values because **generated applications are not executed during experiments**. The validation logic requires running servers to test CRUD endpoints (`http://localhost:8000-8002`), but servers are deliberately not started (`auto_restart_servers: false` in config). This experiment measures **code generation efficiency** (tokens, time, automation), not **runtime code quality**. See `docs/QUALITY_METRICS_INVESTIGATION.md` for details.",
         "",
         "**New Metrics Added (Oct 2025)**:",
         "- **API_CALLS**: Number of LLM API requests - measures call efficiency (lower = better batching, fewer retries)",
@@ -1098,9 +1130,14 @@ def generate_statistical_report(
         "",
         "Testing for significant differences across all frameworks.",
         "",
+        "*Note: Metrics with zero variance (all values identical) are excluded from statistical testing.*",
+        "",
         "| Metric | H | p-value | Significant | Groups | N |",
         "|--------|---|---------|-------------|--------|---|"
     ])
+    
+    skipped_metrics = []
+    quality_metrics = ['CRUDe', 'ESR', 'MC', 'Q_star']
     
     for metric in all_metrics:
         # Collect metric values by framework
@@ -1109,6 +1146,13 @@ def generate_statistical_report(
             groups[framework] = [run[metric] for run in runs if metric in run]
         
         if all(len(vals) > 0 for vals in groups.values()):
+            # Check if all values are identical (zero variance)
+            all_values = [v for vals in groups.values() for v in vals]
+            if len(set(all_values)) == 1:
+                # Skip zero-variance metrics
+                skipped_metrics.append(metric)
+                continue
+            
             result = kruskal_wallis_test(groups)
             sig = "✓ Yes" if result['significant'] else "✗ No"
             lines.append(
@@ -1127,21 +1171,41 @@ def generate_statistical_report(
     
     lines.extend(["", ""])
     
+    # Add note about skipped metrics
+    if skipped_metrics:
+        lines.append(f"**Metrics Excluded** (zero variance): {', '.join(f'`{m}`' for m in skipped_metrics)}")
+        lines.append("")
+        quality_skipped = [m for m in skipped_metrics if m in quality_metrics]
+        if quality_skipped:
+            lines.append(f"*Note: {', '.join(quality_skipped)} excluded because all values are identically zero (metrics not measured).*")
+            lines.append("")
+    
     # Section 4: Pairwise Comparisons
     lines.extend([
         "## 4. Pairwise Comparisons",
         "",
         "Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.",
+        "",
+        "*Note: Metrics with zero variance are excluded from pairwise comparisons.*",
         ""
     ])
     
     for metric in all_metrics:
+        # Skip metrics with zero variance
+        if metric in skipped_metrics:
+            continue
+            
         # Collect metric values by framework
         groups = {}
         for framework, runs in frameworks_data.items():
             groups[framework] = [run[metric] for run in runs if metric in run]
         
         if all(len(vals) > 0 for vals in groups.values()) and len(groups) >= 2:
+            # Double-check variance (shouldn't be needed, but defensive)
+            all_values = [v for vals in groups.values() for v in vals]
+            if len(set(all_values)) == 1:
+                continue
+            
             lines.append(f"### {metric}")
             lines.append("")
             lines.append("| Comparison | p-value | Significant | Cliff's δ | Effect Size |")
@@ -1341,8 +1405,9 @@ def generate_statistical_report(
     
     if zero_metrics:
         recommendations.append(
-            f"**⚠️ Data Quality Alert**: Metrics {', '.join(zero_metrics)} show zero values across all frameworks. "
-            f"Verify metric calculation before making quality-based decisions."
+            f"**⚠️ Quality Metrics Not Measured**: {', '.join(zero_metrics)} show zero values because generated applications are not executed. "
+            f"This experiment measures **code generation efficiency** (tokens, time, automation), not **runtime quality**. "
+            f"See `docs/QUALITY_METRICS_INVESTIGATION.md` for details."
         )
     
     # Add recommendations to report
