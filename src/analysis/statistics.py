@@ -958,6 +958,11 @@ def generate_statistical_report(
         "| **HEU** | Human Effort Units | Total manual effort required | 0-∞ | Lower ↓ |",
         "| **UTT** | User Task Total | Number of evolution steps | Fixed | 6 |",
         "",
+        "**New Metrics Added (Oct 2025)**:",
+        "- **API_CALLS**: Number of LLM API requests - measures call efficiency (lower = better batching, fewer retries)",
+        "- **CACHED_TOKENS**: Tokens served from OpenAI's prompt cache - represents cost savings (~50% discount)",
+        "- **Cache Hit Rate**: Calculated as `(CACHED_TOKENS / TOK_IN) × 100%` - measures prompt reuse efficiency",
+        "",
         "---",
         ""
     ])

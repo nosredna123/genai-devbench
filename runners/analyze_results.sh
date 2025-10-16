@@ -227,9 +227,9 @@ for framework, runs in frameworks_data.items():
 # Step 3: Generate visualizations
 logger.info("Generating visualizations...")
 
-# Radar chart (6 key metrics)
+# Radar chart (7 key metrics including API_CALLS)
 try:
-    radar_metrics = ['AUTR', 'TOK_IN', 'T_WALL_seconds', 'CRUDe', 'ESR', 'MC']
+    radar_metrics = ['AUTR', 'API_CALLS', 'TOK_IN', 'T_WALL_seconds', 'CRUDe', 'ESR', 'MC']
     radar_data = {
         fw: {m: aggregated_data[fw][m] for m in radar_metrics if m in aggregated_data[fw]}
         for fw in aggregated_data
@@ -239,7 +239,7 @@ try:
         radar_data,
         str(OUTPUT_DIR / "radar_chart.svg"),
         metrics=radar_metrics,
-        title="Framework Comparison - 6 Key Metrics"
+        title="Framework Comparison - 7 Key Metrics"
     )
     logger.info("✓ Radar chart saved")
 except Exception as e:
@@ -279,6 +279,98 @@ try:
 except Exception as e:
     logger.error("Failed to generate timeline chart: %s", e)
 
+# NEW: API Efficiency chart (API calls vs tokens)
+try:
+    api_efficiency_data = {
+        fw: {
+            'API_CALLS': data.get('API_CALLS', 0),
+            'TOK_IN': data.get('TOK_IN', 0),
+            'TOK_OUT': data.get('TOK_OUT', 0)
+        }
+        for fw, data in aggregated_data.items()
+        if 'API_CALLS' in data
+    }
+    
+    if api_efficiency_data:
+        from src.analysis.visualizations import api_efficiency_chart
+        api_efficiency_chart(
+            api_efficiency_data,
+            str(OUTPUT_DIR / "api_efficiency_chart.svg"),
+            title="API Efficiency: Calls vs Token Consumption"
+        )
+        logger.info("✓ API efficiency chart saved")
+    else:
+        logger.warning("Insufficient data for API efficiency chart")
+except Exception as e:
+    logger.error("Failed to generate API efficiency chart: %s", e)
+
+# NEW: Cache Efficiency chart (cache hit rates)
+try:
+    cache_data = {
+        fw: {
+            'TOK_IN': data.get('TOK_IN', 0),
+            'CACHED_TOKENS': data.get('CACHED_TOKENS', 0)
+        }
+        for fw, data in aggregated_data.items()
+        if 'CACHED_TOKENS' in data
+    }
+    
+    if cache_data:
+        from src.analysis.visualizations import cache_efficiency_chart
+        cache_efficiency_chart(
+            cache_data,
+            str(OUTPUT_DIR / "cache_efficiency_chart.svg"),
+            title="Cache Efficiency Analysis"
+        )
+        logger.info("✓ Cache efficiency chart saved")
+    else:
+        logger.warning("Insufficient data for cache efficiency chart")
+except Exception as e:
+    logger.error("Failed to generate cache efficiency chart: %s", e)
+
+# NEW: API Calls Timeline (step-by-step API usage)
+try:
+    # Need to reconstruct timeline data with API_CALLS
+    # This requires loading step-level data from metrics.json
+    api_timeline_data = {}
+    
+    for run_entry in all_runs:
+        framework_name = run_entry['framework']
+        run_id = run_entry['run_id']
+        run_dir = RUNS_DIR / framework_name / run_id
+        metrics_file = run_dir / "metrics.json"
+        
+        if metrics_file.exists():
+            with open(metrics_file, 'r', encoding='utf-8') as f:
+                metrics = json.load(f)
+            
+            if 'steps' in metrics and isinstance(metrics['steps'], list):
+                if framework_name not in api_timeline_data:
+                    api_timeline_data[framework_name] = {}
+                
+                for step in metrics['steps']:
+                    step_num = step.get('step_number')
+                    api_calls = step.get('api_calls', 0)
+                    
+                    if step_num is not None and api_calls > 0:
+                        if step_num not in api_timeline_data[framework_name]:
+                            api_timeline_data[framework_name][step_num] = {'API_CALLS': 0}
+                        # Average across runs
+                        api_timeline_data[framework_name][step_num]['API_CALLS'] = api_calls
+    
+    if api_timeline_data:
+        from src.analysis.visualizations import api_calls_timeline
+        api_calls_timeline(
+            api_timeline_data,
+            str(OUTPUT_DIR / "api_calls_timeline.svg"),
+            title="API Calls Evolution Across Steps"
+        )
+        logger.info("✓ API calls timeline saved")
+    else:
+        logger.warning("No step-level API calls data for timeline")
+except Exception as e:
+    logger.error("Failed to generate API calls timeline: %s", e)
+
 # Step 4: Generate statistical report
 logger.info("Generating statistical report...")
 
@@ -299,6 +391,9 @@ logger.info("Files generated:")
 logger.info("  - radar_chart.svg")
 logger.info("  - pareto_plot.svg")
 logger.info("  - timeline_chart.svg (if step data available)")
+logger.info("  - api_efficiency_chart.svg (NEW)")
+logger.info("  - cache_efficiency_chart.svg (NEW)")
+logger.info("  - api_calls_timeline.svg (NEW)")
 logger.info("  - report.md")
 logger.info("=" * 60)
 
@@ -308,10 +403,13 @@ EOF
 log_info "Analysis complete! Results saved to: $OUTPUT_DIR"
 log_info ""
 log_info "Generated files:"
-log_info "  - radar_chart.svg       : Multi-framework radar comparison"
-log_info "  - pareto_plot.svg       : Quality vs cost trade-off"
-log_info "  - timeline_chart.svg    : CRUD evolution timeline"
-log_info "  - report.md             : Comprehensive statistical report"
+log_info "  - radar_chart.svg              : Multi-framework radar comparison (7 metrics)"
+log_info "  - pareto_plot.svg              : Quality vs cost trade-off"
+log_info "  - timeline_chart.svg           : CRUD evolution timeline"
+log_info "  - api_efficiency_chart.svg     : API calls vs token consumption (NEW)"
+log_info "  - cache_efficiency_chart.svg   : Cache hit rates and efficiency (NEW)"
+log_info "  - api_calls_timeline.svg       : API usage evolution across steps (NEW)"
+log_info "  - report.md                    : Comprehensive statistical report"
 log_info ""
 log_info "To view the report:"
 log_info "  cat $OUTPUT_DIR/report.md"

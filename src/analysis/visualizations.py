@@ -31,6 +31,9 @@ METRIC_LABELS = {
     'HIT': 'Human\nInterventions',
     'HEU': 'Human\nEffort',
     'UTT': 'Task\nCount',
+    'API_CALLS': 'API Calls\n(count)',
+    'CACHED_TOKENS': 'Cached Tokens',
+    'CACHE_HIT_RATE': 'Cache Hit\nRate (%)',
 }
 
 
@@ -64,9 +67,9 @@ def radar_chart(
     if not frameworks_data:
         raise ValueError("frameworks_data cannot be empty")
     
-    # Default metrics: 6 key metrics from experiment spec
+    # Default metrics: 7 key metrics from experiment spec (including API efficiency)
     if metrics is None:
-        metrics = ["AUTR", "TOK_IN", "T_WALL_seconds", "CRUDe", "ESR", "MC"]
+        metrics = ["AUTR", "API_CALLS", "TOK_IN", "T_WALL_seconds", "CRUDe", "ESR", "MC"]
     
     # Validate all frameworks have all metrics
     for framework, data in frameworks_data.items():
@@ -467,3 +470,297 @@ def aggregate_framework_metrics(
         aggregated[metric] = np.mean(values)
     
     return aggregated
+
+
+def api_efficiency_chart(
+    frameworks_data: Dict[str, Dict[str, float]],
+    output_path: str,
+    title: str = "API Efficiency: Calls vs Token Consumption"
+) -> None:
+    """
+    Generate a scatter plot showing API calls vs total tokens for each framework.
+    
+    This visualization helps understand:
+    - Which frameworks make more efficient use of each API call
+    - Token-per-call ratio differences between frameworks
+    - Trade-offs between call frequency and token consumption
+    
+    Args:
+        frameworks_data: Dict mapping framework names to metric dictionaries.
+                        Must contain 'API_CALLS', 'TOK_IN', and 'TOK_OUT' keys.
+        output_path: Path to save the SVG file.
+        title: Chart title.
+    
+    Raises:
+        ValueError: If frameworks_data is empty or missing required metrics.
+    """
+    if not frameworks_data:
+        raise ValueError("frameworks_data cannot be empty")
+    
+    # Validate required metrics
+    required = ['API_CALLS', 'TOK_IN', 'TOK_OUT']
+    for framework, data in frameworks_data.items():
+        missing = [m for m in required if m not in data]
+        if missing:
+            raise ValueError(f"Framework {framework} missing metrics: {missing}")
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(10, 7))
+    
+    # Colors for each framework
+    colors = {'baes': '#2E86AB', 'chatdev': '#A23B72', 'ghspec': '#F18F01'}
+    markers = {'baes': 'o', 'chatdev': 's', 'ghspec': '^'}
+    
+    # Plot each framework
+    for framework, data in frameworks_data.items():
+        api_calls = data['API_CALLS']
+        total_tokens = data['TOK_IN'] + data['TOK_OUT']
+        tokens_per_call = total_tokens / api_calls if api_calls > 0 else 0
+        
+        color = colors.get(framework.lower(), '#333333')
+        marker = markers.get(framework.lower(), 'o')
+        
+        # Plot point
+        ax.scatter(api_calls, total_tokens, s=200, alpha=0.7, 
+                  color=color, marker=marker, label=framework, edgecolors='black', linewidth=1.5)
+        
+        # Add annotation with tokens/call ratio
+        ax.annotate(f'{tokens_per_call:,.0f} tok/call',
+                   xy=(api_calls, total_tokens),
+                   xytext=(10, 10), textcoords='offset points',
+                   fontsize=9, alpha=0.8,
+                   bbox=dict(boxstyle='round,pad=0.3', facecolor=color, alpha=0.2))
+    
+    # Add diagonal lines showing constant tokens-per-call ratios
+    if frameworks_data:
+        max_calls = max(data['API_CALLS'] for data in frameworks_data.values())
+        max_tokens = max(data['TOK_IN'] + data['TOK_OUT'] for data in frameworks_data.values())
+        
+        # Draw reference lines for common ratios (e.g., 1000, 2000, 5000 tokens/call)
+        for ratio in [500, 1000, 2000, 5000]:
+            if ratio * max_calls * 0.1 < max_tokens * 1.5:  # Only draw if relevant
+                x_line = np.linspace(0, max_calls * 1.2, 100)
+                y_line = ratio * x_line
+                ax.plot(x_line, y_line, '--', alpha=0.3, linewidth=1, color='gray')
+                # Label the line
+                label_x = max_calls * 0.9
+                label_y = ratio * label_x
+                if label_y < max_tokens * 1.3:
+                    ax.text(label_x, label_y, f'{ratio:,} tok/call', 
+                           fontsize=8, alpha=0.5, rotation=45, va='bottom')
+    
+    ax.set_xlabel('API Calls (count)', fontsize=12, fontweight='bold')
+    ax.set_ylabel('Total Tokens (Input + Output)', fontsize=12, fontweight='bold')
+    ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
+    ax.legend(loc='upper left', fontsize=10, framealpha=0.9)
+    ax.grid(True, alpha=0.3, linestyle=':')
+    
+    # Add interpretation note
+    note = "← Lower left = More efficient (fewer calls, fewer tokens)\n→ Upper right = Less efficient (more calls, more tokens)\nSlope = Tokens per call"
+    ax.text(0.98, 0.02, note, transform=ax.transAxes,
+           fontsize=8, alpha=0.6, ha='right', va='bottom',
+           bbox=dict(boxstyle='round,pad=0.5', facecolor='wheat', alpha=0.3))
+    
+    plt.tight_layout()
+    plt.savefig(output_path, format='svg', dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+def cache_efficiency_chart(
+    frameworks_data: Dict[str, Dict[str, float]],
+    output_path: str,
+    title: str = "Cache Efficiency Analysis"
+) -> None:
+    """
+    Generate a bar chart showing cache hit rates and cached token percentages.
+    
+    This visualization compares:
+    - Cache hit rate (% of input tokens served from cache)
+    - Absolute cached tokens count
+    - Potential cost savings from caching
+    
+    Args:
+        frameworks_data: Dict mapping framework names to metric dictionaries.
+                        Must contain 'TOK_IN' and 'CACHED_TOKENS' keys.
+        output_path: Path to save the SVG file.
+        title: Chart title.
+    
+    Raises:
+        ValueError: If frameworks_data is empty or missing required metrics.
+    """
+    if not frameworks_data:
+        raise ValueError("frameworks_data cannot be empty")
+    
+    # Validate required metrics
+    required = ['TOK_IN', 'CACHED_TOKENS']
+    for framework, data in frameworks_data.items():
+        missing = [m for m in required if m not in data]
+        if missing:
+            raise ValueError(f"Framework {framework} missing metrics: {missing}")
+    
+    # Calculate cache hit rates
+    cache_data = {}
+    for framework, data in frameworks_data.items():
+        tok_in = data['TOK_IN']
+        cached = data['CACHED_TOKENS']
+        hit_rate = (cached / tok_in * 100) if tok_in > 0 else 0
+        cache_data[framework] = {
+            'hit_rate': hit_rate,
+            'cached_tokens': cached,
+            'total_input': tok_in
+        }
+    
+    # Create figure with two subplots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    
+    frameworks = list(cache_data.keys())
+    colors = {'baes': '#2E86AB', 'chatdev': '#A23B72', 'ghspec': '#F18F01'}
+    bar_colors = [colors.get(fw.lower(), '#333333') for fw in frameworks]
+    
+    # Subplot 1: Cache Hit Rate (%)
+    hit_rates = [cache_data[fw]['hit_rate'] for fw in frameworks]
+    bars1 = ax1.bar(frameworks, hit_rates, color=bar_colors, alpha=0.7, edgecolor='black', linewidth=1.5)
+    
+    # Add value labels on bars
+    for bar, rate in zip(bars1, hit_rates):
+        height = bar.get_height()
+        ax1.text(bar.get_x() + bar.get_width()/2., height,
+                f'{rate:.1f}%',
+                ha='center', va='bottom', fontsize=11, fontweight='bold')
+    
+    ax1.set_ylabel('Cache Hit Rate (%)', fontsize=12, fontweight='bold')
+    ax1.set_title('Cache Hit Rate by Framework', fontsize=13, fontweight='bold', pad=15)
+    ax1.set_ylim(0, max(hit_rates) * 1.2 if hit_rates else 100)
+    ax1.grid(True, alpha=0.3, axis='y', linestyle=':')
+    ax1.set_axisbelow(True)
+    
+    # Subplot 2: Cached Tokens (absolute count)
+    cached_tokens = [cache_data[fw]['cached_tokens'] for fw in frameworks]
+    bars2 = ax2.bar(frameworks, cached_tokens, color=bar_colors, alpha=0.7, edgecolor='black', linewidth=1.5)
+    
+    # Add value labels on bars
+    for bar, tokens in zip(bars2, cached_tokens):
+        height = bar.get_height()
+        ax2.text(bar.get_x() + bar.get_width()/2., height,
+                f'{tokens:,.0f}',
+                ha='center', va='bottom', fontsize=11, fontweight='bold')
+    
+    ax2.set_ylabel('Cached Tokens (count)', fontsize=12, fontweight='bold')
+    ax2.set_title('Total Cached Tokens', fontsize=13, fontweight='bold', pad=15)
+    ax2.set_ylim(0, max(cached_tokens) * 1.2 if cached_tokens else 1000)
+    ax2.grid(True, alpha=0.3, axis='y', linestyle=':')
+    ax2.set_axisbelow(True)
+    
+    # Format y-axis with thousands separator
+    ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x):,}'))
+    
+    # Add interpretation note
+    note = "Higher cache hit rate = Better prompt reuse\nCost savings ≈ 50% for cached tokens"
+    fig.text(0.5, 0.02, note, ha='center', fontsize=9, alpha=0.6,
+            bbox=dict(boxstyle='round,pad=0.5', facecolor='lightblue', alpha=0.3))
+    
+    plt.suptitle(title, fontsize=15, fontweight='bold', y=0.98)
+    plt.tight_layout(rect=[0, 0.05, 1, 0.96])
+    plt.savefig(output_path, format='svg', dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+def api_calls_timeline(
+    frameworks_timeline_data: Dict[str, Dict[int, Dict[str, float]]],
+    output_path: str,
+    title: str = "API Calls Evolution Across Steps"
+) -> None:
+    """
+    Generate a line chart showing API call patterns across experiment steps.
+    
+    This visualization tracks:
+    - How API call frequency changes as complexity increases
+    - Which frameworks scale API usage with task complexity
+    - Step-by-step API efficiency patterns
+    
+    Args:
+        frameworks_timeline_data: Dict mapping framework names to step-wise metrics.
+                                 Example: {
+                                     'BAEs': {
+                                         1: {'API_CALLS': 5, 'TOK_IN': 1000, ...},
+                                         2: {'API_CALLS': 8, 'TOK_IN': 1500, ...}
+                                     },
+                                     ...
+                                 }
+        output_path: Path to save the SVG file.
+        title: Chart title.
+    
+    Raises:
+        ValueError: If frameworks_timeline_data is empty.
+    """
+    if not frameworks_timeline_data:
+        raise ValueError("frameworks_timeline_data cannot be empty")
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(12, 7))
+    
+    colors = {'baes': '#2E86AB', 'chatdev': '#A23B72', 'ghspec': '#F18F01'}
+    markers = {'baes': 'o', 'chatdev': 's', 'ghspec': '^'}
+    
+    # Plot each framework
+    for framework, step_data in frameworks_timeline_data.items():
+        if not step_data:
+            continue
+        
+        # Extract steps and API calls
+        steps = sorted(step_data.keys())
+        api_calls = [step_data[step].get('API_CALLS', 0) for step in steps]
+        
+        color = colors.get(framework.lower(), '#333333')
+        marker = markers.get(framework.lower(), 'o')
+        
+        # Plot line with markers
+        ax.plot(steps, api_calls, marker=marker, linewidth=2.5, markersize=10,
+               label=framework, color=color, alpha=0.8)
+        
+        # Add value labels at each point
+        for step, calls in zip(steps, api_calls):
+            ax.annotate(f'{calls}', xy=(step, calls), xytext=(0, 8),
+                       textcoords='offset points', ha='center',
+                       fontsize=9, alpha=0.7, fontweight='bold')
+    
+    ax.set_xlabel('Experiment Step', fontsize=12, fontweight='bold')
+    ax.set_ylabel('API Calls (count)', fontsize=12, fontweight='bold')
+    ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
+    ax.legend(loc='upper left', fontsize=11, framealpha=0.9)
+    ax.grid(True, alpha=0.3, linestyle=':')
+    ax.set_axisbelow(True)
+    
+    # Set integer x-axis (steps 1-6)
+    if frameworks_timeline_data:
+        all_steps = []
+        for step_data in frameworks_timeline_data.values():
+            all_steps.extend(step_data.keys())
+        if all_steps:
+            ax.set_xticks(range(1, max(all_steps) + 1))
+    
+    # Add task complexity annotations
+    task_labels = {
+        1: "Basic CRUD",
+        2: "Relationships",
+        3: "Constraints",
+        4: "Validation",
+        5: "Filtering",
+        6: "Full UI"
+    }
+    
+    # Add subtle background shading for complexity zones
+    ax.axvspan(0.5, 2.5, alpha=0.05, color='green', label='_Simple')
+    ax.axvspan(2.5, 4.5, alpha=0.05, color='orange', label='_Medium')
+    ax.axvspan(4.5, 6.5, alpha=0.05, color='red', label='_Complex')
+    
+    # Add interpretation note
+    note = "Upward trend = Framework needs more API calls as complexity increases\nFlat line = Consistent API efficiency across tasks"
+    ax.text(0.98, 0.02, note, transform=ax.transAxes,
+           fontsize=8, alpha=0.6, ha='right', va='bottom',
+           bbox=dict(boxstyle='round,pad=0.5', facecolor='lightyellow', alpha=0.3))
+    
+    plt.tight_layout()
+    plt.savefig(output_path, format='svg', dpi=300, bbox_inches='tight')
+    plt.close()
+
