@@ -960,7 +960,7 @@ class GHSpecAdapter(BaseAdapter):
                              'size_bytes': len(content.encode('utf-8'))
                          }})
     
-    def attempt_bugfix_cycle(self, validation_errors: list) -> Tuple[int, int, int]:
+    def attempt_bugfix_cycle(self, validation_errors: list) -> Tuple[int, int, int, int, int]:
         """
         Attempt to fix code based on validation failures.
         

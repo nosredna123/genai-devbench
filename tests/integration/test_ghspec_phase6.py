@@ -115,7 +115,7 @@ I need the following information:
 2. Validate input is numeric"""
         
         mock_call_openai.side_effect = [clarification_response, actual_spec]
-        mock_fetch_usage.return_value = (100, 200)
+        mock_fetch_usage.return_value = (100, 200, 5, 10)
         
         adapter.start()
         
@@ -298,7 +298,7 @@ Module structure
         # Mock bugfix response
         fixed_code = "def broken():\n    return 'fixed'"
         mock_call_openai.return_value = fixed_code
-        mock_fetch_usage.return_value = (100, 200)
+        mock_fetch_usage.return_value = (100, 200, 5, 10)
         
         # Simulate validation errors
         validation_errors = [
@@ -312,7 +312,7 @@ Module structure
         
         # Execute bugfix cycle
         adapter.current_step = 6
-        hitl_count, tokens_in, tokens_out = adapter.attempt_bugfix_cycle(validation_errors)
+        hitl_count, tokens_in, tokens_out, api_calls, cached_tokens = adapter.attempt_bugfix_cycle(validation_errors)
         
         # Verify bugfix was attempted
         assert mock_call_openai.called
@@ -340,7 +340,7 @@ Module structure
         tasks_response = """# Tasks\n\n- [ ] **TASK-001** Implement add\n  - **File**: `calc.py`\n  - **Goal**: Addition"""
         
         mock_call_openai.side_effect = [spec_response, plan_response, tasks_response]
-        mock_fetch_usage.return_value = (100, 200)
+        mock_fetch_usage.return_value = (100, 200, 5, 10)
         
         adapter.start()
         

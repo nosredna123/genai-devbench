@@ -170,7 +170,7 @@ def divide(a, b):
     return a / b
 """
         mock_call_openai.return_value = fixed_code
-        mock_fetch_usage.return_value = (100, 200)
+        mock_fetch_usage.return_value = (100, 200, 5, 10)
         
         # Create validation errors
         errors = [
@@ -184,7 +184,7 @@ def divide(a, b):
         
         # Execute bugfix cycle
         adapter_with_code.current_step = 6
-        hitl_count, tokens_in, tokens_out = adapter_with_code.attempt_bugfix_cycle(errors)
+        hitl_count, tokens_in, tokens_out, api_calls, cached_tokens = adapter_with_code.attempt_bugfix_cycle(errors)
         
         # Verify API was called
         assert mock_call_openai.called
@@ -211,7 +211,7 @@ def divide(a, b):
             "# Fixed validator.py",
             "# Fixed main.py"
         ]
-        mock_fetch_usage.return_value = (100, 200)
+        mock_fetch_usage.return_value = (100, 200, 5, 10)
         
         # Create multiple validation errors
         errors = [
@@ -240,7 +240,7 @@ def divide(a, b):
         (adapter_with_code.src_dir / "main.py").write_text("# Buggy main")
         
         adapter_with_code.current_step = 6
-        hitl_count, tokens_in, tokens_out = adapter_with_code.attempt_bugfix_cycle(errors)
+        hitl_count, tokens_in, tokens_out, api_calls, cached_tokens = adapter_with_code.attempt_bugfix_cycle(errors)
         
         # Should have called API 3 times
         assert mock_call_openai.call_count == 3
@@ -258,7 +258,7 @@ def divide(a, b):
         errors = []
         
         adapter_with_code.current_step = 6
-        hitl_count, tokens_in, tokens_out = adapter_with_code.attempt_bugfix_cycle(errors)
+        hitl_count, tokens_in, tokens_out, api_calls, cached_tokens = adapter_with_code.attempt_bugfix_cycle(errors)
         
         # Should not call API
         assert not mock_call_openai.called

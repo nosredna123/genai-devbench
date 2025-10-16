@@ -291,7 +291,7 @@ CURRENT: {current_file_content}
         ]
         
         # Mock token usage (same for all calls for simplicity)
-        mock_fetch_usage.return_value = (200, 400)
+        mock_fetch_usage.return_value = (200, 400, 5, 10)
         
         # Execute implementation
         adapter_with_artifacts.current_step = 4
@@ -333,7 +333,7 @@ CURRENT: {current_file_content}
             "# API update...",                                 # TASK-011
         ]
         
-        mock_fetch_usage.return_value = (150, 350)
+        mock_fetch_usage.return_value = (150, 350, 5, 10)
         
         adapter_with_artifacts.current_step = 4
         hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp = adapter_with_artifacts._execute_task_implementation("Build todo app")

@@ -53,21 +53,19 @@ def test_usage_api():
         model=chatdev_config.get('model')
     )
     
-    # Handle both 2-tuple (old) and 3-tuple (new with api_calls) return values
-    if len(result) == 3:
-        tokens_in, tokens_out, api_calls = result
-        print(f"\n✅ Using NEW 3-tuple format (includes api_calls)")
-    else:
-        tokens_in, tokens_out = result
-        api_calls = None
-        print(f"\n⚠️  Using OLD 2-tuple format (api_calls not yet implemented)")
+    # Handle 4-tuple return value (tokens_in, tokens_out, api_calls, cached_tokens)
+    tokens_in, tokens_out, api_calls, cached_tokens = result
+    print(f"\n✅ Using 4-tuple format (includes api_calls and cached_tokens)")
     
     print(f"\nResults:")
-    print(f"  Input tokens:  {tokens_in:,}")
-    print(f"  Output tokens: {tokens_out:,}")
-    print(f"  Total tokens:  {tokens_in + tokens_out:,}")
-    if api_calls is not None:
-        print(f"  API calls:     {api_calls:,}")
+    print(f"  Input tokens:   {tokens_in:,}")
+    print(f"  Output tokens:  {tokens_out:,}")
+    print(f"  Total tokens:   {tokens_in + tokens_out:,}")
+    print(f"  API calls:      {api_calls:,}")
+    print(f"  Cached tokens:  {cached_tokens:,}")
+    if cached_tokens > 0 and tokens_in > 0:
+        cache_hit_rate = (cached_tokens / tokens_in) * 100
+        print(f"  Cache hit rate: {cache_hit_rate:.1f}%")
     
     if tokens_in > 0 or tokens_out > 0:
         # Calculate cost (gpt-4o-mini: $0.15/$0.60 per 1M tokens)
