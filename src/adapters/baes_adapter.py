@@ -211,12 +211,12 @@ class BAeSAdapter(BaseAdapter):
         """
         wrapper_script = Path(__file__).parent / "baes_kernel_wrapper.py"
         context_store_path = str(self.database_dir / "context_store.json")
-        venv_python = self.venv_path / "bin" / "python"
+        venv_python = (self.venv_path / "bin" / "python").absolute()
         
         cmd = [
             str(venv_python),
-            str(wrapper_script),
-            str(self.framework_dir),
+            str(wrapper_script.absolute()),
+            str(self.framework_dir.absolute()),
             context_store_path,
             request,
             str(start_servers).lower()
