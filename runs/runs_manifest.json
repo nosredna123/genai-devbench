@@ -1,11 +1,11 @@
 {
   "version": "1.0",
-  "last_updated": "2025-10-16T18:08:08.402795Z",
-  "total_runs": 3,
+  "last_updated": "2025-10-16T19:19:11.474261Z",
+  "total_runs": 13,
   "frameworks": {
-    "chatdev": 1,
-    "baes": 1,
-    "ghspec": 1
+    "chatdev": 4,
+    "baes": 5,
+    "ghspec": 4
   },
   "runs": [
     {
@@ -14,7 +14,7 @@
       "path": "baes/08c47487-f180-46e8-a148-06373aa06110",
       "start_time": "2025-10-16T16:16:26.008713Z",
       "end_time": "2025-10-16T16:19:55.762573Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 24523,
       "total_tokens_out": 6639
     },
@@ -24,7 +24,7 @@
       "path": "chatdev/5a7fd52f-9819-4044-96c0-43dbe73d24d9",
       "start_time": "2025-10-16T16:21:19.143666Z",
       "end_time": "2025-10-16T16:54:27.176500Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 220858,
       "total_tokens_out": 76892
     },
@@ -34,9 +34,109 @@
       "path": "ghspec/a1b3972f-f772-4a7c-956e-1828a8db7a7d",
       "start_time": "2025-10-16T17:27:01.627087Z",
       "end_time": "2025-10-16T17:37:16.968930Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 46512,
       "total_tokens_out": 18387
+    },
+    {
+      "run_id": "c3c8cc0d-7706-4cdb-942b-85213b0d2c02",
+      "framework": "baes",
+      "path": "baes/c3c8cc0d-7706-4cdb-942b-85213b0d2c02",
+      "start_time": "2025-10-16T18:17:43.369499Z",
+      "end_time": "2025-10-16T18:21:27.614006Z",
+      "verification_status": "pending",
+      "total_tokens_in": 29373,
+      "total_tokens_out": 8889
+    },
+    {
+      "run_id": "b906fd64-74ec-4c83-8179-a4cb308566de",
+      "framework": "chatdev",
+      "path": "chatdev/b906fd64-74ec-4c83-8179-a4cb308566de",
+      "start_time": "2025-10-16T18:22:50.855332Z",
+      "end_time": "2025-10-16T18:53:20.787808Z",
+      "verification_status": "pending",
+      "total_tokens_in": 237395,
+      "total_tokens_out": 80566
+    },
+    {
+      "run_id": "c0965c5b-5756-48af-a6ca-c381061036b6",
+      "framework": "ghspec",
+      "path": "ghspec/c0965c5b-5756-48af-a6ca-c381061036b6",
+      "start_time": "2025-10-16T18:54:00.722794Z",
+      "end_time": "2025-10-16T19:06:42.637601Z",
+      "verification_status": "pending",
+      "total_tokens_in": 51011,
+      "total_tokens_out": 32995
+    },
+    {
+      "run_id": "6e921772-eca1-4ae6-b610-32d356aed9aa",
+      "framework": "baes",
+      "path": "baes/6e921772-eca1-4ae6-b610-32d356aed9aa",
+      "start_time": "2025-10-16T19:07:08.596061Z",
+      "end_time": "2025-10-16T19:10:18.671757Z",
+      "verification_status": "pending",
+      "total_tokens_in": 20150,
+      "total_tokens_out": 5302
+    },
+    {
+      "run_id": "44163569-81cb-4657-8063-3e41002cdb41",
+      "framework": "chatdev",
+      "path": "chatdev/44163569-81cb-4657-8063-3e41002cdb41",
+      "start_time": "2025-10-16T19:11:40.637129Z",
+      "end_time": "2025-10-16T19:50:30.937542Z",
+      "verification_status": "pending",
+      "total_tokens_in": 246285,
+      "total_tokens_out": 90737
+    },
+    {
+      "run_id": "0e9ca3c8-a578-44e9-8ec8-d533890c3a32",
+      "framework": "ghspec",
+      "path": "ghspec/0e9ca3c8-a578-44e9-8ec8-d533890c3a32",
+      "start_time": "2025-10-16T19:51:10.737351Z",
+      "end_time": "2025-10-16T19:59:30.064371Z",
+      "verification_status": "pending",
+      "total_tokens_in": 45904,
+      "total_tokens_out": 20044
+    },
+    {
+      "run_id": "7ab81207-e700-44d6-aaea-c159bfccd55b",
+      "framework": "baes",
+      "path": "baes/7ab81207-e700-44d6-aaea-c159bfccd55b",
+      "start_time": "2025-10-16T19:59:52.807825Z",
+      "end_time": "2025-10-16T20:03:11.587152Z",
+      "verification_status": "pending",
+      "total_tokens_in": 27525,
+      "total_tokens_out": 7769
+    },
+    {
+      "run_id": "aa0e24f6-2fca-46ed-b98b-05459bf7305b",
+      "framework": "chatdev",
+      "path": "chatdev/aa0e24f6-2fca-46ed-b98b-05459bf7305b",
+      "start_time": "2025-10-16T20:04:35.344551Z",
+      "end_time": "2025-10-16T20:36:01.661645Z",
+      "verification_status": "pending",
+      "total_tokens_in": 237487,
+      "total_tokens_out": 84634
+    },
+    {
+      "run_id": "d7586946-09d4-441e-bbdf-720729227fc7",
+      "framework": "ghspec",
+      "path": "ghspec/d7586946-09d4-441e-bbdf-720729227fc7",
+      "start_time": "2025-10-16T20:36:45.491348Z",
+      "end_time": "2025-10-16T20:47:01.566894Z",
+      "verification_status": "pending",
+      "total_tokens_in": 60442,
+      "total_tokens_out": 24814
+    },
+    {
+      "run_id": "0a7e4445-ddf2-4e34-98c6-486690697fe5",
+      "framework": "baes",
+      "path": "baes/0a7e4445-ddf2-4e34-98c6-486690697fe5",
+      "start_time": "2025-10-16T20:47:28.534697Z",
+      "end_time": "2025-10-16T20:50:31.144377Z",
+      "verification_status": "pending",
+      "total_tokens_in": 0,
+      "total_tokens_out": 0
     }
   ]
 }
