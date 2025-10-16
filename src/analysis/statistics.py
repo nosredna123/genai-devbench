@@ -323,6 +323,79 @@ def compute_composite_scores(metrics: Dict[str, float]) -> Dict[str, float]:
     }
 
 
+def _format_metric_value(metric: str, value: float, include_units: bool = True) -> str:
+    """
+    Format metric value with appropriate units and precision.
+    
+    Args:
+        metric: Metric name
+        value: Numeric value
+        include_units: Whether to include unit labels
+    
+    Returns:
+        Formatted string with value and units
+    """
+    # Token metrics: thousands separator
+    if metric in ['TOK_IN', 'TOK_OUT']:
+        if include_units:
+            return f"{value:,.0f} tokens"
+        return f"{value:,.0f}"
+    
+    # Time metrics: seconds with minutes conversion if >60
+    elif metric == 'T_WALL_seconds':
+        if include_units:
+            if value >= 60:
+                minutes = value / 60
+                return f"{value:.1f}s ({minutes:.1f} min)"
+            return f"{value:.1f}s"
+        return f"{value:.1f}"
+    
+    # Percentages/rates (0-1 range) - display as is
+    elif metric in ['AUTR', 'ESR', 'MC', 'AEI']:
+        return f"{value:.3f}"
+    
+    # Quality star
+    elif metric in ['Q*', 'Q_star']:
+        return f"{value:.3f}"
+    
+    # Counts (integers)
+    elif metric in ['UTT', 'HIT', 'HEU', 'CRUDe']:
+        return f"{int(value)}"
+    
+    # Zero-downtime intervals (seconds)
+    elif metric == 'ZDI':
+        if include_units:
+            return f"{value:.0f}s"
+        return f"{value:.0f}"
+    
+    # Default: 2 decimal places
+    return f"{value:.2f}"
+
+
+def _format_confidence_interval(lower: float, upper: float, metric: str) -> str:
+    """
+    Format confidence interval with appropriate precision.
+    
+    Args:
+        lower: Lower bound
+        upper: Upper bound
+        metric: Metric name for formatting context
+    
+    Returns:
+        Formatted CI string like [lower, upper]
+    """
+    if metric in ['TOK_IN', 'TOK_OUT']:
+        return f"[{lower:,.0f}, {upper:,.0f}]"
+    elif metric == 'T_WALL_seconds':
+        return f"[{lower:.1f}, {upper:.1f}]"
+    elif metric in ['AUTR', 'ESR', 'MC', 'AEI', 'Q*', 'Q_star']:
+        return f"[{lower:.3f}, {upper:.3f}]"
+    elif metric in ['UTT', 'HIT', 'HEU', 'CRUDe', 'ZDI']:
+        return f"[{int(lower)}, {int(upper)}]"
+    else:
+        return f"[{lower:.2f}, {upper:.2f}]"
+
+
 def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]]]) -> List[str]:
     """
     Generate executive summary section with key findings.
@@ -533,6 +606,8 @@ def generate_statistical_report(
         "## 1. Aggregate Statistics",
         "",
         "### Mean Values with 95% Bootstrap CI",
+        "",
+        "*Note: Token values shown with thousands separator; time in seconds (minutes if >60s)*",
         ""
     ])
     
@@ -552,7 +627,11 @@ def generate_statistical_report(
                 mean = stats['mean']
                 ci_lower = stats['ci_lower']
                 ci_upper = stats['ci_upper']
-                row += f" {mean:.3f} [{ci_lower:.3f}, {ci_upper:.3f}] |"
+                
+                # Format values with units
+                formatted_mean = _format_metric_value(metric, mean, include_units=False)
+                formatted_ci = _format_confidence_interval(ci_lower, ci_upper, metric)
+                row += f" {formatted_mean} {formatted_ci} |"
             else:
                 row += " N/A |"
         
@@ -686,13 +765,13 @@ def generate_statistical_report(
             q_agg = bootstrap_aggregate_metrics([{'Q*': v} for v in q_star_values])
             aei_agg = bootstrap_aggregate_metrics([{'AEI': v} for v in aei_values])
             
-            q_mean = q_agg['Q*']['mean']
-            q_ci = f"[{q_agg['Q*']['ci_lower']:.3f}, {q_agg['Q*']['ci_upper']:.3f}]"
-            aei_mean = aei_agg['AEI']['mean']
-            aei_ci = f"[{aei_agg['AEI']['ci_lower']:.3f}, {aei_agg['AEI']['ci_upper']:.3f}]"
+            q_mean = _format_metric_value('Q*', q_agg['Q*']['mean'], include_units=False)
+            q_ci = _format_confidence_interval(q_agg['Q*']['ci_lower'], q_agg['Q*']['ci_upper'], 'Q*')
+            aei_mean = _format_metric_value('AEI', aei_agg['AEI']['mean'], include_units=False)
+            aei_ci = _format_confidence_interval(aei_agg['AEI']['ci_lower'], aei_agg['AEI']['ci_upper'], 'AEI')
             
             lines.append(
-                f"| {framework} | {q_mean:.3f} | {q_ci} | {aei_mean:.3f} | {aei_ci} |"
+                f"| {framework} | {q_mean} | {q_ci} | {aei_mean} | {aei_ci} |"
             )
         else:
             lines.append(f"| {framework} | N/A | N/A | N/A | N/A |")
