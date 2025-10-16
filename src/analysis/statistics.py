@@ -430,6 +430,101 @@ def _get_performance_indicator(metric: str, value: float, all_values: List[float
         return " 🟡"
 
 
+def _generate_relative_performance(framework_means: Dict[str, Dict[str, Dict[str, float]]], 
+                                   all_metrics: List[str]) -> List[str]:
+    """
+    Generate relative performance table showing % of best for key metrics.
+    
+    Args:
+        framework_means: Dict of framework -> metric -> stats dict
+        all_metrics: List of all metrics
+    
+    Returns:
+        List of markdown lines for relative performance section
+    """
+    lines = [
+        "## 2. Relative Performance",
+        "",
+        "Performance normalized to best framework (100% = best performer).",
+        "",
+        "*Lower percentages are better for cost metrics (tokens, time); higher percentages are better for quality metrics.*",
+        ""
+    ]
+    
+    # Select key metrics for comparison
+    key_metrics = {
+        'Tokens (↓)': 'TOK_IN',
+        'Time (↓)': 'T_WALL_seconds',
+        'Test Auto (↑)': 'AUTR',
+        'Efficiency (↑)': 'AEI',
+        'Quality (↑)': 'Q_star'
+    }
+    
+    # Build table header
+    header = "| Framework |"
+    for metric_name in key_metrics.keys():
+        header += f" {metric_name} |"
+    
+    separator = "|-----------|" + "|".join(["-" * 15 for _ in key_metrics]) + "|"
+    lines.extend([header, separator])
+    
+    # Calculate relative performance for each framework
+    for framework in framework_means.keys():
+        row = f"| {framework} |"
+        
+        for metric_display, metric_key in key_metrics.items():
+            if metric_key not in all_metrics or metric_key not in framework_means[framework]:
+                row += " N/A |"
+                continue
+            
+            # Collect all values for this metric
+            values = []
+            for fw in framework_means.keys():
+                if metric_key in framework_means[fw]:
+                    values.append(framework_means[fw][metric_key]['mean'])
+            
+            if not values or len(values) < 2:
+                row += " N/A |"
+                continue
+            
+            current_value = framework_means[framework][metric_key]['mean']
+            
+            # Determine if lower or higher is better
+            lower_is_better = '↓' in metric_display
+            
+            if lower_is_better:
+                # For cost metrics: % of best (minimum)
+                best_value = min(values)
+                if best_value == 0:
+                    relative = 100.0
+                else:
+                    relative = (current_value / best_value) * 100
+            else:
+                # For quality metrics: % of best (maximum)
+                best_value = max(values)
+                if best_value == 0:
+                    relative = 100.0 if current_value == 0 else 0.0
+                else:
+                    relative = (current_value / best_value) * 100
+            
+            # Determine indicator
+            if relative == 100.0:
+                indicator = " 🟢"
+            elif relative >= 80 and not lower_is_better:
+                indicator = " 🟡"
+            elif relative <= 120 and lower_is_better:
+                indicator = " 🟡"
+            else:
+                indicator = " 🔴"
+            
+            row += f" {relative:.0f}%{indicator} |"
+        
+        lines.append(row)
+    
+    lines.extend(["", ""])
+    return lines
+
+
 def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]]]) -> List[str]:
     """
     Generate executive summary section with key findings.
@@ -693,9 +788,13 @@ def generate_statistical_report(
     
     lines.extend(["", ""])
     
-    # Section 2: Kruskal-Wallis Tests
+    # Section 2: Relative Performance
+    relative_performance_lines = _generate_relative_performance(framework_means, all_metrics)
+    lines.extend(relative_performance_lines)
+    
+    # Section 3: Kruskal-Wallis Tests
     lines.extend([
-        "## 2. Kruskal-Wallis H-Tests",
+        "## 3. Kruskal-Wallis H-Tests",
         "",
         "Testing for significant differences across all frameworks.",
         "",
@@ -721,9 +820,9 @@ def generate_statistical_report(
     
     lines.extend(["", ""])
     
-    # Section 3: Pairwise Comparisons
+    # Section 4: Pairwise Comparisons
     lines.extend([
-        "## 3. Pairwise Comparisons",
+        "## 4. Pairwise Comparisons",
         "",
         "Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.",
         ""

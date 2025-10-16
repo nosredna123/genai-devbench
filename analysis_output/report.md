@@ -1,6 +1,6 @@
 # Statistical Analysis Report
 
-**Generated:** 2025-10-16 13:33:22 UTC
+**Generated:** 2025-10-16 13:38:39 UTC
 
 **Frameworks:** ghspec, chatdev, baes
 
@@ -65,7 +65,20 @@
 | baes | 0.099 [0.099, 0.099] 🟡 | 1.000 [1.000, 1.000] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 25,607 [25,607, 25,607] 🟢 | 6,694 [6,694, 6,694] 🟢 | 238.5 [238.5, 238.5] 🟢 | 6 [6, 6] 🟢 | 48 [48, 48] 🟢 |
 
 
-## 2. Kruskal-Wallis H-Tests
+## 2. Relative Performance
+
+Performance normalized to best framework (100% = best performer).
+
+*Lower percentages are better for cost metrics (tokens, time); higher percentages are better for quality metrics.*
+
+| Framework | Tokens (↓) | Time (↓) | Test Auto (↑) | Efficiency (↑) | Quality (↑) |
+|-----------|---------------|---------------|---------------|---------------|---------------|
+| ghspec | 120% 🔴 | 168% 🔴 | 100% 🟢 | 100% 🟢 | 100% 🟢 |
+| chatdev | 940% 🔴 | 747% 🔴 | 100% 🟢 | 74% 🔴 | 100% 🟢 |
+| baes | 100% 🟢 | 100% 🟢 | 100% 🟢 | 90% 🟡 | 100% 🟢 |
+
+
+## 3. Kruskal-Wallis H-Tests
 
 Testing for significant differences across all frameworks.
 
@@ -86,7 +99,7 @@ Testing for significant differences across all frameworks.
 | ZDI | 3.000 | 0.2231 | ✗ No | 3 | 5 |
 
 
-## 3. Pairwise Comparisons
+## 4. Pairwise Comparisons
 
 Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 
