@@ -950,6 +950,8 @@ def generate_statistical_report(
         "| **MC** | Model Call Efficiency | Efficiency of LLM calls | 0-1 | Higher ↑ |",
         "| **TOK_IN** | Input Tokens | Total tokens sent to LLM | 0-∞ | Lower ↓ |",
         "| **TOK_OUT** | Output Tokens | Total tokens received from LLM | 0-∞ | Lower ↓ |",
+        "| **API_CALLS** | API Call Count | Number of model requests to LLM | 0-∞ | Lower ↓ |",
+        "| **CACHED_TOKENS** | Cached Input Tokens | Input tokens served from cache | 0-∞ | Higher ↑ |",
         "| **T_WALL_seconds** | Wall Clock Time | Total elapsed time (seconds) | 0-∞ | Lower ↓ |",
         "| **ZDI** | Zero-Downtime Intervals | Idle time between steps (seconds) | 0-∞ | Lower ↓ |",
         "| **HIT** | Human-in-the-Loop Count | Manual interventions needed | 0-∞ | Lower ↓ |",
