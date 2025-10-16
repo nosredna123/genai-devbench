@@ -104,7 +104,7 @@
     "error": null
   },
   "usage_api_reconciliation": {
-    "verification_status": "pending",
+    "verification_status": "verified",
     "attempts": [
       {
         "timestamp": "2025-10-15T19:25:21.806380+00:00",
@@ -195,8 +195,54 @@
         "total_tokens_out": 23542,
         "steps_with_tokens": 3,
         "total_steps": 6
+      },
+      {
+        "timestamp": "2025-10-15T22:52:13.177846+00:00",
+        "steps": [
+          {
+            "step": 1,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 2,
+            "status": "success",
+            "tokens_in": 3365,
+            "tokens_out": 1758
+          },
+          {
+            "step": 3,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 4,
+            "status": "success",
+            "tokens_in": 33327,
+            "tokens_out": 12554
+          },
+          {
+            "step": 5,
+            "status": "success",
+            "tokens_in": 22348,
+            "tokens_out": 9230
+          },
+          {
+            "step": 6,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0
+          }
+        ],
+        "total_tokens_in": 59040,
+        "total_tokens_out": 23542,
+        "steps_with_tokens": 3,
+        "total_steps": 6
       }
     ],
-    "verification_message": "Data still arriving (+5,363 in, +3,413 out tokens since last attempt)"
+    "verification_message": "\u2705 Data stable across 109 minute interval (59,040 in, 23,542 out)",
+    "verified_at": "2025-10-15T22:52:13.177846+00:00"
   }
 }
