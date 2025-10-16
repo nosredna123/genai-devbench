@@ -295,7 +295,7 @@ CURRENT: {current_file_content}
         
         # Execute implementation
         adapter_with_artifacts.current_step = 4
-        hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp = adapter_with_artifacts._execute_task_implementation("Build todo app")
+        hitl_count, tokens_in, tokens_out, api_calls, cached_tokens, start_timestamp, end_timestamp = adapter_with_artifacts._execute_task_implementation("Build todo app")
         
         # Verify all tasks were processed
         assert mock_call_openai.call_count == 5
@@ -336,7 +336,7 @@ CURRENT: {current_file_content}
         mock_fetch_usage.return_value = (150, 350, 5, 10)
         
         adapter_with_artifacts.current_step = 4
-        hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp = adapter_with_artifacts._execute_task_implementation("Build todo app")
+        hitl_count, tokens_in, tokens_out, api_calls, cached_tokens, start_timestamp, end_timestamp = adapter_with_artifacts._execute_task_implementation("Build todo app")
         
         # Should have made 6 API calls (5 tasks + 1 clarification)
         assert mock_call_openai.call_count == 6

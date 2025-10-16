@@ -186,7 +186,7 @@ A simple todo list application for task management.
         mock_fetch_usage.return_value = (150, 350, 5, 10)
         
         # Execute specify phase
-        hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp = adapter_with_workspace._execute_phase(
+        hitl_count, tokens_in, tokens_out, api_calls, cached_tokens, start_timestamp, end_timestamp = adapter_with_workspace._execute_phase(
             'specify',
             'Build a todo list application'
         )
@@ -243,7 +243,7 @@ User authentication system using JWT tokens.
         mock_fetch_usage.return_value = (200, 400, 5, 10)
         
         # Execute phase
-        hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp = adapter_with_workspace._execute_phase(
+        hitl_count, tokens_in, tokens_out, api_calls, cached_tokens, start_timestamp, end_timestamp = adapter_with_workspace._execute_phase(
             'specify',
             'Build an authentication system'
         )

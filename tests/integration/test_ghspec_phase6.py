@@ -63,9 +63,9 @@ class TestGHSpecAdapterPhase6EndToEnd:
         
         # Mock different token counts per call
         mock_fetch_usage.side_effect = [
-            (50, 100),   # Step 1
-            (75, 150),   # Step 2
-            (100, 200),  # Step 3
+            (50, 100, 3, 5),    # Step 1: tokens_in, tokens_out, api_calls, cached_tokens
+            (75, 150, 4, 8),    # Step 2
+            (100, 200, 5, 10),  # Step 3
         ]
         
         adapter.start()
