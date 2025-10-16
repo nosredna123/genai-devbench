@@ -1,0 +1,62 @@
+{
+  "version": "1.0",
+  "last_updated": "2025-10-16T12:49:49.142211Z",
+  "total_runs": 5,
+  "frameworks": {
+    "chatdev": 2,
+    "baes": 1,
+    "ghspec": 2
+  },
+  "runs": [
+    {
+      "run_id": "02b41485-651f-4aa9-9ea3-be0b742f81cf",
+      "framework": "ghspec",
+      "path": "ghspec/02b41485-651f-4aa9-9ea3-be0b742f81cf",
+      "start_time": "2025-10-15T19:11:10.927510Z",
+      "end_time": "2025-10-15T19:23:09.657030Z",
+      "verification_status": "verified",
+      "total_tokens_in": 59040,
+      "total_tokens_out": 23542
+    },
+    {
+      "run_id": "d8d76027-1d25-4e86-a316-83551f024173",
+      "framework": "chatdev",
+      "path": "chatdev/d8d76027-1d25-4e86-a316-83551f024173",
+      "start_time": "2025-10-15T19:30:51.894401Z",
+      "end_time": "2025-10-15T20:00:00.241792Z",
+      "verification_status": "verified",
+      "total_tokens_in": 217055,
+      "total_tokens_out": 74482
+    },
+    {
+      "run_id": "d95b777a-b2b7-4975-9a68-563553c244ab",
+      "framework": "ghspec",
+      "path": "ghspec/d95b777a-b2b7-4975-9a68-563553c244ab",
+      "start_time": "2025-10-15T21:07:06.128958Z",
+      "end_time": "2025-10-15T21:08:26.444744Z",
+      "verification_status": "verified",
+      "total_tokens_in": 2503,
+      "total_tokens_out": 925
+    },
+    {
+      "run_id": "d7982980-2428-4b9d-997e-2abc20346e14",
+      "framework": "chatdev",
+      "path": "chatdev/d7982980-2428-4b9d-997e-2abc20346e14",
+      "start_time": "2025-10-15T22:00:48.447659Z",
+      "end_time": "2025-10-15T22:31:03.117555Z",
+      "verification_status": "verified",
+      "total_tokens_in": 264373,
+      "total_tokens_out": 76824
+    },
+    {
+      "run_id": "801758a3-dbda-4fc5-8d7f-fd1c916d7617",
+      "framework": "baes",
+      "path": "baes/801758a3-dbda-4fc5-8d7f-fd1c916d7617",
+      "start_time": "2025-10-16T12:29:31.455006Z",
+      "end_time": "2025-10-16T12:33:29.940848Z",
+      "verification_status": "pending",
+      "total_tokens_in": 25607,
+      "total_tokens_out": 6694
+    }
+  ]
+}
