@@ -396,6 +396,40 @@ def _format_confidence_interval(lower: float, upper: float, metric: str) -> str:
         return f"[{lower:.2f}, {upper:.2f}]"
 
 
+def _get_performance_indicator(metric: str, value: float, all_values: List[float]) -> str:
+    """
+    Get emoji indicator based on performance relative to other frameworks.
+    
+    Args:
+        metric: Metric name
+        value: Value for this framework
+        all_values: All framework values for this metric
+    
+    Returns:
+        Emoji indicator: 🟢 (best), 🟡 (middle), 🔴 (worst)
+    """
+    if len(all_values) < 2:
+        return ""  # No comparison possible
+    
+    # Metrics where lower is better
+    lower_is_better = ['TOK_IN', 'TOK_OUT', 'T_WALL_seconds', 'ZDI', 'HIT', 'HEU']
+    
+    if metric in lower_is_better:
+        best_value = min(all_values)
+        worst_value = max(all_values)
+    else:
+        best_value = max(all_values)
+        worst_value = min(all_values)
+    
+    # Determine indicator
+    if value == best_value:
+        return " 🟢"
+    elif value == worst_value and len(all_values) > 2:  # Only mark worst if >2 frameworks
+        return " 🔴"
+    else:
+        return " 🟡"
+
+
 def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]]]) -> List[str]:
     """
     Generate executive summary section with key findings.
@@ -608,6 +642,8 @@ def generate_statistical_report(
         "### Mean Values with 95% Bootstrap CI",
         "",
         "*Note: Token values shown with thousands separator; time in seconds (minutes if >60s)*",
+        "",
+        "**Performance Indicators:** 🟢 Best | 🟡 Middle | 🔴 Worst",
         ""
     ])
     
@@ -616,9 +652,23 @@ def generate_statistical_report(
     separator = "|-----------|" + "|".join(["-" * 12 for _ in all_metrics]) + "|"
     lines.extend([header, separator])
     
-    # Table rows
+    # First pass: collect all mean values for each metric to determine indicators
+    framework_means = {}
     for framework, runs in frameworks_data.items():
         aggregated = bootstrap_aggregate_metrics(runs)
+        framework_means[framework] = aggregated
+    
+    # Collect all values per metric for comparison
+    metric_values = {}
+    for metric in all_metrics:
+        metric_values[metric] = []
+        for framework in frameworks_data.keys():
+            if metric in framework_means[framework]:
+                metric_values[metric].append(framework_means[framework][metric]['mean'])
+    
+    # Table rows with indicators
+    for framework in frameworks_data.keys():
+        aggregated = framework_means[framework]
         row = f"| {framework} |"
         
         for metric in all_metrics:
@@ -631,7 +681,11 @@ def generate_statistical_report(
                 # Format values with units
                 formatted_mean = _format_metric_value(metric, mean, include_units=False)
                 formatted_ci = _format_confidence_interval(ci_lower, ci_upper, metric)
-                row += f" {formatted_mean} {formatted_ci} |"
+                
+                # Add performance indicator
+                indicator = _get_performance_indicator(metric, mean, metric_values[metric])
+                
+                row += f" {formatted_mean} {formatted_ci}{indicator} |"
             else:
                 row += " N/A |"
         
