@@ -46,26 +46,60 @@ def test_usage_api():
     print(f"  API Key Env: OPEN_AI_KEY_ADM (admin key with org permissions)")
     
     # Fetch usage using admin key (OPEN_AI_KEY_ADM has org-level permissions for Usage API)
-    tokens_in, tokens_out = adapter.fetch_usage_from_openai(
+    result = adapter.fetch_usage_from_openai(
         api_key_env_var='OPEN_AI_KEY_ADM',
         start_timestamp=start_time,
         end_timestamp=end_time,
         model=chatdev_config.get('model')
     )
     
+    # Handle both 2-tuple (old) and 3-tuple (new with api_calls) return values
+    if len(result) == 3:
+        tokens_in, tokens_out, api_calls = result
+        print(f"\n✅ Using NEW 3-tuple format (includes api_calls)")
+    else:
+        tokens_in, tokens_out = result
+        api_calls = None
+        print(f"\n⚠️  Using OLD 2-tuple format (api_calls not yet implemented)")
+    
     print(f"\nResults:")
     print(f"  Input tokens:  {tokens_in:,}")
     print(f"  Output tokens: {tokens_out:,}")
     print(f"  Total tokens:  {tokens_in + tokens_out:,}")
+    if api_calls is not None:
+        print(f"  API calls:     {api_calls:,}")
     
     if tokens_in > 0 or tokens_out > 0:
-        # Calculate cost (gpt-5-mini: $0.25/$2.00 per 1M tokens)
-        cost_input = (tokens_in / 1_000_000) * 0.25
-        cost_output = (tokens_out / 1_000_000) * 2.00
+        # Calculate cost (gpt-4o-mini: $0.15/$0.60 per 1M tokens)
+        cost_input = (tokens_in / 1_000_000) * 0.15
+        cost_output = (tokens_out / 1_000_000) * 0.60
         total_cost = cost_input + cost_output
         print(f"\n  Estimated cost: ${total_cost:.4f}")
         print(f"    Input:  ${cost_input:.4f}")
         print(f"    Output: ${cost_output:.4f}")
+        
+        # Calculate efficiency if API calls available
+        if api_calls is not None and api_calls > 0:
+            total_tokens = tokens_in + tokens_out
+            efficiency = (api_calls / total_tokens) * 1000 if total_tokens > 0 else 0
+            avg_tokens_per_call = total_tokens / api_calls if api_calls > 0 else 0
+            
+            print(f"\n  API Efficiency Metrics:")
+            print(f"    Calls per 1K tokens: {efficiency:.2f}")
+            print(f"    Avg tokens per call: {avg_tokens_per_call:.0f}")
+            
+            # Sanity checks
+            if efficiency > 100:
+                print(f"    ⚠️  WARNING: Very high call rate (likely parsing error)")
+            elif efficiency < 0.01:
+                print(f"    ⚠️  WARNING: Very low call rate (likely missing data)")
+            elif efficiency < 1.0:
+                print(f"    ✅ Very efficient batching (< 1 call per 1K tokens)")
+            elif efficiency < 5.0:
+                print(f"    ✅ Balanced efficiency (1-5 calls per 1K tokens)")
+            else:
+                print(f"    ⚠️  Chatty communication (> 5 calls per 1K tokens)")
+        
         print("\n✅ SUCCESS: Token counting working!")
     else:
         print("\n⚠️  No tokens found in last hour (this may be expected)")
