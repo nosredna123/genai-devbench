@@ -302,6 +302,8 @@ class OrchestratorRunner:
                         hitl_count=result.get('hitl_count', 0),
                         tokens_in=result.get('tokens_in', 0),
                         tokens_out=result.get('tokens_out', 0),
+                        api_calls=result.get('api_calls', 0),
+                        cached_tokens=result.get('cached_tokens', 0),
                         start_timestamp=result.get('start_timestamp'),
                         end_timestamp=result.get('end_timestamp')
                     )

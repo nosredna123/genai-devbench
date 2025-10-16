@@ -43,6 +43,8 @@ class MetricsCollector:
         hitl_count: int,
         tokens_in: int,
         tokens_out: int,
+        api_calls: int = 0,
+        cached_tokens: int = 0,
         start_timestamp: Optional[int] = None,
         end_timestamp: Optional[int] = None
     ) -> None:
@@ -58,6 +60,8 @@ class MetricsCollector:
             hitl_count: Number of HITL interventions
             tokens_in: Input tokens consumed (may be 0 initially)
             tokens_out: Output tokens generated (may be 0 initially)
+            api_calls: Number of API calls made to OpenAI
+            cached_tokens: Number of cached input tokens
             start_timestamp: Unix timestamp when step started (for Usage API reconciliation)
             end_timestamp: Unix timestamp when step ended (for Usage API reconciliation)
         """
@@ -70,6 +74,8 @@ class MetricsCollector:
             'hitl_count': hitl_count,
             'tokens_in': tokens_in,
             'tokens_out': tokens_out,
+            'api_calls': api_calls,
+            'cached_tokens': cached_tokens,
             'start_timestamp': start_timestamp,
             'end_timestamp': end_timestamp
         }
@@ -104,7 +110,7 @@ class MetricsCollector:
         
     def compute_efficiency_metrics(self) -> Dict[str, Any]:
         """
-        Compute efficiency metrics: TOK_IN, TOK_OUT, T_WALL.
+        Compute efficiency metrics: TOK_IN, TOK_OUT, API_CALLS, CACHED_TOKENS, T_WALL.
         
         Returns:
             Dictionary with efficiency metrics
@@ -112,6 +118,8 @@ class MetricsCollector:
         # Total tokens
         tok_in = sum(step['tokens_in'] for step in self.steps_data.values())
         tok_out = sum(step['tokens_out'] for step in self.steps_data.values())
+        api_calls = sum(step.get('api_calls', 0) for step in self.steps_data.values())
+        cached_tokens = sum(step.get('cached_tokens', 0) for step in self.steps_data.values())
         
         # Wall-clock time
         if self.start_time and self.end_time:
@@ -126,6 +134,8 @@ class MetricsCollector:
         return {
             'TOK_IN': tok_in,
             'TOK_OUT': tok_out,
+            'API_CALLS': api_calls,
+            'CACHED_TOKENS': cached_tokens,
             'T_WALL_seconds': t_wall_seconds,
             'start_timestamp': start_timestamp,
             'end_timestamp': end_timestamp
