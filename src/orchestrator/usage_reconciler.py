@@ -47,7 +47,7 @@ class UsageReconciler:
         self,
         start_timestamp: int,
         end_timestamp: int
-    ) -> tuple[int, int]:
+    ) -> tuple[int, int, int, int]:
         """
         Fetch usage data from OpenAI Usage API.
         
@@ -56,12 +56,12 @@ class UsageReconciler:
             end_timestamp: Unix timestamp for end of window
             
         Returns:
-            Tuple of (input_tokens, output_tokens)
+            Tuple of (input_tokens, output_tokens, api_calls, cached_tokens)
         """
         api_key = os.getenv('OPEN_AI_KEY_ADM')
         if not api_key:
             logger.warning("OPEN_AI_KEY_ADM not found in environment")
-            return 0, 0
+            return 0, 0, 0, 0
         
         url = "https://api.openai.com/v1/organization/usage/completions"
         headers = {
@@ -85,7 +85,7 @@ class UsageReconciler:
                 error_data = response.json()
                 if "api.usage.read" in error_data.get("error", {}).get("message", ""):
                     logger.error("API key lacks 'api.usage.read' scope")
-                    return 0, 0
+                    return 0, 0, 0, 0
             
             response.raise_for_status()
             usage_data = response.json()
@@ -93,7 +93,7 @@ class UsageReconciler:
             # Aggregate tokens from all buckets. The Usage API (Oct 2025) returns
             # input_tokens/output_tokens, but we fall back to legacy field names
             # to remain compatible with earlier API responses.
-            def _extract_tokens(result: Dict[str, Any]) -> tuple[int, int]:
+            def _extract_tokens(result: Dict[str, Any]) -> tuple[int, int, int, int]:
                 input_fields = (
                     "input_tokens",
                     "n_context_tokens_total",
@@ -108,22 +108,28 @@ class UsageReconciler:
                 )
                 tokens_in = next((int(result.get(field, 0) or 0) for field in input_fields if field in result), 0)
                 tokens_out = next((int(result.get(field, 0) or 0) for field in output_fields if field in result), 0)
-                return tokens_in, tokens_out
+                num_requests = int(result.get("num_model_requests", 0) or 0)
+                cached_tokens = int(result.get("input_cached_tokens", 0) or 0)
+                return tokens_in, tokens_out, num_requests, cached_tokens
 
             total_input_tokens = 0
             total_output_tokens = 0
+            total_api_calls = 0
+            total_cached_tokens = 0
             
             for bucket in usage_data.get("data", []):
                 for result in bucket.get("results", []):
-                    tokens_in, tokens_out = _extract_tokens(result)
+                    tokens_in, tokens_out, api_calls, cached_tokens = _extract_tokens(result)
                     total_input_tokens += tokens_in
                     total_output_tokens += tokens_out
+                    total_api_calls += api_calls
+                    total_cached_tokens += cached_tokens
             
-            return total_input_tokens, total_output_tokens
+            return total_input_tokens, total_output_tokens, total_api_calls, total_cached_tokens
             
         except Exception as e:
             logger.error(f"Failed to fetch usage from OpenAI API: {e}")
-            return 0, 0
+            return 0, 0, 0, 0
     
     def reconcile_run(
         self,
@@ -293,6 +299,8 @@ class UsageReconciler:
             'steps': [],
             'total_tokens_in': 0,
             'total_tokens_out': 0,
+            'total_api_calls': 0,
+            'total_cached_tokens': 0,
             'steps_with_tokens': 0,
             'total_steps': len(metrics.get('steps', []))
         }
@@ -331,7 +339,7 @@ class UsageReconciler:
             )
             
             try:
-                tokens_in, tokens_out = self._fetch_usage_from_openai(
+                tokens_in, tokens_out, api_calls, cached_tokens = self._fetch_usage_from_openai(
                     start_timestamp=start_timestamp,
                     end_timestamp=end_timestamp
                 )
@@ -339,9 +347,13 @@ class UsageReconciler:
                 # Update step
                 step['tokens_in'] = tokens_in
                 step['tokens_out'] = tokens_out
+                step['api_calls'] = api_calls
+                step['cached_tokens'] = cached_tokens
                 
                 attempt['total_tokens_in'] += tokens_in
                 attempt['total_tokens_out'] += tokens_out
+                attempt['total_api_calls'] += api_calls
+                attempt['total_cached_tokens'] += cached_tokens
                 
                 if tokens_in > 0 or tokens_out > 0:
                     attempt['steps_with_tokens'] += 1
@@ -350,7 +362,9 @@ class UsageReconciler:
                     'step': step_num,
                     'status': 'success',
                     'tokens_in': tokens_in,
-                    'tokens_out': tokens_out
+                    'tokens_out': tokens_out,
+                    'api_calls': api_calls,
+                    'cached_tokens': cached_tokens
                 })
                 
             except Exception as e:
@@ -363,7 +377,9 @@ class UsageReconciler:
                     'status': 'error',
                     'error': str(e),
                     'tokens_in': 0,
-                    'tokens_out': 0
+                    'tokens_out': 0,
+                    'api_calls': 0,
+                    'cached_tokens': 0
                 })
         
         return attempt
