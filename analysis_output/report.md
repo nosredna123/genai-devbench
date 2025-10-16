@@ -1,6 +1,6 @@
 # Statistical Analysis Report
 
-**Generated:** 2025-10-16 13:45:21 UTC
+**Generated:** 2025-10-16 13:50:05 UTC
 
 **Frameworks:** ghspec, chatdev, baes
 
@@ -339,4 +339,47 @@ No outliers detected.
 | ghspec | 0.000 | [0.000, 0.000] | 0.109 | [0.091, 0.128] |
 | chatdev | 0.000 | [0.000, 0.000] | 0.081 | [0.080, 0.081] |
 | baes | 0.000 | [0.000, 0.000] | 0.099 | [0.099, 0.099] |
+
+
+## 6. Visual Summary
+
+### Key Visualizations
+
+The following charts provide visual insights into framework performance:
+
+**Radar Chart** - Multi-dimensional comparison across 6 key metrics
+
+![Radar Chart](radar_chart.svg)
+
+**Pareto Plot** - Quality vs Cost trade-off analysis
+
+![Pareto Plot](pareto_plot.svg)
+
+**Timeline Chart** - CRUD evolution over execution steps
+
+![Timeline Chart](timeline_chart.svg)
+
+---
+
+## 7. Recommendations
+
+### 🎯 Framework Selection Guidance
+
+- **💰 Cost Optimization**: Choose **baes** if minimizing LLM token costs is priority. It uses 9.4x fewer tokens than chatdev.
+
+- **⚡ Speed Priority**: Choose **baes** for fastest execution. It completes tasks 7.5x faster than chatdev (saves ~25.7 minutes per task).
+
+- **⚙️ Efficiency Leader**: **ghspec** delivers the best quality-per-token ratio (AEI = 0.109), making it ideal for balancing quality and cost.
+
+- **🤖 Automation**: All frameworks achieve perfect test automation (AUTR = 1.0) - automation quality is not a differentiating factor.
+
+- **⚠️ Data Quality Alert**: Metrics Q_star, ESR, CRUDe, MC show zero values across all frameworks. Verify metric calculation before making quality-based decisions.
+
+### 📋 Decision Matrix
+
+| Use Case | Recommended Framework | Rationale |
+|----------|----------------------|-----------|
+| Cost-sensitive projects | baes | Lowest token consumption |
+| Time-critical tasks | baes | Fastest execution time |
+| Balanced quality/cost | ghspec | Best efficiency index (AEI) |
 

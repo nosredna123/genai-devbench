@@ -1054,6 +1054,131 @@ def generate_statistical_report(
     
     lines.extend(["", ""])
     
+    # Section 6: Visual Summary
+    lines.extend([
+        "## 6. Visual Summary",
+        "",
+        "### Key Visualizations",
+        "",
+        "The following charts provide visual insights into framework performance:",
+        "",
+        "**Radar Chart** - Multi-dimensional comparison across 6 key metrics",
+        "",
+        "![Radar Chart](radar_chart.svg)",
+        "",
+        "**Pareto Plot** - Quality vs Cost trade-off analysis",
+        "",
+        "![Pareto Plot](pareto_plot.svg)",
+        "",
+        "**Timeline Chart** - CRUD evolution over execution steps",
+        "",
+        "![Timeline Chart](timeline_chart.svg)",
+        "",
+        "---",
+        ""
+    ])
+    
+    # Section 7: Recommendations
+    lines.extend([
+        "## 7. Recommendations",
+        "",
+        "### 🎯 Framework Selection Guidance",
+        ""
+    ])
+    
+    # Generate recommendations based on analysis
+    # Extract mean values from framework_means for recommendation logic
+    simple_aggregated = {}
+    for framework, metrics in framework_means.items():
+        simple_aggregated[framework] = {
+            metric: stats['mean']
+            for metric, stats in metrics.items()
+        }
+    
+    recommendations = []
+    
+    # Analyze the data to provide recommendations
+    if all('TOK_IN' in data for data in simple_aggregated.values()):
+        min_tokens = min(simple_aggregated.items(), key=lambda x: x[1].get('TOK_IN', float('inf')))
+        max_tokens = max(simple_aggregated.items(), key=lambda x: x[1].get('TOK_IN', 0))
+        
+        if min_tokens[1]['TOK_IN'] > 0 and max_tokens[1]['TOK_IN'] / min_tokens[1]['TOK_IN'] > 3:
+            recommendations.append(
+                f"**💰 Cost Optimization**: Choose **{min_tokens[0]}** if minimizing LLM token costs is priority. "
+                f"It uses {max_tokens[1]['TOK_IN'] / min_tokens[1]['TOK_IN']:.1f}x fewer tokens than {max_tokens[0]}."
+            )
+    
+    if all('T_WALL_seconds' in data for data in simple_aggregated.values()):
+        fastest = min(simple_aggregated.items(), key=lambda x: x[1].get('T_WALL_seconds', float('inf')))
+        slowest = max(simple_aggregated.items(), key=lambda x: x[1].get('T_WALL_seconds', 0))
+        
+        if fastest[1]['T_WALL_seconds'] > 0 and slowest[1]['T_WALL_seconds'] / fastest[1]['T_WALL_seconds'] > 2:
+            time_diff = slowest[1]['T_WALL_seconds'] - fastest[1]['T_WALL_seconds']
+            recommendations.append(
+                f"**⚡ Speed Priority**: Choose **{fastest[0]}** for fastest execution. "
+                f"It completes tasks {slowest[1]['T_WALL_seconds'] / fastest[1]['T_WALL_seconds']:.1f}x faster than {slowest[0]} "
+                f"(saves ~{time_diff / 60:.1f} minutes per task)."
+            )
+    
+    if all('AEI' in data for data in simple_aggregated.values()):
+        best_efficiency = max(simple_aggregated.items(), key=lambda x: x[1].get('AEI', 0))
+        recommendations.append(
+            f"**⚙️ Efficiency Leader**: **{best_efficiency[0]}** delivers the best quality-per-token ratio (AEI = {best_efficiency[1]['AEI']:.3f}), "
+            f"making it ideal for balancing quality and cost."
+        )
+    
+    if all('AUTR' in data for data in simple_aggregated.values()):
+        autr_values = [data['AUTR'] for data in simple_aggregated.values()]
+        if all(v == 1.0 for v in autr_values):
+            recommendations.append(
+                "**🤖 Automation**: All frameworks achieve perfect test automation (AUTR = 1.0) - "
+                "automation quality is not a differentiating factor."
+            )
+    
+    # Check for quality concerns
+    quality_metrics = ['Q_star', 'ESR', 'CRUDe', 'MC']
+    zero_metrics = []
+    for metric in quality_metrics:
+        if all(metric in data and data[metric] == 0 for data in simple_aggregated.values()):
+            zero_metrics.append(metric)
+    
+    if zero_metrics:
+        recommendations.append(
+            f"**⚠️ Data Quality Alert**: Metrics {', '.join(zero_metrics)} show zero values across all frameworks. "
+            f"Verify metric calculation before making quality-based decisions."
+        )
+    
+    # Add recommendations to report
+    if recommendations:
+        for rec in recommendations:
+            lines.append(f"- {rec}")
+            lines.append("")
+    else:
+        lines.append("*No specific recommendations available - insufficient data variance.*")
+        lines.append("")
+    
+    lines.extend([
+        "### 📋 Decision Matrix",
+        "",
+        "| Use Case | Recommended Framework | Rationale |",
+        "|----------|----------------------|-----------|"
+    ])
+    
+    # Build decision matrix
+    if all('TOK_IN' in data for data in simple_aggregated.values()):
+        min_tokens = min(simple_aggregated.items(), key=lambda x: x[1].get('TOK_IN', float('inf')))
+        lines.append(f"| Cost-sensitive projects | {min_tokens[0]} | Lowest token consumption |")
+    
+    if all('T_WALL_seconds' in data for data in simple_aggregated.values()):
+        fastest = min(simple_aggregated.items(), key=lambda x: x[1].get('T_WALL_seconds', float('inf')))
+        lines.append(f"| Time-critical tasks | {fastest[0]} | Fastest execution time |")
+    
+    if all('AEI' in data for data in simple_aggregated.values()):
+        best_efficiency = max(simple_aggregated.items(), key=lambda x: x[1].get('AEI', 0))
+        lines.append(f"| Balanced quality/cost | {best_efficiency[0]} | Best efficiency index (AEI) |")
+    
+    lines.extend(["", ""])
+    
     # Write to file
     output_path_obj = Path(output_path)
     output_path_obj.parent.mkdir(parents=True, exist_ok=True)
