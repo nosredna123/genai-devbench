@@ -1,32 +1,68 @@
-# API Calls Metric Implementation Plan
+# API Calls + Cache Metrics Implementation Plan
 
 **Date**: October 16, 2025  
-**Status**: 📋 Planning  
-**Estimated Effort**: 1 hour (50 lines of code changes)
+**Status**: 📋 Planning (UPDATED - Extended Scope)  
+**Estimated Effort**: 1.5 hours (80 lines of code changes)
 
 ## Overview
 
-Add a new metric called **`api_calls`** that tracks the number of API requests made to OpenAI during each experimental step. This metric leverages the existing OpenAI Usage API infrastructure to extract `num_model_requests` alongside token counts.
+Add **two new metrics** that leverage the existing OpenAI Usage API infrastructure:
+
+1. **`api_calls`**: Number of API requests made to OpenAI (from `num_model_requests` field)
+2. **`cached_tokens`**: Number of input tokens served from cache (from `input_cached_tokens` field)
+
+Both fields exist in the same API response currently used for token counting, requiring no additional API calls.
+
+## Quick Summary (TL;DR)
+
+**What's changing?**
+- Extract 2 additional fields from OpenAI Usage API response (already available, currently ignored)
+- Change return signature: `(tokens_in, tokens_out)` → `(tokens_in, tokens_out, api_calls, cached_tokens)`
+- Add 2 new columns to metrics.json per step: `api_calls` and `cached_tokens`
+
+**Why?**
+1. **`api_calls`**: Measure communication intensity (0.56 calls/1K tokens baseline)
+2. **`cached_tokens`**: Measure cost optimization (10% cache hit rate = ~10% cost savings)
+
+**Impact:**
+- ✅ No new API calls required
+- ✅ ~80 lines of code changes across 6 files
+- ✅ Backward compatible (tests handle both 2-tuple and 4-tuple)
+- ✅ Immediate insights into framework efficiency and costs
+
+**Effort**: 1.5 hours total (20 min per phase × 5 phases)
+
+---
 
 ## Motivation
 
 ### Scientific Value
 
+#### API Calls Metric
 1. **Efficiency Analysis**: Measure API calls per token to identify frameworks that batch requests efficiently
 2. **Communication Patterns**: Understand inter-agent or iterative refinement intensity
 3. **Cost-Effectiveness**: Correlate API call volume with quality outcomes
 4. **Step-wise Insights**: Identify which development phases trigger most AI interactions
 
+#### Cached Tokens Metric
+1. **Cost Optimization**: Cached tokens are ~90% cheaper than uncached tokens
+2. **Cache Hit Rate**: Measure prompt reuse effectiveness (current: **10%** cache hit rate)
+3. **Framework Comparison**: Identify which frameworks benefit most from prompt caching
+4. **Real Cost Analysis**: Calculate actual API costs considering cache discounts
+
 ### Current Infrastructure
 
-✅ **Already Available**: OpenAI Usage API returns `num_model_requests` in the same response as token counts  
+✅ **Already Available**: OpenAI Usage API returns both `num_model_requests` AND `input_cached_tokens` in the same response  
 ✅ **No Additional Costs**: No extra API calls needed  
 ✅ **Time-Window Isolation**: Same accurate attribution as token tracking  
-✅ **Framework-Agnostic**: Works identically for ChatDev, GHSpec, and BAEs
+✅ **Framework-Agnostic**: Works identically for ChatDev, GHSpec, and BAEs  
+✅ **Significant Impact**: 10% cache hit rate observed in recent data (42,624 cached tokens over 7 days)
 
-## Metric Definition
+## Metric Definitions
 
-### Name: `api_calls`
+### Metric 1: `api_calls`
+
+**Source Field**: `num_model_requests` from OpenAI Usage API
 
 **Rationale**: 
 - ✅ Accurate: Reflects actual OpenAI API requests
@@ -34,7 +70,7 @@ Add a new metric called **`api_calls`** that tracks the number of API requests m
 - ✅ Actionable: Clear interpretation for efficiency analysis
 - ❌ Rejected alternatives: `utterances` (misleading for non-agent frameworks), `model_interactions` (verbose)
 
-### Interpretation by Framework
+#### Interpretation by Framework
 
 | Framework | API Call Represents | Expected Pattern |
 |-----------|---------------------|------------------|
@@ -42,11 +78,33 @@ Add a new metric called **`api_calls`** that tracks the number of API requests m
 | **GHSpec** | Iterative refinement cycle (spec→plan→tasks→code) | Moderate (4-phase workflow) |
 | **BAEs** | Kernel-mediated entity interaction | Variable (depends on coordination) |
 
+### Metric 2: `cached_tokens`
+
+**Source Field**: `input_cached_tokens` from OpenAI Usage API
+
+**Description**: Number of input tokens served from OpenAI's prompt cache instead of being processed fresh.
+
+**Cost Impact**:
+- **Uncached tokens**: $2.50 per 1M input tokens (gpt-4o-mini)
+- **Cached tokens**: $0.25 per 1M input tokens (90% discount)
+- **Example**: 42,624 cached tokens = ~$0.096 savings vs. $0.107 full cost = **10% cost reduction**
+
+#### Interpretation by Framework
+
+| Framework | Cache Benefit Expectation | Why |
+|-----------|---------------------------|-----|
+| **ChatDev** | High | Repeated role prompts, similar task templates |
+| **GHSpec** | Medium | Iterative spec refinements reuse context |
+| **BAEs** | Medium-High | Entity definitions and kernel instructions repeat |
+
 ### Derived Metrics
+
+#### From `api_calls`:
 
 1. **API Efficiency Ratio**: `api_calls / (tokens_in + tokens_out)`
    - Lower = fewer, larger calls (efficient batching)
    - Higher = many small calls (chatty communication)
+   - **Baseline**: 0.56 calls per 1K tokens (from recent data)
 
 2. **Calls Per Step**: `api_calls` aggregated by step number
    - Identify which development phases are most API-intensive
@@ -54,9 +112,31 @@ Add a new metric called **`api_calls`** that tracks the number of API requests m
 3. **Total Run Calls**: Sum of `api_calls` across all steps
    - Overall framework communication intensity
 
+#### From `cached_tokens`:
+
+1. **Cache Hit Rate**: `(cached_tokens / tokens_in) * 100`
+   - Percentage of input tokens served from cache
+   - **Baseline**: 10.0% (from recent data: 42,624 / 426,712)
+
+2. **Cost Savings**: `cached_tokens * (base_price - cache_price)`
+   - Actual dollar savings from caching
+   - Example: `42,624 * ($2.50 - $0.25) / 1M = $0.096 saved`
+
+3. **Effective Cost Per Token**: Recalculate considering cache discount
+   - More accurate than using base pricing
+
+#### Combined Metrics:
+
+1. **Avg Tokens Per Call**: `(tokens_in + tokens_out) / api_calls`
+   - **Baseline**: 1,772 tokens/call (from recent data)
+   - Larger = better batching
+
+2. **Cache-Adjusted Efficiency**: Combine cache savings with call efficiency
+   - Frameworks with high cache rates AND low call counts = most efficient
+
 ## Implementation Plan
 
-### Phase 1: Data Collection (15 min)
+### Phase 1: Data Collection (20 min)
 
 **File**: `src/adapters/base_adapter.py`
 
@@ -81,10 +161,10 @@ def fetch_usage_from_openai(
     start_timestamp: int,
     end_timestamp: Optional[int] = None,
     model: Optional[str] = None
-) -> Tuple[int, int, int]:  # ← (tokens_in, tokens_out, api_calls)
+) -> Tuple[int, int, int, int]:  # ← (tokens_in, tokens_out, api_calls, cached_tokens)
 ```
 
-#### Change 1.2: Extract `num_model_requests` from API response
+#### Change 1.2: Extract both `num_model_requests` and `input_cached_tokens` from API response
 
 **Location**: `base_adapter.py` lines ~140-165
 
@@ -111,26 +191,32 @@ return total_input_tokens, total_output_tokens
 
 **Updated**:
 ```python
-def _extract_tokens(result: Dict[str, Any]) -> tuple[int, int, int]:
+def _extract_tokens(result: Dict[str, Any]) -> tuple[int, int, int, int]:
     input_fields = ("input_tokens", "n_context_tokens_total", ...)
     output_fields = ("output_tokens", "n_generated_tokens_total", ...)
     tokens_in = next((int(result.get(field, 0) or 0) for field in input_fields if field in result), 0)
     tokens_out = next((int(result.get(field, 0) or 0) for field in output_fields if field in result), 0)
+    
+    # Extract API call count and cached tokens
     num_requests = int(result.get("num_model_requests", 0) or 0)  # ← NEW
-    return tokens_in, tokens_out, num_requests
+    cached_tokens = int(result.get("input_cached_tokens", 0) or 0)  # ← NEW
+    
+    return tokens_in, tokens_out, num_requests, cached_tokens
 
 total_input_tokens = 0
 total_output_tokens = 0
 total_api_calls = 0  # ← NEW
+total_cached_tokens = 0  # ← NEW
 
 for bucket in usage_data.get("data", []):
     for result in bucket.get("results", []):
-        tokens_in, tokens_out, num_requests = _extract_tokens(result)  # ← UPDATED
+        tokens_in, tokens_out, num_requests, cached = _extract_tokens(result)  # ← UPDATED
         total_input_tokens += tokens_in
         total_output_tokens += tokens_out
         total_api_calls += num_requests  # ← NEW
+        total_cached_tokens += cached  # ← NEW
 
-return total_input_tokens, total_output_tokens, total_api_calls  # ← UPDATED
+return total_input_tokens, total_output_tokens, total_api_calls, total_cached_tokens  # ← UPDATED
 ```
 
 #### Change 1.3: Update logging
@@ -165,6 +251,8 @@ logger.info(
             'tokens_in': total_input_tokens,
             'tokens_out': total_output_tokens,
             'api_calls': total_api_calls,  # ← NEW
+            'cached_tokens': total_cached_tokens,  # ← NEW
+            'cache_hit_rate': f"{(total_cached_tokens / total_input_tokens * 100):.1f}%" if total_input_tokens > 0 else "0%",  # ← NEW
             'buckets_count': len(usage_data.get("data", [])),
             'model': model
         }
@@ -176,23 +264,23 @@ logger.info(
 
 **Location**: `base_adapter.py` lines ~85, 120, 181-190
 
-**All returns** `(0, 0)` → `(0, 0, 0)`:
+**All returns** `(0, 0)` → `(0, 0, 0, 0)`:
 ```python
 # Line ~85 (missing API key)
-return 0, 0, 0
+return 0, 0, 0, 0
 
 # Line ~120 (permission error)
-return 0, 0, 0
+return 0, 0, 0, 0
 
 # Line ~186 (exception handler)
-return 0, 0, 0
+return 0, 0, 0, 0
 ```
 
 ---
 
-### Phase 2: Adapter Updates (15 min)
+### Phase 2: Adapter Updates (20 min)
 
-Update all framework adapters to capture the third return value.
+Update all framework adapters to capture both new return values.
 
 #### File: `src/adapters/chatdev_adapter.py`
 
@@ -210,7 +298,7 @@ tokens_in, tokens_out = self.fetch_usage_from_openai(
 
 **Updated**:
 ```python
-tokens_in, tokens_out, api_calls = self.fetch_usage_from_openai(
+tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
     api_key_env_var='OPEN_AI_KEY_ADM',
     start_timestamp=self._step_start_time,
     end_timestamp=end_timestamp,
@@ -244,6 +332,7 @@ return {
     'tokens_in': tokens_in,
     'tokens_out': tokens_out,
     'api_calls': api_calls,  # ← NEW
+    'cached_tokens': cached_tokens,  # ← NEW
     'start_timestamp': self._step_start_time,
     'end_timestamp': end_timestamp
 }
@@ -252,18 +341,18 @@ return {
 #### File: `src/adapters/ghspec_adapter.py`
 
 **Apply identical changes** to the `execute_step()` method:
-- Update `fetch_usage_from_openai()` call to capture third value
-- Add `'api_calls': api_calls` to return dictionary
+- Update `fetch_usage_from_openai()` call to capture 4 values
+- Add `'api_calls': api_calls` and `'cached_tokens': cached_tokens` to return dictionary
 
 #### File: `src/adapters/baes_adapter.py`
 
 **Apply identical changes** to the `execute_step()` method:
-- Update `fetch_usage_from_openai()` call to capture third value
-- Add `'api_calls': api_calls` to return dictionary
+- Update `fetch_usage_from_openai()` call to capture 4 values
+- Add `'api_calls': api_calls` and `'cached_tokens': cached_tokens` to return dictionary
 
 ---
 
-### Phase 3: Storage & Reconciliation (10 min)
+### Phase 3: Storage & Reconciliation (15 min)
 
 #### File: `src/orchestrator/usage_reconciler.py`
 
@@ -288,17 +377,20 @@ def _fetch_usage_from_openai(
     self,
     start_timestamp: int,
     end_timestamp: int
-) -> tuple[int, int, int]:
+) -> tuple[int, int, int, int]:
     # ... existing code ...
     total_api_calls = 0  # ← NEW (aggregate from buckets)
+    total_cached_tokens = 0  # ← NEW (aggregate from buckets)
     
     for bucket in usage_data.get("data", []):
         for result in bucket.get("results", []):
             # ... extract tokens ...
             num_requests = int(result.get("num_model_requests", 0) or 0)  # ← NEW
+            cached = int(result.get("input_cached_tokens", 0) or 0)  # ← NEW
             total_api_calls += num_requests  # ← NEW
+            total_cached_tokens += cached  # ← NEW
     
-    return total_input_tokens, total_output_tokens, total_api_calls
+    return total_input_tokens, total_output_tokens, total_api_calls, total_cached_tokens
 ```
 
 **Change 3.2**: Update reconciliation logic
@@ -318,7 +410,7 @@ step['tokens_out'] = tokens_out
 
 **Updated**:
 ```python
-tokens_in, tokens_out, api_calls = self._fetch_usage_from_openai(
+tokens_in, tokens_out, api_calls, cached_tokens = self._fetch_usage_from_openai(
     start_timestamp=step.get('start_timestamp'),
     end_timestamp=step.get('end_timestamp')
 )
@@ -326,15 +418,16 @@ tokens_in, tokens_out, api_calls = self._fetch_usage_from_openai(
 step['tokens_in'] = tokens_in
 step['tokens_out'] = tokens_out
 step['api_calls'] = api_calls  # ← NEW
+step['cached_tokens'] = cached_tokens  # ← NEW
 ```
 
 ---
 
-### Phase 4: Analysis & Reporting (15 min)
+### Phase 4: Analysis & Reporting (20 min)
 
 #### File: `src/analysis/statistics.py`
 
-**Change 4.1**: Extract `api_calls` from metrics
+**Change 4.1**: Extract `api_calls` and `cached_tokens` from metrics
 
 **Location**: Lines ~100-150 (metric extraction section)
 
@@ -342,22 +435,36 @@ step['api_calls'] = api_calls  # ← NEW
 ```python
 # Extract API calls
 api_calls_data = []
+cached_tokens_data = []
+
 for run in runs:
     steps = run['metrics'].get('steps', [])
     total_calls = sum(step.get('api_calls', 0) for step in steps)
+    total_cached = sum(step.get('cached_tokens', 0) for step in steps)
+    total_tokens_in = sum(step.get('tokens_in', 0) for step in steps)
+    
     api_calls_data.append({
         'framework': run['framework'],
         'run_id': run['run_id'],
         'total_calls': total_calls,
         'steps': [step.get('api_calls', 0) for step in steps]
     })
+    
+    cached_tokens_data.append({
+        'framework': run['framework'],
+        'run_id': run['run_id'],
+        'total_cached': total_cached,
+        'total_tokens_in': total_tokens_in,
+        'cache_hit_rate': (total_cached / total_tokens_in * 100) if total_tokens_in > 0 else 0,
+        'steps': [step.get('cached_tokens', 0) for step in steps]
+    })
 ```
 
-**Change 4.2**: Add statistical analysis
+**Change 4.2**: Add statistical analysis for both metrics
 
 **Location**: Lines ~300-400 (after existing metric analysis)
 
-**Add new section**:
+**Add new sections**:
 ```python
 def _analyze_api_calls(self, runs: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Analyze API call patterns across frameworks."""
@@ -371,26 +478,94 @@ def _analyze_api_calls(self, runs: List[Dict[str, Any]]) -> Dict[str, Any]:
         framework = run['framework']
         steps = run['metrics'].get('steps', [])
         total_calls = sum(step.get('api_calls', 0) for step in steps)
+        total_tokens = sum(step.get('tokens_in', 0) + step.get('tokens_out', 0) for step in steps)
         
         if framework == 'chatdev':
-            chatdev_calls.append(total_calls)
+            chatdev_calls.append({
+                'calls': total_calls,
+                'tokens': total_tokens,
+                'efficiency': total_calls / (total_tokens / 1000) if total_tokens > 0 else 0
+            })
         elif framework == 'ghspec':
-            ghspec_calls.append(total_calls)
+            ghspec_calls.append({
+                'calls': total_calls,
+                'tokens': total_tokens,
+                'efficiency': total_calls / (total_tokens / 1000) if total_tokens > 0 else 0
+            })
         elif framework == 'baes':
-            baes_calls.append(total_calls)
+            baes_calls.append({
+                'calls': total_calls,
+                'tokens': total_tokens,
+                'efficiency': total_calls / (total_tokens / 1000) if total_tokens > 0 else 0
+            })
     
     # Compute statistics
     results = {}
     
     for framework, data in [('chatdev', chatdev_calls), ('ghspec', ghspec_calls), ('baes', baes_calls)]:
         if data:
+            calls = [d['calls'] for d in data]
+            efficiencies = [d['efficiency'] for d in data]
+            
             results[framework] = {
-                'mean': np.mean(data),
-                'median': np.median(data),
-                'std': np.std(data),
-                'min': np.min(data),
-                'max': np.max(data),
-                'ci_95': self._bootstrap_ci(data) if len(data) > 1 else (np.mean(data), np.mean(data))
+                'mean_calls': np.mean(calls),
+                'median_calls': np.median(calls),
+                'std_calls': np.std(calls),
+                'min_calls': np.min(calls),
+                'max_calls': np.max(calls),
+                'mean_efficiency': np.mean(efficiencies),  # calls per 1K tokens
+                'ci_95': self._bootstrap_ci(calls) if len(calls) > 1 else (np.mean(calls), np.mean(calls))
+            }
+    
+    return results
+
+def _analyze_cache_efficiency(self, runs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Analyze prompt caching efficiency across frameworks."""
+    
+    # Extract data by framework
+    chatdev_cache = []
+    ghspec_cache = []
+    baes_cache = []
+    
+    for run in runs:
+        framework = run['framework']
+        steps = run['metrics'].get('steps', [])
+        total_cached = sum(step.get('cached_tokens', 0) for step in steps)
+        total_input = sum(step.get('tokens_in', 0) for step in steps)
+        
+        cache_data = {
+            'cached': total_cached,
+            'total_input': total_input,
+            'hit_rate': (total_cached / total_input * 100) if total_input > 0 else 0,
+            'cost_savings': total_cached * (2.50 - 0.25) / 1_000_000  # gpt-4o-mini pricing
+        }
+        
+        if framework == 'chatdev':
+            chatdev_cache.append(cache_data)
+        elif framework == 'ghspec':
+            ghspec_cache.append(cache_data)
+        elif framework == 'baes':
+            baes_cache.append(cache_data)
+    
+    # Compute statistics
+    results = {}
+    
+    for framework, data in [('chatdev', chatdev_cache), ('ghspec', ghspec_cache), ('baes', baes_cache)]:
+        if data:
+            hit_rates = [d['hit_rate'] for d in data]
+            savings = [d['cost_savings'] for d in data]
+            
+            results[framework] = {
+                'mean_cache_hit_rate': np.mean(hit_rates),
+                'median_cache_hit_rate': np.median(hit_rates),
+                'std_cache_hit_rate': np.std(hit_rates),
+                'total_cost_savings': np.sum(savings),
+                'mean_cost_savings': np.mean(savings),
+                'ci_95': self._bootstrap_ci(hit_rates) if len(hit_rates) > 1 else (np.mean(hit_rates), np.mean(hit_rates))
+            }
+    
+    return results
+```
             }
     
     # Kruskal-Wallis test
@@ -955,7 +1130,9 @@ grep -A 20 "API Calls" analysis_output/report.md
 
 ### Typical Values (Estimated)
 
-Based on framework architectures:
+Based on framework architectures and recent data (7-day baseline):
+
+#### API Calls Metric
 
 | Framework | Expected API Calls (6 steps) | Calls per Step | Efficiency (calls/1K tokens) |
 |-----------|------------------------------|----------------|------------------------------|
@@ -963,7 +1140,26 @@ Based on framework architectures:
 | **GHSpec** | 50-100 | 8-17 | 2-5 (moderate, 4-phase) |
 | **BAEs** | 30-80 | 5-13 | 1-4 (low, direct API) |
 
+**Baseline from recent data**: 0.56 calls/1K tokens (very efficient batching)
+
+#### Cached Tokens Metric
+
+| Framework | Expected Cache Hit Rate | Why |
+|-----------|------------------------|-----|
+| **ChatDev** | 15-25% | High prompt reuse (role templates, similar tasks) |
+| **GHSpec** | 8-15% | Moderate reuse (iterative spec refinement) |
+| **BAEs** | 10-20% | Variable reuse (entity definitions, kernel instructions) |
+
+**Baseline from recent data**: 10.0% cache hit rate (42,624 cached / 426,712 input tokens)
+
+**Cost Impact**:
+- Cached tokens: $0.25 per 1M tokens (90% discount)
+- Uncached tokens: $2.50 per 1M tokens
+- Example savings: 42,624 cached tokens = ~$0.096 saved (vs. $0.107 full cost)
+
 ### Interpretation Guidelines
+
+#### API Calls
 
 **High API Calls** (>200 total):
 - ✅ Rich multi-agent dialogue
@@ -982,20 +1178,39 @@ Based on framework architectures:
 - `3-7 calls/1K tokens`: Balanced (typical)
 - `> 7 calls/1K tokens`: Chatty (many small interactions)
 
+#### Cache Hit Rate
+
+**High Cache Rate** (>20%):
+- ✅ Excellent prompt reuse
+- ✅ Significant cost savings
+- ✅ Consistent task structure
+
+**Moderate Cache Rate** (10-20%):
+- ✅ Good prompt reuse (typical)
+- ✅ Moderate cost savings
+- ℹ️ Variable task patterns
+
+**Low Cache Rate** (<10%):
+- ⚠️ Limited prompt reuse
+- ⚠️ Minimal cost savings
+- ℹ️ Highly diverse tasks or short prompts
+
 ---
 
 ## Success Criteria
 
 1. ✅ All unit tests pass
-2. ✅ Integration test with live Usage API returns 3-tuple
-3. ✅ E2E test finds `api_calls` in metrics.json
+2. ✅ Integration test with live Usage API returns 4-tuple
+3. ✅ E2E test finds both `api_calls` and `cached_tokens` in metrics.json
 4. ✅ Report includes API Calls section with statistics
-5. ✅ Radar chart displays `api_calls` dimension
-6. ✅ Timeline chart shows step-wise patterns
-7. ✅ No regression in existing token/timing metrics
-8. ✅ Statistical analysis (Kruskal-Wallis) runs without errors
-9. ✅ CI/CD pipeline passes (if applicable)
-10. ✅ Documentation updated
+5. ✅ Report includes Cache Efficiency section with cost analysis
+6. ✅ Radar chart displays both `api_calls` and `cache_hit_rate` dimensions
+7. ✅ Timeline chart shows step-wise API call patterns
+8. ✅ New chart shows cache hit rate evolution across frameworks
+9. ✅ No regression in existing token/timing metrics
+10. ✅ Statistical analysis (Kruskal-Wallis) runs without errors
+11. ✅ CI/CD pipeline passes (if applicable)
+12. ✅ Documentation updated
 
 ---
 
@@ -1004,24 +1219,31 @@ Based on framework architectures:
 1. **Derived Metrics**:
    - API Efficiency Score: `(tokens_total / api_calls) / 1000`
    - Communication Overhead: `(api_calls * avg_latency_ms) / total_duration`
+   - Effective Cost Per Token: Account for cache discounts
+   - Cost Savings Ratio: `(cached_tokens * price_difference) / total_cost`
 
 2. **Detailed Breakdown**:
    - If OpenAI API adds per-agent/per-phase metadata, capture it
    - Cross-reference with HITL events (does HITL correlate with more API calls?)
+   - Track cache miss reasons (if API provides this data)
 
 3. **Anomaly Detection**:
    - Flag steps with unusually high/low API calls
    - Alert if `api_calls = 0` but `tokens > 0` (data integrity issue)
+   - Detect cache rate drops (may indicate prompt changes)
 
 4. **Cost Analysis**:
    - Combine with per-call pricing to estimate API cost per call
    - Compare total cost vs. quality outcomes
+   - Project cost savings from cache optimization
+   - ROI analysis: cache benefits vs. framework complexity
 
 ---
 
 ## References
 
 - **OpenAI Usage API**: https://platform.openai.com/docs/api-reference/usage
+- **Unused Fields Analysis**: `docs/unused_openai_fields_analysis.md`
 - **Token Counting Implementation**: `docs/token_counting_implementation.md`
 - **Metric Definitions**: `docs/metrics.md`
 - **Statistical Methods**: `docs/test_results_2025-10-09.md`
@@ -1033,4 +1255,5 @@ Based on framework architectures:
 | Date | Change | Author |
 |------|--------|--------|
 | 2025-10-16 | Initial implementation plan created | GitHub Copilot |
+| 2025-10-16 | Extended scope to include cached_tokens metric | GitHub Copilot |
 
