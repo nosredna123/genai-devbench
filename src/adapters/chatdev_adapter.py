@@ -683,7 +683,7 @@ class ChatDevAdapter(BaseAdapter):
             
             # Query Usage API for tokens in this time window
             # No model/API key filtering - time window isolation is sufficient
-            tokens_in, tokens_out = self.fetch_usage_from_openai(
+            tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
                 api_key_env_var='OPEN_AI_KEY_ADM',  # Admin key with usage.read scope
                 start_timestamp=self._step_start_time,
                 end_timestamp=end_timestamp,
@@ -705,6 +705,8 @@ class ChatDevAdapter(BaseAdapter):
                                  'duration': duration,
                                  'tokens_in': tokens_in,
                                  'tokens_out': tokens_out,
+                                 'api_calls': api_calls,
+                                 'cached_tokens': cached_tokens,
                                  'hitl_count': hitl_count,
                                  'exit_code': result.returncode
                              }})
@@ -715,6 +717,8 @@ class ChatDevAdapter(BaseAdapter):
                 'hitl_count': hitl_count,
                 'tokens_in': tokens_in,
                 'tokens_out': tokens_out,
+                'api_calls': api_calls,
+                'cached_tokens': cached_tokens,
                 'retry_count': 0,
                 'start_timestamp': self._step_start_time,
                 'end_timestamp': end_timestamp

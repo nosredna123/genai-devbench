@@ -350,7 +350,7 @@ class GHSpecAdapter(BaseAdapter):
         
         # Fetch token usage from OpenAI Usage API
         api_call_end = int(time.time())
-        tokens_in, tokens_out = self.fetch_usage_from_openai(
+        tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
             api_key_env_var='OPEN_AI_KEY_ADM',  # Admin key for Usage API
             start_timestamp=api_call_start,
             end_timestamp=api_call_end,
@@ -363,10 +363,12 @@ class GHSpecAdapter(BaseAdapter):
                              'output_path': str(output_path),
                              'hitl_count': hitl_count,
                              'tokens_in': tokens_in,
-                             'tokens_out': tokens_out
+                             'tokens_out': tokens_out,
+                             'api_calls': api_calls,
+                             'cached_tokens': cached_tokens
                          }})
         
-        return hitl_count, tokens_in, tokens_out, api_call_start, api_call_end
+        return hitl_count, tokens_in, tokens_out, api_calls, cached_tokens, api_call_start, api_call_end
     
     def _load_prompt_template(self, template_path: Path) -> Tuple[str, str]:
         """
@@ -629,6 +631,8 @@ class GHSpecAdapter(BaseAdapter):
         total_hitl_count = 0
         total_tokens_in = 0
         total_tokens_out = 0
+        total_api_calls = 0
+        total_cached_tokens = 0
         
         # Track overall start time (before first task)
         overall_start_timestamp = int(time.time())
@@ -667,7 +671,7 @@ class GHSpecAdapter(BaseAdapter):
             
             # Fetch token usage
             api_call_end = int(time.time())
-            tokens_in, tokens_out = self.fetch_usage_from_openai(
+            tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
                 api_key_env_var='OPEN_AI_KEY_ADM',  # Admin key for Usage API
                 start_timestamp=api_call_start,
                 end_timestamp=api_call_end,
@@ -678,6 +682,8 @@ class GHSpecAdapter(BaseAdapter):
             total_hitl_count += hitl_count
             total_tokens_in += tokens_in
             total_tokens_out += tokens_out
+            total_api_calls += api_calls
+            total_cached_tokens += cached_tokens
             
             logger.info(f"Task {task['id']} completed",
                        extra={'run_id': self.run_id, 'step': self.current_step,
@@ -694,13 +700,15 @@ class GHSpecAdapter(BaseAdapter):
                              'tasks_completed': len(tasks),
                              'total_hitl': total_hitl_count,
                              'total_tokens_in': total_tokens_in,
-                             'total_tokens_out': total_tokens_out
+                             'total_tokens_out': total_tokens_out,
+                             'total_api_calls': total_api_calls,
+                             'total_cached_tokens': total_cached_tokens
                          }})
         
         # Track overall end time (after last task)
         overall_end_timestamp = int(time.time())
         
-        return total_hitl_count, total_tokens_in, total_tokens_out, overall_start_timestamp, overall_end_timestamp
+        return total_hitl_count, total_tokens_in, total_tokens_out, total_api_calls, total_cached_tokens, overall_start_timestamp, overall_end_timestamp
     
     def _parse_tasks(self) -> list:
         """
@@ -984,7 +992,7 @@ class GHSpecAdapter(BaseAdapter):
         if not bugfix_tasks:
             logger.info("No bugfix tasks derived",
                        extra={'run_id': self.run_id, 'step': self.current_step})
-            return 0, 0, 0
+            return 0, 0, 0, 0, 0
         
         # Load spec for context
         spec_content = self.spec_md_path.read_text(encoding='utf-8')
@@ -996,6 +1004,8 @@ class GHSpecAdapter(BaseAdapter):
         total_hitl_count = 0
         total_tokens_in = 0
         total_tokens_out = 0
+        total_api_calls = 0
+        total_cached_tokens = 0
         
         # Process each bugfix task
         for i, task in enumerate(bugfix_tasks, 1):
@@ -1025,7 +1035,7 @@ class GHSpecAdapter(BaseAdapter):
             
             # Fetch token usage
             api_call_end = int(time.time())
-            tokens_in, tokens_out = self.fetch_usage_from_openai(
+            tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
                 api_key_env_var='OPEN_AI_KEY_ADM',  # Admin key for Usage API
                 start_timestamp=api_call_start,
                 end_timestamp=api_call_end,
@@ -1036,6 +1046,8 @@ class GHSpecAdapter(BaseAdapter):
             total_hitl_count += hitl_count
             total_tokens_in += tokens_in
             total_tokens_out += tokens_out
+            total_api_calls += api_calls
+            total_cached_tokens += cached_tokens
             
             logger.info(f"Bugfix {i} applied",
                        extra={'run_id': self.run_id, 'step': self.current_step,
@@ -1045,10 +1057,12 @@ class GHSpecAdapter(BaseAdapter):
                    extra={'run_id': self.run_id, 'step': self.current_step,
                          'metadata': {
                              'total_tokens_in': total_tokens_in,
-                             'total_tokens_out': total_tokens_out
+                             'total_tokens_out': total_tokens_out,
+                             'total_api_calls': total_api_calls,
+                             'total_cached_tokens': total_cached_tokens
                          }})
         
-        return total_hitl_count, total_tokens_in, total_tokens_out
+        return total_hitl_count, total_tokens_in, total_tokens_out, total_api_calls, total_cached_tokens
     
     def _derive_bugfix_tasks(self, validation_errors: list) -> list:
         """

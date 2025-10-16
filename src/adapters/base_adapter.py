@@ -40,9 +40,9 @@ class BaseAdapter(ABC):
         start_timestamp: int,
         end_timestamp: Optional[int] = None,
         model: Optional[str] = None
-    ) -> Tuple[int, int]:
+    ) -> Tuple[int, int, int, int]:
         """
-        Fetch token usage from OpenAI Usage API.
+        Fetch token usage, API calls, and cache metrics from OpenAI Usage API.
         
         This is a general, DRY method that works for ALL frameworks (ChatDev, GHSpec, BAEs)
         by querying OpenAI's Usage API directly instead of parsing framework-specific logs.
@@ -54,12 +54,12 @@ class BaseAdapter(ABC):
             model: Optional model filter (e.g., "gpt-4o-mini", "gpt-5-mini")
             
         Returns:
-            Tuple of (tokens_in, tokens_out)
+            Tuple of (tokens_in, tokens_out, api_calls, cached_tokens)
             
         Note:
             - Uses organization/usage/completions endpoint
             - Aggregates all API calls within the time window
-            - Returns (0, 0) if API call fails or no usage found
+            - Returns (0, 0, 0, 0) if API call fails or no usage found
         """
         try:
             import requests
@@ -71,7 +71,7 @@ class BaseAdapter(ABC):
                     f"API key not found in environment variable: {api_key_env_var}",
                     extra={'run_id': self.run_id}
                 )
-                return 0, 0
+                return 0, 0, 0, 0
             
             # Use current time if end_timestamp not provided
             if end_timestamp is None:
@@ -126,7 +126,7 @@ class BaseAdapter(ABC):
                             }
                         }
                     )
-                    return 0, 0  # Return zeros instead of failing
+                    return 0, 0, 0, 0  # Return zeros instead of failing
             
             response.raise_for_status()
             usage_data = response.json()
@@ -134,7 +134,7 @@ class BaseAdapter(ABC):
             # Aggregate tokens from all buckets
             # Note: OpenAI Usage API now returns input_tokens/output_tokens (Oct 2025)
             # but we maintain backwards compatibility with earlier field names.
-            def _extract_tokens(result: Dict[str, Any]) -> tuple[int, int]:
+            def _extract_tokens(result: Dict[str, Any]) -> tuple[int, int, int, int]:
                 input_fields = (
                     "input_tokens",
                     "n_context_tokens_total",
@@ -149,16 +149,25 @@ class BaseAdapter(ABC):
                 )
                 tokens_in = next((int(result.get(field, 0) or 0) for field in input_fields if field in result), 0)
                 tokens_out = next((int(result.get(field, 0) or 0) for field in output_fields if field in result), 0)
-                return tokens_in, tokens_out
+                
+                # Extract API call count and cached tokens
+                num_requests = int(result.get("num_model_requests", 0) or 0)
+                cached_tokens = int(result.get("input_cached_tokens", 0) or 0)
+                
+                return tokens_in, tokens_out, num_requests, cached_tokens
 
             total_input_tokens = 0
             total_output_tokens = 0
+            total_api_calls = 0
+            total_cached_tokens = 0
 
             for bucket in usage_data.get("data", []):
                 for result in bucket.get("results", []):
-                    tokens_in, tokens_out = _extract_tokens(result)
+                    tokens_in, tokens_out, num_requests, cached = _extract_tokens(result)
                     total_input_tokens += tokens_in
                     total_output_tokens += tokens_out
+                    total_api_calls += num_requests
+                    total_cached_tokens += cached
             
             logger.info(
                 "Token usage fetched from OpenAI Usage API",
@@ -168,13 +177,16 @@ class BaseAdapter(ABC):
                     'metadata': {
                         'tokens_in': total_input_tokens,
                         'tokens_out': total_output_tokens,
+                        'api_calls': total_api_calls,
+                        'cached_tokens': total_cached_tokens,
+                        'cache_hit_rate': f"{(total_cached_tokens / total_input_tokens * 100):.1f}%" if total_input_tokens > 0 else "0%",
                         'buckets_count': len(usage_data.get("data", [])),
                         'model': model
                     }
                 }
             )
             
-            return total_input_tokens, total_output_tokens
+            return total_input_tokens, total_output_tokens, total_api_calls, total_cached_tokens
             
         except Exception as e:
             logger.error(
@@ -187,8 +199,8 @@ class BaseAdapter(ABC):
                     }
                 }
             )
-            # Return 0, 0 on error - non-critical for test execution
-            return 0, 0
+            # Return 0, 0, 0, 0 on error - non-critical for test execution
+            return 0, 0, 0, 0
     
     def verify_commit_hash(self, repo_path: Path, expected_hash: str) -> None:
         """
