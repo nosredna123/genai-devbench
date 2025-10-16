@@ -18,14 +18,40 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 echo -e "${GREEN}BAEs Experiment Framework${NC}"
 echo "======================================"
 
-# Check arguments
-if [ $# -ne 1 ]; then
-    echo -e "${RED}Error: Missing framework argument${NC}"
-    echo "Usage: $0 {baes|chatdev|ghspec|all}"
+# Default number of rounds
+ROUNDS=1
+
+# Parse arguments
+if [ $# -lt 1 ] || [ $# -gt 3 ]; then
+    echo -e "${RED}Error: Invalid arguments${NC}"
+    echo "Usage: $0 {baes|chatdev|ghspec|all} [--rounds N]"
+    echo ""
+    echo "Options:"
+    echo "  --rounds N    Run the experiment N times in sequence (default: 1)"
     exit 1
 fi
 
 FRAMEWORK="$1"
+
+# Parse optional arguments
+shift
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --rounds)
+            if [ -z "$2" ] || ! [[ "$2" =~ ^[0-9]+$ ]] || [ "$2" -lt 1 ]; then
+                echo -e "${RED}Error: --rounds requires a positive integer${NC}"
+                exit 1
+            fi
+            ROUNDS="$2"
+            shift 2
+            ;;
+        *)
+            echo -e "${RED}Error: Unknown option '$1'${NC}"
+            echo "Usage: $0 {baes|chatdev|ghspec|all} [--rounds N]"
+            exit 1
+            ;;
+    esac
+done
 
 # Validate framework choice
 if [[ ! "$FRAMEWORK" =~ ^(baes|chatdev|ghspec|all)$ ]]; then
@@ -35,6 +61,7 @@ if [[ ! "$FRAMEWORK" =~ ^(baes|chatdev|ghspec|all)$ ]]; then
 fi
 
 echo "Framework: $FRAMEWORK"
+echo "Rounds: $ROUNDS"
 echo "Project root: $PROJECT_ROOT"
 echo ""
 
@@ -101,27 +128,58 @@ echo "======================================"
 export PYTHONPATH="$PROJECT_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
 if [ "$FRAMEWORK" == "all" ]; then
-    # Run all frameworks sequentially
-    for fw in baes chatdev ghspec; do
-        echo ""
-        echo -e "${YELLOW}Running framework: $fw${NC}"
-        python3 -m src.orchestrator "$fw" || {
-            echo -e "${RED}✗ Framework $fw failed${NC}"
-            exit 1
-        }
-        echo -e "${GREEN}✓ Framework $fw completed${NC}"
+    # Run all frameworks sequentially, with multiple rounds if specified
+    for ((round=1; round<=ROUNDS; round++)); do
+        if [ "$ROUNDS" -gt 1 ]; then
+            echo ""
+            echo -e "${GREEN}======================================${NC}"
+            echo -e "${GREEN}Starting Round $round of $ROUNDS${NC}"
+            echo -e "${GREEN}======================================${NC}"
+        fi
+        
+        for fw in baes chatdev ghspec; do
+            echo ""
+            echo -e "${YELLOW}Running framework: $fw${NC}"
+            python3 -m src.orchestrator "$fw" || {
+                echo -e "${RED}✗ Framework $fw failed (round $round)${NC}"
+                exit 1
+            }
+            echo -e "${GREEN}✓ Framework $fw completed (round $round)${NC}"
+        done
+        
+        if [ "$ROUNDS" -gt 1 ]; then
+            echo ""
+            echo -e "${GREEN}✓ Round $round of $ROUNDS completed${NC}"
+        fi
     done
 else
-    # Run single framework
-    python3 -m src.orchestrator "$FRAMEWORK" || {
-        echo -e "${RED}✗ Experiment failed${NC}"
-        exit 1
-    }
+    # Run single framework with multiple rounds if specified
+    for ((round=1; round<=ROUNDS; round++)); do
+        if [ "$ROUNDS" -gt 1 ]; then
+            echo ""
+            echo -e "${GREEN}======================================${NC}"
+            echo -e "${GREEN}Starting Round $round of $ROUNDS${NC}"
+            echo -e "${GREEN}======================================${NC}"
+        fi
+        
+        python3 -m src.orchestrator "$FRAMEWORK" || {
+            echo -e "${RED}✗ Experiment failed (round $round)${NC}"
+            exit 1
+        }
+        
+        if [ "$ROUNDS" -gt 1 ]; then
+            echo -e "${GREEN}✓ Round $round of $ROUNDS completed${NC}"
+        fi
+    done
 fi
 
 echo ""
 echo -e "${GREEN}======================================"
-echo "Experiment completed successfully!"
+if [ "$ROUNDS" -gt 1 ]; then
+    echo "All $ROUNDS rounds completed successfully!"
+else
+    echo "Experiment completed successfully!"
+fi
 echo "=====================================${NC}"
 echo ""
 echo "Results available in: $PROJECT_ROOT/runs/"
