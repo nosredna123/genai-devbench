@@ -10,8 +10,8 @@
       "success": true,
       "retry_count": 0,
       "hitl_count": 0,
-      "tokens_in": 0,
-      "tokens_out": 0,
+      "tokens_in": 16413,
+      "tokens_out": 4538,
       "start_timestamp": 1760617771.4556596,
       "end_timestamp": 1760617893.2863662
     },
@@ -22,8 +22,8 @@
       "success": true,
       "retry_count": 0,
       "hitl_count": 0,
-      "tokens_in": 0,
-      "tokens_out": 0,
+      "tokens_in": 5483,
+      "tokens_out": 1648,
       "start_timestamp": 1760617893.2866063,
       "end_timestamp": 1760617934.8566463
     },
@@ -34,8 +34,8 @@
       "success": true,
       "retry_count": 0,
       "hitl_count": 0,
-      "tokens_in": 0,
-      "tokens_out": 0,
+      "tokens_in": 3711,
+      "tokens_out": 508,
       "start_timestamp": 1760617934.856867,
       "end_timestamp": 1760617991.0353158
     },
@@ -81,15 +81,15 @@
     "HIT": 0,
     "AUTR": 1.0,
     "HEU": 0,
-    "TOK_IN": 0,
-    "TOK_OUT": 0,
+    "TOK_IN": 25607,
+    "TOK_OUT": 6694,
     "T_WALL_seconds": 238.48584175109863,
     "CRUDe": 0,
     "ESR": 0.0,
     "MC": 0.0,
     "ZDI": 48,
     "Q_star": 0.0,
-    "AEI": 0.0
+    "AEI": 0.09851576074424892
   },
   "usage_api_verification": {
     "verified": true,
@@ -102,5 +102,101 @@
     "discrepancy_pct_in": 0,
     "discrepancy_pct_out": 0,
     "error": null
+  },
+  "usage_api_reconciliation": {
+    "verification_status": "pending",
+    "attempts": [
+      {
+        "timestamp": "2025-10-16T12:38:31.814713+00:00",
+        "steps": [
+          {
+            "step": 1,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 2,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 3,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 4,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 5,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 6,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0
+          }
+        ],
+        "total_tokens_in": 0,
+        "total_tokens_out": 0,
+        "steps_with_tokens": 0,
+        "total_steps": 6
+      },
+      {
+        "timestamp": "2025-10-16T12:46:49.466895+00:00",
+        "steps": [
+          {
+            "step": 1,
+            "status": "success",
+            "tokens_in": 16413,
+            "tokens_out": 4538
+          },
+          {
+            "step": 2,
+            "status": "success",
+            "tokens_in": 5483,
+            "tokens_out": 1648
+          },
+          {
+            "step": 3,
+            "status": "success",
+            "tokens_in": 3711,
+            "tokens_out": 508
+          },
+          {
+            "step": 4,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 5,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0
+          },
+          {
+            "step": 6,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0
+          }
+        ],
+        "total_tokens_in": 25607,
+        "total_tokens_out": 6694,
+        "steps_with_tokens": 3,
+        "total_steps": 6
+      }
+    ],
+    "verification_message": "Data still arriving (+25,607 in, +6,694 out tokens since last attempt)"
   }
 }

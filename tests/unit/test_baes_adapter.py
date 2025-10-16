@@ -313,8 +313,8 @@ class TestStepExecution:
         assert isinstance(result['duration_seconds'], float)
         assert isinstance(result['tokens_in'], int)
         assert isinstance(result['tokens_out'], int)
-        assert isinstance(result['start_timestamp'], float)
-        assert isinstance(result['end_timestamp'], float)
+        assert isinstance(result['start_timestamp'], int)  # Integer timestamps for API compatibility
+        assert isinstance(result['end_timestamp'], int)  # Integer timestamps for API compatibility
     
     @patch.object(BAeSAdapter, '_execute_kernel_request')
     def test_execute_step_token_placeholders(self, mock_execute_kernel, adapter):

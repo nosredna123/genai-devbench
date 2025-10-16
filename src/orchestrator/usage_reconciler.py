@@ -68,9 +68,11 @@ class UsageReconciler:
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
+        # Convert to integer timestamps (seconds only, no microseconds)
+        # OpenAI Usage API requires integer Unix timestamps
         params = {
-            "start_time": start_timestamp,
-            "end_time": end_timestamp,
+            "start_time": int(start_timestamp),
+            "end_time": int(end_timestamp),
             "bucket_width": "1d",
             "limit": 31
         }

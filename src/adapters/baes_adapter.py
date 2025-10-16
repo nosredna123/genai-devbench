@@ -273,7 +273,8 @@ class BAeSAdapter(BaseAdapter):
             }
     
     def execute_step(self, step_num: int, command_text: str) -> Tuple[bool, float, int, int, float, float]:
-        start_timestamp = time.time()
+        start_time = time.time()  # Float for precise duration calculation
+        start_timestamp = int(time.time())  # Integer for API queries
         self.current_step = step_num
         
         logger.info("Executing BAEs step",
@@ -310,8 +311,8 @@ class BAeSAdapter(BaseAdapter):
                 logger.info(f"BAEs request {idx+1}/{len(requests_list)} completed successfully",
                            extra={'run_id': self.run_id, 'step': step_num})
             
-            end_timestamp = time.time()
-            duration = end_timestamp - start_timestamp
+            duration = time.time() - start_time  # Precise duration as float
+            end_timestamp = int(time.time())  # Integer timestamp for API queries
             
             tokens_in = 0
             tokens_out = 0
@@ -331,12 +332,13 @@ class BAeSAdapter(BaseAdapter):
             }
             
         except Exception as e:
-            end_timestamp = time.time()
+            duration = time.time() - start_time  # Precise duration as float
+            end_timestamp = int(time.time())  # Integer timestamp for API queries
             logger.error(f"BAEs step failed with exception: {e}",
                         extra={'run_id': self.run_id, 'step': step_num})
             return {
                 'success': False,
-                'duration_seconds': end_timestamp - start_timestamp,
+                'duration_seconds': duration,
                 'hitl_count': 0,
                 'tokens_in': 0,
                 'tokens_out': 0,
