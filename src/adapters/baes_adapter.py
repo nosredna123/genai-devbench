@@ -239,7 +239,22 @@ class BAeSAdapter(BaseAdapter):
                 }
             
             # Parse JSON output
-            return json.loads(result.stdout)
+            # BAEs framework outputs formatted console text (ANSI codes, emojis, progress bars)
+            # followed by JSON on the last line. Extract JSON from end of output.
+            stdout = result.stdout.strip()
+            
+            # Try to extract JSON from last line first (most common case)
+            lines = stdout.split('\n')
+            for line in reversed(lines):
+                line = line.strip()
+                if line.startswith('{') and line.endswith('}'):
+                    try:
+                        return json.loads(line)
+                    except json.JSONDecodeError:
+                        continue  # Try next line
+            
+            # Fallback: try parsing entire output (backward compatibility)
+            return json.loads(stdout)
             
         except subprocess.TimeoutExpired:
             return {
