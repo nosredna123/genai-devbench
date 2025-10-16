@@ -191,22 +191,71 @@ class BAeSAdapter(BaseAdapter):
     
     @property
     def kernel(self):
-        if self._kernel is None:
-            sys.path.insert(0, str(self.framework_dir))
-            
-            try:
-                from baes.core.enhanced_runtime_kernel import EnhancedRuntimeKernel
-                
-                context_store_path = str(self.database_dir / "context_store.json")
-                self._kernel = EnhancedRuntimeKernel(context_store_path)
-                
-                logger.debug("Initialized EnhancedRuntimeKernel", extra={'run_id': self.run_id})
-            except Exception as e:
-                logger.error(f"Failed to initialize EnhancedRuntimeKernel: {e}",
-                            extra={'run_id': self.run_id})
-                raise RuntimeError(f"Kernel initialization failed: {e}") from e
+        """Property to access kernel - kept for API compatibility but not actually used.
         
-        return self._kernel
+        Actual kernel execution happens via subprocess in the venv.
+        """
+        # Deprecated - kernel execution moved to subprocess wrapper
+        return None
+    
+    def _execute_kernel_request(self, request: str, start_servers: bool = False) -> dict:
+        """Execute a BAEs kernel request using the wrapper script in the venv.
+        
+        Args:
+            request: Natural language request
+            start_servers: Whether to start API/UI servers
+            
+        Returns:
+            Dictionary with 'success' and 'result' or 'error'
+        """
+        wrapper_script = Path(__file__).parent / "baes_kernel_wrapper.py"
+        context_store_path = str(self.database_dir / "context_store.json")
+        venv_python = self.venv_path / "bin" / "python"
+        
+        cmd = [
+            str(venv_python),
+            str(wrapper_script),
+            str(self.framework_dir),
+            context_store_path,
+            request,
+            str(start_servers).lower()
+        ]
+        
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5 minute timeout per request
+                cwd=str(self.framework_dir),
+                env=os.environ.copy()
+            )
+            
+            if result.returncode != 0:
+                return {
+                    'success': False,
+                    'error': f"Wrapper script failed: {result.stderr}"
+                }
+            
+            # Parse JSON output
+            import json
+            return json.loads(result.stdout)
+            
+        except subprocess.TimeoutExpired:
+            return {
+                'success': False,
+                'error': 'Request execution timed out after 5 minutes'
+            }
+        except json.JSONDecodeError as e:
+            return {
+                'success': False,
+                'error': f'Failed to parse wrapper output: {e}\nOutput: {result.stdout}'
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Unexpected error: {e}'
+            }
     
     def execute_step(self, step_num: int, command_text: str) -> Tuple[bool, float, int, int, float, float]:
         start_timestamp = time.time()
@@ -230,7 +279,7 @@ class BAeSAdapter(BaseAdapter):
                 
                 start_servers = (step_num == 1 and idx == 0)
                 
-                result = self.kernel.process_natural_language_request(
+                result = self._execute_kernel_request(
                     request=request,
                     start_servers=start_servers
                 )
@@ -255,13 +304,31 @@ class BAeSAdapter(BaseAdapter):
             logger.info("BAEs step completed",
                        extra={'run_id': self.run_id, 'step': step_num, 'event': 'step_complete'})
             
-            return all_success, duration, tokens_in, tokens_out, start_timestamp, end_timestamp
+            return {
+                'success': all_success,
+                'duration_seconds': duration,
+                'hitl_count': 0,
+                'tokens_in': tokens_in,
+                'tokens_out': tokens_out,
+                'start_timestamp': start_timestamp,
+                'end_timestamp': end_timestamp,
+                'retry_count': 0
+            }
             
         except Exception as e:
             end_timestamp = time.time()
             logger.error(f"BAEs step failed with exception: {e}",
                         extra={'run_id': self.run_id, 'step': step_num})
-            return False, end_timestamp - start_timestamp, 0, 0, start_timestamp, end_timestamp
+            return {
+                'success': False,
+                'duration_seconds': end_timestamp - start_timestamp,
+                'hitl_count': 0,
+                'tokens_in': 0,
+                'tokens_out': 0,
+                'start_timestamp': start_timestamp,
+                'end_timestamp': end_timestamp,
+                'retry_count': 0
+            }
     
     def _translate_command_to_requests(self, command_text: str) -> List[str]:
         if command_text in self.COMMAND_MAPPING:

@@ -247,26 +247,9 @@ class TestKernelProperty:
         adapter.database_dir = tmp_path / "database"
         adapter.database_dir.mkdir(parents=True)
         
-        # Mock the import at the point it's used (inside the kernel property)
-        mock_kernel_instance = Mock()
-        
-        # Create a mock module structure
-        mock_baes_core = Mock()
-        mock_enhanced_kernel = Mock(return_value=mock_kernel_instance)
-        mock_baes_core.enhanced_runtime_kernel.EnhancedRuntimeKernel = mock_enhanced_kernel
-        
-        with patch.dict('sys.modules', {
-            'baes': Mock(),
-            'baes.core': mock_baes_core,
-            'baes.core.enhanced_runtime_kernel': Mock(EnhancedRuntimeKernel=mock_enhanced_kernel)
-        }):
-            # Access kernel property
-            kernel = adapter.kernel
-            
-            # Verify initialization
-            assert adapter._kernel is not None
-            assert adapter._kernel == mock_kernel_instance
-            assert mock_enhanced_kernel.called
+        # Kernel property is now deprecated - just returns None
+        kernel = adapter.kernel
+        assert kernel is None
 
 
 class TestConfigValidation:
@@ -298,54 +281,62 @@ class TestConfigValidation:
 class TestStepExecution:
     """Test step execution flow (mocked)."""
     
-    @patch.object(BAeSAdapter, 'kernel', new_callable=PropertyMock)
-    def test_execute_step_returns_tuple(self, mock_kernel_prop, adapter):
-        """execute_step should return 6-tuple with correct types."""
-        # Mock kernel
-        mock_kernel = Mock()
-        mock_kernel.process_natural_language_request.return_value = {
+    @patch.object(BAeSAdapter, '_execute_kernel_request')
+    def test_execute_step_returns_dict(self, mock_execute_kernel, adapter):
+        """execute_step should return a dictionary with all required fields."""
+        # Mock kernel wrapper execution
+        mock_execute_kernel.return_value = {
             'success': True,
-            'entity': 'Student',
-            'files_generated': ['student.py']
+            'result': {
+                'entity': 'Student',
+                'files_generated': ['student.py']
+            }
         }
-        mock_kernel_prop.return_value = mock_kernel
         
         result = adapter.execute_step(1, "Create a Student entity")
         
-        assert isinstance(result, tuple)
-        assert len(result) == 6
+        # Should return a dictionary
+        assert isinstance(result, dict)
         
-        success, duration, tokens_in, tokens_out, start_ts, end_ts = result
-        assert isinstance(success, bool)
-        assert isinstance(duration, float)
-        assert isinstance(tokens_in, int)
-        assert isinstance(tokens_out, int)
-        assert isinstance(start_ts, float)
-        assert isinstance(end_ts, float)
+        # Check all required fields
+        assert 'success' in result
+        assert 'duration_seconds' in result
+        assert 'tokens_in' in result
+        assert 'tokens_out' in result
+        assert 'start_timestamp' in result
+        assert 'end_timestamp' in result
+        assert 'hitl_count' in result
+        assert 'retry_count' in result
+        
+        # Check types
+        assert isinstance(result['success'], bool)
+        assert isinstance(result['duration_seconds'], float)
+        assert isinstance(result['tokens_in'], int)
+        assert isinstance(result['tokens_out'], int)
+        assert isinstance(result['start_timestamp'], float)
+        assert isinstance(result['end_timestamp'], float)
     
-    @patch.object(BAeSAdapter, 'kernel', new_callable=PropertyMock)
-    def test_execute_step_token_placeholders(self, mock_kernel_prop, adapter):
+    @patch.object(BAeSAdapter, '_execute_kernel_request')
+    def test_execute_step_token_placeholders(self, mock_execute_kernel, adapter):
         """execute_step should return (0, 0) token placeholders."""
-        mock_kernel = Mock()
-        mock_kernel.process_natural_language_request.return_value = {
-            'success': True
+        mock_execute_kernel.return_value = {
+            'success': True,
+            'result': {}
         }
-        mock_kernel_prop.return_value = mock_kernel
         
-        _, _, tokens_in, tokens_out, _, _ = adapter.execute_step(1, "test command")
+        result = adapter.execute_step(1, "test command")
         
         # Tokens should be placeholders for reconciliation
-        assert tokens_in == 0
-        assert tokens_out == 0
+        assert result['tokens_in'] == 0
+        assert result['tokens_out'] == 0
     
-    @patch.object(BAeSAdapter, 'kernel', new_callable=PropertyMock)
-    def test_execute_step_sets_current_step(self, mock_kernel_prop, adapter):
+    @patch.object(BAeSAdapter, '_execute_kernel_request')
+    def test_execute_step_sets_current_step(self, mock_execute_kernel, adapter):
         """execute_step should update current_step."""
-        mock_kernel = Mock()
-        mock_kernel.process_natural_language_request.return_value = {
-            'success': True
+        mock_execute_kernel.return_value = {
+            'success': True,
+            'result': {}
         }
-        mock_kernel_prop.return_value = mock_kernel
         
         adapter.execute_step(3, "test command")
         assert adapter.current_step == 3
