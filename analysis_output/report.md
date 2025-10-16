@@ -1,6 +1,6 @@
 # Statistical Analysis Report
 
-**Generated:** 2025-10-16 13:38:39 UTC
+**Generated:** 2025-10-16 13:45:21 UTC
 
 **Frameworks:** ghspec, chatdev, baes
 
@@ -23,6 +23,54 @@
 | **HIT** | Human-in-the-Loop Count | Manual interventions needed | 0-∞ | Lower ↓ |
 | **HEU** | Human Effort Units | Total manual effort required | 0-∞ | Lower ↓ |
 | **UTT** | User Task Total | Number of evolution steps | Fixed | 6 |
+
+---
+
+## Statistical Methods Guide
+
+This report uses non-parametric statistics to compare frameworks robustly.
+
+### 📖 Key Concepts
+
+**Bootstrap Confidence Intervals (CI)**
+- Estimates the range where true mean likely falls (95% confidence)
+- Example: `30,772 [2,503, 59,040]` means we're 95% confident the true mean is between 2,503 and 59,040
+- Wider intervals = more uncertainty; narrower intervals = more precise estimates
+
+**Kruskal-Wallis H-Test**
+- Non-parametric test comparing multiple groups (doesn't assume normal distribution)
+- Tests: "Are there significant differences across frameworks?"
+- **H statistic**: Higher values = larger differences between groups
+- **p-value**: Probability results occurred by chance
+  - p < 0.05: Statistically significant (likely real difference) ✓
+  - p ≥ 0.05: Not significant (could be random variation) ✗
+
+**Pairwise Comparisons (Dunn-Šidák)**
+- Compares specific framework pairs after significant Kruskal-Wallis result
+- Dunn-Šidák correction prevents false positives from multiple comparisons
+- Each comparison tests: "Is framework A different from framework B?"
+
+**Cliff's Delta (δ) - Effect Size**
+- Measures practical significance (how large is the difference?)
+- Range: -1 to +1
+  - **δ = 0**: No difference (distributions completely overlap)
+  - **δ = ±1**: Complete separation (no overlap)
+- Interpretation:
+  - |δ| < 0.147: **Negligible** (tiny difference)
+  - 0.147 ≤ |δ| < 0.330: **Small** (noticeable)
+  - 0.330 ≤ |δ| < 0.474: **Medium** (substantial)
+  - |δ| ≥ 0.474: **Large** (major difference)
+
+### 💡 How to Read Results
+
+1. **Check p-value**: Is the difference statistically significant (p < 0.05)?
+2. **Check effect size**: Is the difference practically meaningful (|δ| ≥ 0.147)?
+3. **Both matter**: Statistical significance without large effect = real but trivial difference
+
+**Example Interpretation:**
+- `p = 0.012 (✓), δ = 0.850 (large)` → Strong evidence of major practical difference
+- `p = 0.048 (✓), δ = 0.095 (negligible)` → Statistically significant but practically trivial
+- `p = 0.234 (✗), δ = 0.650 (large)` → Large observed difference but may be random variation
 
 ---
 
@@ -85,18 +133,57 @@ Testing for significant differences across all frameworks.
 | Metric | H | p-value | Significant | Groups | N |
 |--------|---|---------|-------------|--------|---|
 | AEI | 3.000 | 0.2231 | ✗ No | 3 | 5 |
+
+💬 *Differences appear modest - may reflect random variation rather than true performance gaps.*
+
 | AUTR | 0.000 | 1.0000 | ✗ No | 3 | 5 |
+
+💬 *No evidence of differences - frameworks perform similarly on AUTR.*
+
 | CRUDe | 0.000 | 1.0000 | ✗ No | 3 | 5 |
+
+💬 *No evidence of differences - frameworks perform similarly on CRUDe.*
+
 | ESR | 0.000 | 1.0000 | ✗ No | 3 | 5 |
+
+💬 *No evidence of differences - frameworks perform similarly on ESR.*
+
 | HEU | 0.000 | 1.0000 | ✗ No | 3 | 5 |
+
+💬 *No evidence of differences - frameworks perform similarly on HEU.*
+
 | HIT | 0.000 | 1.0000 | ✗ No | 3 | 5 |
+
+💬 *No evidence of differences - frameworks perform similarly on HIT.*
+
 | MC | 0.000 | 1.0000 | ✗ No | 3 | 5 |
+
+💬 *No evidence of differences - frameworks perform similarly on MC.*
+
 | Q_star | 0.000 | 1.0000 | ✗ No | 3 | 5 |
+
+💬 *No evidence of differences - frameworks perform similarly on Q_star.*
+
 | TOK_IN | 3.000 | 0.2231 | ✗ No | 3 | 5 |
+
+💬 *Differences appear modest - may reflect random variation rather than true performance gaps.*
+
 | TOK_OUT | 3.000 | 0.2231 | ✗ No | 3 | 5 |
+
+💬 *Differences appear modest - may reflect random variation rather than true performance gaps.*
+
 | T_WALL_seconds | 3.000 | 0.2231 | ✗ No | 3 | 5 |
+
+💬 *Differences appear modest - may reflect random variation rather than true performance gaps.*
+
 | UTT | 0.000 | 1.0000 | ✗ No | 3 | 5 |
+
+💬 *No evidence of differences - frameworks perform similarly on UTT.*
+
 | ZDI | 3.000 | 0.2231 | ✗ No | 3 | 5 |
+
+💬 *Differences appear modest - may reflect random variation rather than true performance gaps.*
+
 
 
 ## 4. Pairwise Comparisons
@@ -110,6 +197,9 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | ghspec vs chatdev | 0.1213 | ✗ | 1.000 | large |
 | ghspec vs baes | 1.0000 | ✗ | 0.000 | negligible |
 | chatdev vs baes | 0.2207 | ✗ | -1.000 | large |
+
+  *→ Large observed difference (δ=1.000) but not statistically significant - may be random variation*
+  *→ Large observed difference (δ=-1.000) but not statistically significant - may be random variation*
 
 
 ### AUTR
@@ -183,6 +273,9 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | ghspec vs baes | 1.0000 | ✗ | 0.000 | negligible |
 | chatdev vs baes | 0.2207 | ✗ | 1.000 | large |
 
+  *→ Large observed difference (δ=-1.000) but not statistically significant - may be random variation*
+  *→ Large observed difference (δ=1.000) but not statistically significant - may be random variation*
+
 
 ### TOK_OUT
 
@@ -192,6 +285,9 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | ghspec vs baes | 1.0000 | ✗ | 0.000 | negligible |
 | chatdev vs baes | 0.2207 | ✗ | 1.000 | large |
 
+  *→ Large observed difference (δ=-1.000) but not statistically significant - may be random variation*
+  *→ Large observed difference (δ=1.000) but not statistically significant - may be random variation*
+
 
 ### T_WALL_seconds
 
@@ -200,6 +296,9 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | ghspec vs chatdev | 0.1213 | ✗ | -1.000 | large |
 | ghspec vs baes | 1.0000 | ✗ | 0.000 | negligible |
 | chatdev vs baes | 0.2207 | ✗ | 1.000 | large |
+
+  *→ Large observed difference (δ=-1.000) but not statistically significant - may be random variation*
+  *→ Large observed difference (δ=1.000) but not statistically significant - may be random variation*
 
 
 ### UTT
@@ -219,8 +318,11 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | ghspec vs baes | 1.0000 | ✗ | 0.000 | negligible |
 | chatdev vs baes | 0.2207 | ✗ | 1.000 | large |
 
+  *→ Large observed difference (δ=-1.000) but not statistically significant - may be random variation*
+  *→ Large observed difference (δ=1.000) but not statistically significant - may be random variation*
 
-## 4. Outlier Detection
+
+## 5. Outlier Detection
 
 Values > 3σ from median (per framework, per metric).
 

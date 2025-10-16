@@ -200,6 +200,57 @@ def cliffs_delta(group1: List[float], group2: List[float]) -> float:
     return delta
 
 
+def _interpret_kruskal_wallis(result: Dict[str, Any], metric: str) -> str:
+    """
+    Generate contextual interpretation for Kruskal-Wallis test.
+    
+    Args:
+        result: Kruskal-Wallis test result dictionary
+        metric: The metric being tested
+    
+    Returns:
+        Interpretation string
+    """
+    if result['significant']:
+        if result['H'] > 4.0:
+            return f"💬 *Strong evidence that frameworks differ significantly on {metric}. See pairwise comparisons below.*"
+        else:
+            return f"💬 *Frameworks show statistically significant differences on {metric}, though effect is moderate.*"
+    else:
+        if result['p_value'] > 0.5:
+            return f"💬 *No evidence of differences - frameworks perform similarly on {metric}.*"
+        elif result['p_value'] > 0.1:
+            return f"💬 *Differences appear modest - may reflect random variation rather than true performance gaps.*"
+        else:
+            return f"💬 *Borderline result (p={result['p_value']:.3f}) - differences may exist but need more data to confirm.*"
+
+
+def _interpret_pairwise_comparison(comp: Dict[str, Any], metric: str) -> str:
+    """
+    Generate contextual interpretation for pairwise comparison.
+    
+    Args:
+        comp: Pairwise comparison result dictionary
+        metric: The metric being compared
+    
+    Returns:
+        Interpretation string or empty if no interpretation needed
+    """
+    # Only interpret significant results with meaningful effect sizes
+    if comp['significant'] and comp['effect_size'] != 'negligible':
+        direction = "higher" if comp['cliff_delta'] > 0 else "lower"
+        magnitude = comp['effect_size']
+        
+        return (f"  *→ {comp['group1']} has {magnitude} {direction} {metric} than {comp['group2']} "
+                f"(δ={comp['cliff_delta']:.3f})*")
+    elif comp['significant'] and comp['effect_size'] == 'negligible':
+        return f"  *→ Statistically significant but practically negligible difference*"
+    elif not comp['significant'] and abs(comp['cliff_delta']) >= 0.330:
+        return f"  *→ Large observed difference (δ={comp['cliff_delta']:.3f}) but not statistically significant - may be random variation*"
+    
+    return ""
+
+
 def bootstrap_aggregate_metrics(
     runs_data: List[Dict[str, float]],
     n_bootstrap: int = 10000
@@ -719,6 +770,58 @@ def generate_statistical_report(
         ""
     ])
     
+    # Add Statistical Methods Guide
+    lines.extend([
+        "## Statistical Methods Guide",
+        "",
+        "This report uses non-parametric statistics to compare frameworks robustly.",
+        "",
+        "### 📖 Key Concepts",
+        "",
+        "**Bootstrap Confidence Intervals (CI)**",
+        "- Estimates the range where true mean likely falls (95% confidence)",
+        "- Example: `30,772 [2,503, 59,040]` means we're 95% confident the true mean is between 2,503 and 59,040",
+        "- Wider intervals = more uncertainty; narrower intervals = more precise estimates",
+        "",
+        "**Kruskal-Wallis H-Test**",
+        "- Non-parametric test comparing multiple groups (doesn't assume normal distribution)",
+        "- Tests: \"Are there significant differences across frameworks?\"",
+        "- **H statistic**: Higher values = larger differences between groups",
+        "- **p-value**: Probability results occurred by chance",
+        "  - p < 0.05: Statistically significant (likely real difference) ✓",
+        "  - p ≥ 0.05: Not significant (could be random variation) ✗",
+        "",
+        "**Pairwise Comparisons (Dunn-Šidák)**",
+        "- Compares specific framework pairs after significant Kruskal-Wallis result",
+        "- Dunn-Šidák correction prevents false positives from multiple comparisons",
+        "- Each comparison tests: \"Is framework A different from framework B?\"",
+        "",
+        "**Cliff's Delta (δ) - Effect Size**",
+        "- Measures practical significance (how large is the difference?)",
+        "- Range: -1 to +1",
+        "  - **δ = 0**: No difference (distributions completely overlap)",
+        "  - **δ = ±1**: Complete separation (no overlap)",
+        "- Interpretation:",
+        "  - |δ| < 0.147: **Negligible** (tiny difference)",
+        "  - 0.147 ≤ |δ| < 0.330: **Small** (noticeable)",
+        "  - 0.330 ≤ |δ| < 0.474: **Medium** (substantial)",
+        "  - |δ| ≥ 0.474: **Large** (major difference)",
+        "",
+        "### 💡 How to Read Results",
+        "",
+        "1. **Check p-value**: Is the difference statistically significant (p < 0.05)?",
+        "2. **Check effect size**: Is the difference practically meaningful (|δ| ≥ 0.147)?",
+        "3. **Both matter**: Statistical significance without large effect = real but trivial difference",
+        "",
+        "**Example Interpretation:**",
+        "- `p = 0.012 (✓), δ = 0.850 (large)` → Strong evidence of major practical difference",
+        "- `p = 0.048 (✓), δ = 0.095 (negligible)` → Statistically significant but practically trivial",
+        "- `p = 0.234 (✗), δ = 0.650 (large)` → Large observed difference but may be random variation",
+        "",
+        "---",
+        ""
+    ])
+    
     # Add Executive Summary
     lines.extend(_generate_executive_summary(frameworks_data))
     
@@ -815,6 +918,13 @@ def generate_statistical_report(
                 f"| {metric} | {result['H']:.3f} | {result['p_value']:.4f} | "
                 f"{sig} | {result['n_groups']} | {result['n_total']} |"
             )
+            
+            # Add contextual interpretation
+            interpretation = _interpret_kruskal_wallis(result, metric)
+            if interpretation:
+                lines.append("")
+                lines.append(interpretation)
+                lines.append("")
         else:
             lines.append(f"| {metric} | N/A | N/A | N/A | N/A | N/A |")
     
@@ -842,6 +952,9 @@ def generate_statistical_report(
             
             comparisons = pairwise_comparisons(groups)
             
+            # Collect interpretations
+            interpretations = []
+            
             for comp in comparisons:
                 pair = f"{comp['group1']} vs {comp['group2']}"
                 sig = "✓" if comp['significant'] else "✗"
@@ -852,12 +965,22 @@ def generate_statistical_report(
                     f"| {pair} | {comp['p_value']:.4f} | {sig} | "
                     f"{delta:.3f} | {effect} |"
                 )
+                
+                # Collect interpretation
+                interp = _interpret_pairwise_comparison(comp, metric)
+                if interp:
+                    interpretations.append(interp)
+            
+            # Add interpretations after the table
+            if interpretations:
+                lines.append("")
+                lines.extend(interpretations)
             
             lines.extend(["", ""])
     
-    # Section 4: Outlier Detection
+    # Section 5: Outlier Detection
     lines.extend([
-        "## 4. Outlier Detection",
+        "## 5. Outlier Detection",
         "",
         "Values > 3σ from median (per framework, per metric).",
         ""
