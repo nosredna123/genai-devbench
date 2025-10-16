@@ -215,6 +215,8 @@ class MetricsCollector:
                 **interaction,
                 'TOK_IN': efficiency['TOK_IN'],
                 'TOK_OUT': efficiency['TOK_OUT'],
+                'API_CALLS': efficiency['API_CALLS'],
+                'CACHED_TOKENS': efficiency['CACHED_TOKENS'],
                 'T_WALL_seconds': efficiency['T_WALL_seconds'],
                 **quality
             }
