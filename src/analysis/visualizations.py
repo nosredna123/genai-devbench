@@ -16,6 +16,29 @@ import matplotlib.patches as patches
 import numpy as np
 
 
+# Friendly metric labels for visualizations
+METRIC_LABELS = {
+    'AUTR': 'Test Automation\nRate',
+    'TOK_IN': 'Input Tokens',
+    'T_WALL_seconds': 'Wall Time\n(seconds)',
+    'CRUDe': 'CRUD\nCoverage',
+    'ESR': 'Emerging State\nRate',
+    'MC': 'Model Call\nEfficiency',
+    'Q*': 'Quality\nScore',
+    'AEI': 'Automation\nEfficiency',
+    'TOK_OUT': 'Output Tokens',
+    'ZDI': 'Downtime\n(seconds)',
+    'HIT': 'Human\nInterventions',
+    'HEU': 'Human\nEffort',
+    'UTT': 'Task\nCount',
+}
+
+
+def _get_metric_label(metric: str) -> str:
+    """Get friendly label for metric, fallback to metric name if not in map."""
+    return METRIC_LABELS.get(metric, metric)
+
+
 def radar_chart(
     frameworks_data: Dict[str, Dict[str, float]],
     output_path: str,
@@ -97,9 +120,10 @@ def radar_chart(
         ax.plot(angles, values, 'o-', linewidth=2, label=framework, color=color)
         ax.fill(angles, values, alpha=0.15, color=color)
     
-    # Set labels
+    # Set labels - use friendly names
     ax.set_xticks(angles[:-1])
-    ax.set_xticklabels(metrics, size=12)
+    friendly_labels = [_get_metric_label(m) for m in metrics]
+    ax.set_xticklabels(friendly_labels, size=11)
     
     # Set y-axis limits and labels
     ax.set_ylim(0, 1)
@@ -213,9 +237,9 @@ def pareto_plot(
             label='Pareto Frontier'
         )
     
-    # Set labels and title
-    ax.set_xlabel('TOK_IN (Token Input)', fontsize=14)
-    ax.set_ylabel('Q* (Quality Score)', fontsize=14)
+    # Set labels and title with friendly names
+    ax.set_xlabel('Input Tokens', fontsize=14)
+    ax.set_ylabel('Quality Score (Q*)', fontsize=14)
     ax.set_title(title, fontsize=16, pad=20)
     
     # Add grid
@@ -342,16 +366,16 @@ def timeline_chart(
             linestyle='--'
         )
     
-    # Configure left axis (CRUD coverage)
-    ax1.set_xlabel('Step', fontsize=14)
-    ax1.set_ylabel('CRUD Coverage (0-12)', fontsize=14, color='black')
+    # Configure left axis (CRUD coverage) with friendly labels
+    ax1.set_xlabel('Evolution Step', fontsize=14)
+    ax1.set_ylabel('CRUD Operations Coverage (0-12)', fontsize=14, color='black')
     ax1.set_ylim(0, 12)
     ax1.set_yticks(range(0, 13, 2))
     ax1.tick_params(axis='y', labelcolor='black', labelsize=12)
     ax1.tick_params(axis='x', labelsize=12)
     
-    # Configure right axis (downtime)
-    ax2.set_ylabel('Downtime Incidents (ZDI)', fontsize=14, color='darkred')
+    # Configure right axis (downtime) with friendly labels
+    ax2.set_ylabel('Downtime (seconds)', fontsize=14, color='darkred')
     ax2.tick_params(axis='y', labelcolor='darkred', labelsize=12)
     
     # Set x-axis
