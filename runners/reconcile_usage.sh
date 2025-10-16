@@ -53,18 +53,21 @@ case "${1:-}" in
     echo "  $0 <framework>          # Reconcile specific framework"
     echo "  $0 <framework> <run-id> # Reconcile specific run"
     echo "  $0 --list               # List pending runs"
+    echo "  $0 --list --verbose     # List ALL runs with detailed status"
     echo "  $0 --help               # Show this help"
     echo ""
     echo "Options:"
     echo "  --min-age MINUTES       # Only reconcile runs older than this (default: 30)"
     echo "  --max-age HOURS         # Don't reconcile runs older than this (default: 24)"
     echo "  --force                 # Force reconciliation even if already verified"
+    echo "  --verbose               # Show detailed information (use with --list)"
     echo ""
     echo "Examples:"
     echo "  $0                                    # Reconcile all pending"
     echo "  $0 chatdev                            # Reconcile ChatDev runs"
     echo "  $0 chatdev test_run_123               # Reconcile specific run"
     echo "  $0 --list                             # Show what needs verification"
+    echo "  $0 --list --verbose                   # Show all runs with details"
     echo "  $0 --min-age 60                       # Wait 60 minutes before reconciling"
     echo ""
     echo "Double-Check Verification:"
@@ -86,47 +89,200 @@ case "${1:-}" in
     ;;
     
   --list)
-    echo "Scanning for pending reconciliations..."
+    # Check for --verbose flag
+    VERBOSE=false
+    if [ "${2:-}" = "--verbose" ]; then
+      VERBOSE=true
+    fi
+    
+    if [ "$VERBOSE" = "true" ]; then
+      echo "Scanning ALL runs with detailed status..."
+      VERBOSE_PYTHON="True"
+    else
+      echo "Scanning for pending reconciliations..."
+      VERBOSE_PYTHON="False"
+    fi
     echo ""
-    python3 << 'EOF'
+    
+    python3 << EOF
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path.cwd()))
 
 from src.orchestrator.usage_reconciler import UsageReconciler
+from src.orchestrator.manifest_manager import find_runs
+import json
+from datetime import datetime, timezone
+import time
 
 reconciler = UsageReconciler()
-pending = reconciler.get_pending_runs(min_age_minutes=30)
+verbose = $VERBOSE_PYTHON
 
-if pending:
-    print(f"Found {len(pending)} runs pending verification:")
+if verbose:
+    # Show ALL runs grouped by status
+    all_runs = find_runs()
+    
+    # Categorize runs
+    verified_runs = []
+    pending_runs = []
+    too_recent_runs = []
+    no_reconciliation_runs = []
+    
+    current_time = time.time()
+    min_age_seconds = 30 * 60  # 30 minutes
+    
+    for run_entry in all_runs:
+        run_id = run_entry['run_id']
+        framework = run_entry['framework']
+        
+        # Load metrics
+        run_dir = reconciler.runs_dir / framework / run_id
+        metrics_file = run_dir / "metrics.json"
+        
+        if not metrics_file.exists():
+            continue
+            
+        file_mtime = metrics_file.stat().st_mtime
+        age_minutes = (current_time - file_mtime) / 60
+        
+        try:
+            with open(metrics_file, 'r', encoding='utf-8') as f:
+                metrics = json.load(f)
+            
+            reconciliation = metrics.get('usage_api_reconciliation', {})
+            verification_status = reconciliation.get('verification_status', 'unknown')
+            attempts = reconciliation.get('attempts', [])
+            message = reconciliation.get('verification_message', 'Not yet reconciled')
+            
+            tokens_in = metrics.get('aggregate_metrics', {}).get('TOK_IN', 0)
+            tokens_out = metrics.get('aggregate_metrics', {}).get('TOK_OUT', 0)
+            
+            run_info = {
+                'run_id': run_id,
+                'framework': framework,
+                'age_minutes': age_minutes,
+                'status': verification_status,
+                'attempts': len(attempts),
+                'message': message,
+                'tokens_in': tokens_in,
+                'tokens_out': tokens_out,
+                'end_time': run_entry.get('end_time', 'Unknown')
+            }
+            
+            if verification_status == 'verified':
+                verified_runs.append(run_info)
+            elif file_mtime > (current_time - min_age_seconds):
+                too_recent_runs.append(run_info)
+            elif verification_status in ['pending', 'data_not_available', 'warning']:
+                pending_runs.append(run_info)
+            else:
+                no_reconciliation_runs.append(run_info)
+                
+        except Exception as e:
+            print(f"⚠️  Error reading {framework}/{run_id}: {e}")
+    
+    # Print summary
+    total = len(verified_runs) + len(pending_runs) + len(too_recent_runs) + len(no_reconciliation_runs)
+    print(f"📊 SUMMARY: {total} total runs")
+    print(f"   ✅ Verified: {len(verified_runs)}")
+    print(f"   ⏳ Pending verification: {len(pending_runs)}")
+    print(f"   🕐 Too recent (<30 min): {len(too_recent_runs)}")
+    if no_reconciliation_runs:
+        print(f"   ❓ No reconciliation data: {len(no_reconciliation_runs)}")
     print("")
-    for run in pending:
-        age_hours = run['age_minutes'] / 60
-        status = run.get('verification_status', 'unknown')
-        attempts = run.get('attempts', 0)
-        message = run.get('message', 'No message')
-        
-        # Status emoji
-        status_icon = {
-            'pending': '⏳',
-            'data_not_available': '🕐',
-            'warning': '⚠️',
-            'verified': '✅'
-        }.get(status, '❓')
-        
-        print(f"  {status_icon} {run['framework']}/{run['run_id']}")
-        print(f"    Status: {status} (attempt {attempts})")
-        print(f"    Age: {age_hours:.1f} hours")
-        print(f"    Message: {message}")
+    print("=" * 70)
+    print("")
+    
+    # Print verified runs
+    if verified_runs:
+        print(f"✅ VERIFIED RUNS ({len(verified_runs)})")
+        print(f"   Data confirmed stable across multiple checks")
         print("")
+        for run in sorted(verified_runs, key=lambda x: x['end_time'], reverse=True):
+            print(f"  {run['framework']}/{run['run_id'][:8]}...")
+            print(f"    Tokens: {run['tokens_in']:,} in / {run['tokens_out']:,} out")
+            print(f"    Age: {run['age_minutes']:.0f} minutes")
+            print(f"    Message: {run['message']}")
+            print("")
+    
+    # Print pending runs
+    if pending_runs:
+        print(f"⏳ PENDING VERIFICATION ({len(pending_runs)})")
+        print(f"   Ready for reconciliation (>30 min old)")
+        print("")
+        for run in sorted(pending_runs, key=lambda x: x['age_minutes'], reverse=True):
+            status_icon = {
+                'pending': '⏳',
+                'data_not_available': '🕐',
+                'warning': '⚠️'
+            }.get(run['status'], '❓')
+            
+            print(f"  {status_icon} {run['framework']}/{run['run_id'][:8]}...")
+            print(f"    Status: {run['status']} (attempt {run['attempts']})")
+            print(f"    Tokens: {run['tokens_in']:,} in / {run['tokens_out']:,} out")
+            print(f"    Age: {run['age_minutes']:.0f} minutes")
+            print(f"    Message: {run['message']}")
+            print("")
+    
+    # Print too recent runs
+    if too_recent_runs:
+        print(f"🕐 TOO RECENT FOR RECONCILIATION ({len(too_recent_runs)})")
+        print(f"   Waiting for 30-minute delay before attempting reconciliation")
+        print("")
+        for run in sorted(too_recent_runs, key=lambda x: x['age_minutes']):
+            wait_minutes = max(0, 30 - run['age_minutes'])
+            print(f"  🕐 {run['framework']}/{run['run_id'][:8]}...")
+            print(f"    Tokens: {run['tokens_in']:,} in / {run['tokens_out']:,} out")
+            print(f"    Age: {run['age_minutes']:.1f} minutes (wait {wait_minutes:.1f} more)")
+            print("")
+    
+    # Print no reconciliation runs
+    if no_reconciliation_runs:
+        print(f"❓ NO RECONCILIATION DATA ({len(no_reconciliation_runs)})")
+        print("")
+        for run in no_reconciliation_runs:
+            print(f"  ❓ {run['framework']}/{run['run_id'][:8]}...")
+            print(f"    Tokens: {run['tokens_in']:,} in / {run['tokens_out']:,} out")
+            print(f"    Age: {run['age_minutes']:.0f} minutes")
+            print("")
+
 else:
-    print("✅ No runs need reconciliation - all verified!")
-    print("")
-    print("Reasons a run might not be listed:")
-    print("  - Too recent (< 30 minutes old)")
-    print("  - Already verified (double-check complete)")
-    print("  - Too old (> 24 hours)")
+    # Normal mode: show only pending runs
+    pending = reconciler.get_pending_runs(min_age_minutes=30)
+    
+    if pending:
+        print(f"Found {len(pending)} runs pending verification:")
+        print("")
+        for run in pending:
+            age_hours = run['age_minutes'] / 60
+            status = run.get('verification_status', 'unknown')
+            attempts = run.get('attempts', 0)
+            message = run.get('message', 'No message')
+            
+            # Status emoji
+            status_icon = {
+                'pending': '⏳',
+                'data_not_available': '🕐',
+                'warning': '⚠️',
+                'verified': '✅'
+            }.get(status, '❓')
+            
+            print(f"  {status_icon} {run['framework']}/{run['run_id']}")
+            print(f"    Status: {status} (attempt {attempts})")
+            print(f"    Age: {age_hours:.1f} hours")
+            print(f"    Message: {message}")
+            print("")
+        print("")
+        print("💡 Tip: Use '--list --verbose' to see ALL runs and their status")
+    else:
+        print("✅ No runs need reconciliation right now!")
+        print("")
+        print("Possible reasons:")
+        print("  • Too recent (< 30 minutes old) - wait for data propagation")
+        print("  • Already verified (double-check complete)")
+        print("  • Too old (> 24 hours) - outside reconciliation window")
+        print("")
+        print("💡 Tip: Use '--list --verbose' to see ALL runs with their status")
 EOF
     ;;
     
