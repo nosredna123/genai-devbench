@@ -1,8 +1,28 @@
 # Statistical Analysis Report
 
-**Generated:** 2025-10-16 13:08:16 UTC
+**Generated:** 2025-10-16 13:19:32 UTC
 
 **Frameworks:** ghspec, chatdev, baes
+
+---
+
+## Metric Definitions
+
+| Metric | Full Name | Description | Range | Ideal Value |
+|--------|-----------|-------------|-------|-------------|
+| **AUTR** | Automated User Testing Rate | % of tests auto-generated | 0-1 | Higher ↑ |
+| **AEI** | Automation Efficiency Index | Quality per token consumed | 0-∞ | Higher ↑ |
+| **Q\*** | Quality Star | Composite quality score | 0-1 | Higher ↑ |
+| **ESR** | Emerging State Rate | % steps with successful evolution | 0-1 | Higher ↑ |
+| **CRUDe** | CRUD Evolution Coverage | CRUD operations implemented | 0-12 | Higher ↑ |
+| **MC** | Model Call Efficiency | Efficiency of LLM calls | 0-1 | Higher ↑ |
+| **TOK_IN** | Input Tokens | Total tokens sent to LLM | 0-∞ | Lower ↓ |
+| **TOK_OUT** | Output Tokens | Total tokens received from LLM | 0-∞ | Lower ↓ |
+| **T_WALL_seconds** | Wall Clock Time | Total elapsed time (seconds) | 0-∞ | Lower ↓ |
+| **ZDI** | Zero-Downtime Intervals | Idle time between steps (seconds) | 0-∞ | Lower ↓ |
+| **HIT** | Human-in-the-Loop Count | Manual interventions needed | 0-∞ | Lower ↓ |
+| **HEU** | Human Effort Units | Total manual effort required | 0-∞ | Lower ↓ |
+| **UTT** | User Task Total | Number of evolution steps | Fixed | 6 |
 
 ---
 
