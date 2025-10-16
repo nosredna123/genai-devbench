@@ -1,11 +1,32 @@
 {
   "version": "1.0",
-  "last_updated": "2025-10-16T16:10:00.000000Z",
-  "total_runs": 0,
+  "last_updated": "2025-10-16T16:54:29.811691Z",
+  "total_runs": 2,
   "frameworks": {
-    "chatdev": 0,
-    "baes": 0,
+    "chatdev": 1,
+    "baes": 1,
     "ghspec": 0
   },
-  "runs": []
+  "runs": [
+    {
+      "run_id": "08c47487-f180-46e8-a148-06373aa06110",
+      "framework": "baes",
+      "path": "baes/08c47487-f180-46e8-a148-06373aa06110",
+      "start_time": "2025-10-16T16:16:26.008713Z",
+      "end_time": "2025-10-16T16:19:55.762573Z",
+      "verification_status": "pending",
+      "total_tokens_in": 0,
+      "total_tokens_out": 0
+    },
+    {
+      "run_id": "5a7fd52f-9819-4044-96c0-43dbe73d24d9",
+      "framework": "chatdev",
+      "path": "chatdev/5a7fd52f-9819-4044-96c0-43dbe73d24d9",
+      "start_time": "2025-10-16T16:21:19.143666Z",
+      "end_time": "2025-10-16T16:54:27.176500Z",
+      "verification_status": "pending",
+      "total_tokens_in": 0,
+      "total_tokens_out": 0
+    }
+  ]
 }

@@ -429,9 +429,13 @@ class OrchestratorRunner:
             }
             
         except Exception as e:
+            import traceback
+            tb_str = traceback.format_exc()
             logger.error("Run failed",
                         extra={'run_id': self.run_id, 'event': 'run_failed',
-                              'metadata': {'error': str(e)}})
+                              'metadata': {'error': str(e), 'traceback': tb_str}})
+            # Also print to console for debugging
+            print(f"\n{'='*60}\nFULL TRACEBACK:\n{tb_str}{'='*60}\n", flush=True)
             return {
                 'status': 'failed',
                 'run_id': self.run_id,
