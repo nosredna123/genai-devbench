@@ -15,6 +15,7 @@ import time
 import shutil
 import tarfile
 import socket
+import json
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -238,7 +239,6 @@ class BAeSAdapter(BaseAdapter):
                 }
             
             # Parse JSON output
-            import json
             return json.loads(result.stdout)
             
         except subprocess.TimeoutExpired:
