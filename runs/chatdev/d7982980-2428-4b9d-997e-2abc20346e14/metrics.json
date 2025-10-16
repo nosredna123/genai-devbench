@@ -104,7 +104,7 @@
     "error": null
   },
   "usage_api_reconciliation": {
-    "verification_status": "pending",
+    "verification_status": "verified",
     "attempts": [
       {
         "timestamp": "2025-10-16T00:00:56.201309+00:00",
@@ -150,8 +150,54 @@
         "total_tokens_out": 76824,
         "steps_with_tokens": 6,
         "total_steps": 6
+      },
+      {
+        "timestamp": "2025-10-16T12:25:38.237089+00:00",
+        "steps": [
+          {
+            "step": 1,
+            "status": "success",
+            "tokens_in": 48160,
+            "tokens_out": 13408
+          },
+          {
+            "step": 2,
+            "status": "success",
+            "tokens_in": 47045,
+            "tokens_out": 9777
+          },
+          {
+            "step": 3,
+            "status": "success",
+            "tokens_in": 46614,
+            "tokens_out": 11550
+          },
+          {
+            "step": 4,
+            "status": "success",
+            "tokens_in": 44999,
+            "tokens_out": 16064
+          },
+          {
+            "step": 5,
+            "status": "success",
+            "tokens_in": 42308,
+            "tokens_out": 13671
+          },
+          {
+            "step": 6,
+            "status": "success",
+            "tokens_in": 35247,
+            "tokens_out": 12354
+          }
+        ],
+        "total_tokens_in": 264373,
+        "total_tokens_out": 76824,
+        "steps_with_tokens": 6,
+        "total_steps": 6
       }
     ],
-    "verification_message": "First reconciliation attempt successful, awaiting verification"
+    "verification_message": "\u2705 Data stable across 745 minute interval (264,373 in, 76,824 out)",
+    "verified_at": "2025-10-16T12:25:38.237089+00:00"
   }
 }
