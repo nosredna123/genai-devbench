@@ -151,7 +151,7 @@ class BAeSAdapter(BaseAdapter):
         self.python_path = self.python_path.absolute()
         pip_path = pip_path.absolute()
         
-        requirements_file = self.framework_dir / "requirements.txt"
+        requirements_file = (self.framework_dir / "requirements.txt").absolute()
         if not requirements_file.exists():
             raise RuntimeError(f"Requirements file not found: {requirements_file}")
         
@@ -177,8 +177,14 @@ class BAeSAdapter(BaseAdapter):
             logger.info("BAEs dependencies installed successfully", extra={'run_id': self.run_id})
             
         except subprocess.CalledProcessError as e:
-            logger.error("Failed to install BAEs dependencies", extra={'run_id': self.run_id})
-            raise RuntimeError(f"BAEs dependency installation failed: {e}") from e
+            stderr_output = e.stderr.decode() if e.stderr else 'No stderr output'
+            logger.error("Failed to install BAEs dependencies",
+                        extra={'run_id': self.run_id,
+                              'metadata': {
+                                  'error': str(e),
+                                  'stderr': stderr_output[:1000]  # First 1000 chars
+                              }})
+            raise RuntimeError(f"BAEs dependency installation failed: {e}\nStderr: {stderr_output[:500]}") from e
         except subprocess.TimeoutExpired as exc:
             logger.error("BAEs dependency installation timed out", extra={'run_id': self.run_id})
             raise RuntimeError("BAEs dependency installation timed out") from exc
