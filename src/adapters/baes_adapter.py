@@ -314,11 +314,15 @@ class BAeSAdapter(BaseAdapter):
             duration = time.time() - start_time  # Precise duration as float
             end_timestamp = int(time.time())  # Integer timestamp for API queries
             
-            tokens_in = 0
-            tokens_out = 0
+            # Fetch usage from OpenAI Usage API
+            tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
+                start_timestamp, end_timestamp
+            )
             
             logger.info("BAEs step completed",
-                       extra={'run_id': self.run_id, 'step': step_num, 'event': 'step_complete'})
+                       extra={'run_id': self.run_id, 'step': step_num, 'event': 'step_complete',
+                              'metadata': {'tokens_in': tokens_in, 'tokens_out': tokens_out,
+                                         'api_calls': api_calls, 'cached_tokens': cached_tokens}})
             
             return {
                 'success': all_success,
@@ -326,6 +330,8 @@ class BAeSAdapter(BaseAdapter):
                 'hitl_count': 0,
                 'tokens_in': tokens_in,
                 'tokens_out': tokens_out,
+                'api_calls': api_calls,
+                'cached_tokens': cached_tokens,
                 'start_timestamp': start_timestamp,
                 'end_timestamp': end_timestamp,
                 'retry_count': 0
@@ -342,6 +348,8 @@ class BAeSAdapter(BaseAdapter):
                 'hitl_count': 0,
                 'tokens_in': 0,
                 'tokens_out': 0,
+                'api_calls': 0,
+                'cached_tokens': 0,
                 'start_timestamp': start_timestamp,
                 'end_timestamp': end_timestamp,
                 'retry_count': 0

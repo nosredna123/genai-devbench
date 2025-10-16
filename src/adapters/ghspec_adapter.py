@@ -192,6 +192,8 @@ class GHSpecAdapter(BaseAdapter):
         hitl_count = 0
         tokens_in = 0
         tokens_out = 0
+        api_calls = 0
+        cached_tokens = 0
         start_timestamp = 0
         end_timestamp = 0
         success = False
@@ -200,21 +202,21 @@ class GHSpecAdapter(BaseAdapter):
             # Phase 3: Spec/Plan/Tasks generation (steps 1-3)
             if step_num == 1:
                 # Generate specification
-                hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp = self._execute_phase('specify', command_text)
+                hitl_count, tokens_in, tokens_out, api_calls, cached_tokens, start_timestamp, end_timestamp = self._execute_phase('specify', command_text)
                 success = self.spec_md_path.exists()
                 
             elif step_num == 2:
                 # Generate technical plan (requires spec.md)
                 if not self.spec_md_path.exists():
                     raise RuntimeError("spec.md not found - run step 1 first")
-                hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp = self._execute_phase('plan', command_text)
+                hitl_count, tokens_in, tokens_out, api_calls, cached_tokens, start_timestamp, end_timestamp = self._execute_phase('plan', command_text)
                 success = self.plan_md_path.exists()
                 
             elif step_num == 3:
                 # Generate task breakdown (requires spec.md and plan.md)
                 if not self.spec_md_path.exists() or not self.plan_md_path.exists():
                     raise RuntimeError("spec.md or plan.md not found - run steps 1-2 first")
-                hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp = self._execute_phase('tasks', command_text)
+                hitl_count, tokens_in, tokens_out, api_calls, cached_tokens, start_timestamp, end_timestamp = self._execute_phase('tasks', command_text)
                 success = self.tasks_md_path.exists()
                 
             # Phase 4: Task-by-task implementation (steps 4-5)
@@ -223,7 +225,7 @@ class GHSpecAdapter(BaseAdapter):
                 if not self.tasks_md_path.exists():
                     raise RuntimeError("tasks.md not found - run steps 1-3 first")
                 
-                hitl_count, tokens_in, tokens_out, start_timestamp, end_timestamp = self._execute_task_implementation(command_text)
+                hitl_count, tokens_in, tokens_out, api_calls, cached_tokens, start_timestamp, end_timestamp = self._execute_task_implementation(command_text)
                 
                 # Success if at least some files were created
                 created_files = list(self.src_dir.rglob('*.py')) + list(self.src_dir.rglob('*.md'))
@@ -249,6 +251,8 @@ class GHSpecAdapter(BaseAdapter):
                 hitl_count = 0
                 tokens_in = 0
                 tokens_out = 0
+                api_calls = 0
+                cached_tokens = 0
                 # For step 6 (stub), use current time as timestamps
                 start_timestamp = int(time.time())
                 end_timestamp = start_timestamp
@@ -274,7 +278,9 @@ class GHSpecAdapter(BaseAdapter):
                              'duration': duration,
                              'hitl_count': hitl_count,
                              'tokens_in': tokens_in,
-                             'tokens_out': tokens_out
+                             'tokens_out': tokens_out,
+                             'api_calls': api_calls,
+                             'cached_tokens': cached_tokens
                          }})
         
         return {
@@ -283,6 +289,8 @@ class GHSpecAdapter(BaseAdapter):
             'hitl_count': hitl_count,
             'tokens_in': tokens_in,
             'tokens_out': tokens_out,
+            'api_calls': api_calls,
+            'cached_tokens': cached_tokens,
             'start_timestamp': start_timestamp,
             'end_timestamp': end_timestamp,
             'retry_count': 0
