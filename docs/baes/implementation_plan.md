@@ -2,7 +2,60 @@
 
 **Date**: October 16, 2025  
 **Purpose**: Integrate BAEs framework into the experiment orchestrator  
-**Target**: Implement `src/adapters/baes_adapter.py`
+**Target**: Implement `src/adapters/baes_adapter.py`  
+**Status**: Updated after critique review
+
+---
+
+## 0. Critique Resolution Summary
+
+This plan has been reviewed against a comprehensive external critique and updated to address all identified concerns:
+
+### ✅ Resolved Issues:
+
+1. **Dependency Management** (CRITICAL):
+   - **Decision**: Create isolated venv for BAEs (like ChatDev) - Option C
+   - **Implementation**: Added `_setup_virtual_environment()` method (Task 1.2.1)
+   - **Rationale**: Prevents dependency conflicts (FastAPI, Pydantic, Streamlit versions)
+
+2. **Server Health Checks** (IMPORTANT):
+   - **Decision**: Check HTTP endpoints AFTER generation steps complete
+   - **Implementation**: Two-phase health check - internal (always) + external (after step 2+)
+   - **Rationale**: Validates full webapp is working as expected after deployment
+
+3. **Token Tracking** (IMPORTANT):
+   - **Decision**: Unified Usage API reconciliation for ALL adapters (no exceptions)
+   - **Implementation**: Returns (0, 0) for tokens; reconciliation fills actual values
+   - **Rationale**: Consistency, accuracy, auditability across frameworks
+
+4. **Server Startup Timing** (MINOR):
+   - **Decision**: Trust BAEs internal startup logic (same as other adapters)
+   - **Implementation**: No additional wait/polling after `process_natural_language_request()`
+   - **Rationale**: Consistent adapter behavior; BAEs handles startup internally
+
+5. **Downtime Measurement** (MINOR):
+   - **Decision**: Framework-internal restarts (Uvicorn --reload) do NOT count as incidents
+   - **Implementation**: Added Section 7.5 clarifying ZDI metric definition
+   - **Rationale**: Reloads are expected behavior, not failures
+
+### 📋 Key Changes Made:
+
+- **Section 3.2**: Updated comparison table to include environment and token tracking
+- **Task 1.2**: Added venv setup and `OPENAI_API_KEY_BAES` configuration
+- **Task 1.2.1**: New method `_setup_virtual_environment()` (follows ChatDev pattern)
+- **Task 1.3**: Updated kernel initialization to use venv imports
+- **Task 3.2**: Enhanced `health_check()` with two-phase checking (internal + HTTP endpoints)
+- **Section 5**: Complete rewrite - unified token tracking strategy, no BAEs modifications needed
+- **Section 6**: Added API key configuration and venv settings
+- **Section 7.5**: New section clarifying downtime measurement philosophy
+
+### 🎯 Validation:
+
+All critique concerns addressed. Plan now aligned with:
+- Existing orchestrator architecture (venv isolation, API key separation)
+- Unified token tracking methodology (Usage API reconciliation)
+- Consistent health checking philosophy (validate after generation)
+- Clear metric definitions (ZDI excludes framework-internal operations)
 
 ---
 
@@ -156,6 +209,9 @@ class BAeSAdapter(BaseAdapter):
 | **Artifacts** | Markdown + code | Separate workspaces | Managed system directory |
 | **API Calls** | Direct OpenAI calls | Direct OpenAI calls | Via kernel (abstracted) |
 | **Timestamps** | Per-phase tracking | Per-step tracking | Per-request tracking |
+| **Environment** | Shared Python env | Isolated venv | Isolated venv (NEW) |
+| **API Key** | OPENAI_API_KEY_GHSPEC | OPENAI_API_KEY_CHATDEV | OPENAI_API_KEY_BAES |
+| **Token Tracking** | Usage API reconciliation | Usage API reconciliation | Usage API reconciliation |
 
 ### 3.3 Integration Approach
 
@@ -225,19 +281,20 @@ def start(self) -> None:
     else:
         # Git clone for production
         subprocess.run(['git', 'clone', repo_url, str(self.framework_dir)],
-                      check=True, timeout=300)
+                      check=True, capture_output=True, stdin=subprocess.DEVNULL, timeout=300)
     
     # 3. Verify commit hash
     commit_hash = self.config.get('commit_hash', 'HEAD')
     if commit_hash != 'HEAD':
         subprocess.run(['git', 'checkout', commit_hash],
-                      cwd=self.framework_dir, check=True)
+                      cwd=self.framework_dir, check=True,
+                      capture_output=True, stdin=subprocess.DEVNULL)
     
     self.verify_commit_hash(self.framework_dir, commit_hash)
     
-    # 4. Setup Python environment
-    # Add framework to Python path
-    sys.path.insert(0, str(self.framework_dir))
+    # 4. Setup isolated virtual environment (like ChatDev)
+    # This prevents dependency conflicts (e.g., Pydantic, FastAPI versions)
+    self._setup_virtual_environment()
     
     # 5. Set environment variables
     os.environ['BAE_CONTEXT_STORE_PATH'] = str(self.database_dir / "context_store.json")
@@ -246,23 +303,151 @@ def start(self) -> None:
     os.environ['UI_PORT'] = str(self.config['ui_port'])
     os.environ['BAE_MAX_RETRIES'] = str(self.config.get('max_retries', 3))
     
-    # 6. Initialize kernel (lazy initialization)
+    # 6. Set BAEs-specific API key for token tracking
+    os.environ['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY_BAES')
+    
+    # 7. Initialize kernel (lazy initialization)
     self._kernel = None  # Will be initialized on first use
     
     logger.info("BAEs framework ready",
                extra={'run_id': self.run_id,
                      'metadata': {
                          'framework_dir': str(self.framework_dir),
-                         'managed_system_dir': str(self.managed_system_dir)
+                         'managed_system_dir': str(self.managed_system_dir),
+                         'venv': str(self.venv_path),
+                         'python': str(self.python_path)
                      }})
+```
+
+#### Task 1.2.1: Virtual Environment Setup (Dependency Isolation)
+
+```python
+def _setup_virtual_environment(self) -> None:
+    """
+    Create virtual environment and install BAEs dependencies.
+    
+    Follows the same pattern as ChatDev adapter (FR-002.1 steps 2-3):
+    - Creates isolated venv to prevent dependency conflicts
+    - Installs BAEs requirements (FastAPI, Streamlit, SQLAlchemy, etc.)
+    - Ensures compatibility with orchestrator environment
+    """
+    self.venv_path = self.framework_dir / ".venv"
+    self.python_path = None
+    
+    logger.info("Creating virtual environment for BAEs",
+               extra={'run_id': self.run_id,
+                     'metadata': {'path': str(self.venv_path)}})
+    
+    # Create virtual environment
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "venv", str(self.venv_path)],
+            check=True,
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            timeout=120
+        )
+    except subprocess.CalledProcessError as e:
+        logger.error("Failed to create virtual environment",
+                    extra={'run_id': self.run_id,
+                          'metadata': {'error': str(e)}})
+        raise RuntimeError("Virtual environment creation failed") from e
+    
+    # Determine Python and pip paths (platform-independent)
+    if sys.platform == "win32":
+        self.python_path = self.venv_path / "Scripts" / "python.exe"
+        pip_path = self.venv_path / "Scripts" / "pip.exe"
+    else:
+        self.python_path = self.venv_path / "bin" / "python"
+        pip_path = self.venv_path / "bin" / "pip"
+    
+    # Ensure paths are absolute
+    self.python_path = self.python_path.absolute()
+    pip_path = pip_path.absolute()
+    
+    # Verify Python is accessible
+    try:
+        result = subprocess.run(
+            [str(self.python_path), "--version"],
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            text=True,
+            timeout=10
+        )
+        python_version = result.stdout.strip()
+        logger.info("Virtual environment created",
+                   extra={'run_id': self.run_id,
+                         'metadata': {'python_version': python_version}})
+    except Exception as e:
+        raise RuntimeError(f"Virtual environment Python not accessible: {e}") from e
+    
+    # Install dependencies from BAEs requirements.txt
+    logger.info("Installing BAEs dependencies",
+               extra={'run_id': self.run_id,
+                     'event': 'dependency_install_start'})
+    
+    requirements_file = self.framework_dir / "requirements.txt"
+    if not requirements_file.exists():
+        raise RuntimeError(f"Requirements file not found: {requirements_file}")
+    
+    try:
+        # Upgrade pip and install build tools
+        logger.info("Upgrading pip and installing build tools",
+                   extra={'run_id': self.run_id})
+        
+        subprocess.run(
+            [str(pip_path), "install", "--upgrade", "pip", "setuptools>=67.0.0", "wheel"],
+            check=True,
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            timeout=120,
+            cwd=self.framework_dir
+        )
+        
+        # Install all requirements from BAEs
+        logger.info("Installing BAEs requirements.txt",
+                   extra={'run_id': self.run_id})
+        
+        subprocess.run(
+            [str(pip_path), "install", "-r", str(requirements_file)],
+            check=True,
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            timeout=300,  # BAEs has many dependencies
+            cwd=self.framework_dir
+        )
+        
+        logger.info("BAEs dependencies installed successfully",
+                   extra={'run_id': self.run_id,
+                         'event': 'dependency_install_complete'})
+        
+    except subprocess.CalledProcessError as e:
+        logger.error("Failed to install BAEs dependencies",
+                    extra={'run_id': self.run_id,
+                          'metadata': {'error': str(e),
+                                     'stderr': e.stderr.decode() if e.stderr else ''}})
+        raise RuntimeError("BAEs dependency installation failed") from e
+    except subprocess.TimeoutExpired:
+        logger.error("BAEs dependency installation timed out",
+                    extra={'run_id': self.run_id})
+        raise RuntimeError("BAEs dependency installation timed out")
 ```
 
 #### Task 1.3: Kernel Initialization
 ```python
 @property
 def kernel(self):
-    """Lazy initialization of EnhancedRuntimeKernel"""
+    """
+    Lazy initialization of EnhancedRuntimeKernel.
+    
+    CRITICAL: Imports BAEs modules from the isolated venv,
+    not the orchestrator's environment.
+    """
     if self._kernel is None:
+        # Add framework directory to Python path for imports
+        # (venv's site-packages already has BAEs dependencies)
+        sys.path.insert(0, str(self.framework_dir))
+        
         from baes.core.enhanced_runtime_kernel import EnhancedRuntimeKernel
         
         context_store_path = str(self.database_dir / "context_store.json")
@@ -507,24 +692,43 @@ def _archive_managed_system(self):
 
 ```python
 def health_check(self) -> bool:
-    """Check if BAEs framework is healthy."""
+    """
+    Check if BAEs framework is healthy.
+    
+    Two-phase checking:
+    1. Internal: Kernel, context store, BAE registry (always)
+    2. External: HTTP endpoints (only after generation steps)
+    """
     try:
+        # Phase 1: Internal health (kernel, registry, context)
         # 1. Check if kernel is initialized
         if not hasattr(self, '_kernel') or not self._kernel:
+            logger.warning("Health check failed: kernel not initialized",
+                         extra={'run_id': self.run_id})
             return False
         
         # 2. Check if context store is accessible
         context_store = self._kernel.context_store
         if not context_store:
+            logger.warning("Health check failed: context store not accessible",
+                         extra={'run_id': self.run_id})
             return False
         
         # 3. Check if BAE registry has entities
         supported_entities = self._kernel.bae_registry.get_supported_entities()
         if not supported_entities:
+            logger.warning("Health check failed: no entities in registry",
+                         extra={'run_id': self.run_id})
             return False
         
-        # 4. Optionally check servers (only if they should be running)
-        # We skip this for experiments as servers may not always be running
+        # Phase 2: External health (HTTP endpoints)
+        # ONLY check after generation steps complete (when full webapp expected)
+        # This aligns with user requirement: "check it immediately after all generation steps"
+        if self._should_check_endpoints():
+            if not self._check_http_endpoints():
+                logger.warning("Health check failed: HTTP endpoints not responding",
+                             extra={'run_id': self.run_id})
+                return False
         
         logger.debug("Health check passed",
                     extra={'run_id': self.run_id,
@@ -536,6 +740,60 @@ def health_check(self) -> bool:
         logger.error(f"Health check failed: {e}",
                     extra={'run_id': self.run_id})
         return False
+
+def _should_check_endpoints(self) -> bool:
+    """
+    Determine if HTTP endpoints should be checked.
+    
+    Returns True if:
+    - We're past the initial generation steps (step >= 2)
+    - Servers have been started (managed_system exists)
+    """
+    return (hasattr(self, 'current_step') and 
+            self.current_step >= 2 and
+            self.managed_system_dir.exists())
+
+def _check_http_endpoints(self) -> bool:
+    """
+    Verify that API and UI servers are responding.
+    
+    Expected after all generation steps complete:
+    - API (port 8100): /health or /docs endpoint
+    - UI (port 8600): Streamlit homepage
+    """
+    import requests
+    
+    api_port = self.config['api_port']
+    ui_port = self.config['ui_port']
+    
+    # Check API endpoint
+    try:
+        response = requests.get(f"http://localhost:{api_port}/docs", timeout=5)
+        if response.status_code != 200:
+            logger.warning(f"API endpoint not healthy: {response.status_code}",
+                         extra={'run_id': self.run_id})
+            return False
+    except requests.RequestException as e:
+        logger.warning(f"API endpoint not reachable: {e}",
+                     extra={'run_id': self.run_id})
+        return False
+    
+    # Check UI endpoint (Streamlit returns 200 for root)
+    try:
+        response = requests.get(f"http://localhost:{ui_port}/", timeout=5)
+        if response.status_code != 200:
+            logger.warning(f"UI endpoint not healthy: {response.status_code}",
+                         extra={'run_id': self.run_id})
+            return False
+    except requests.RequestException as e:
+        logger.warning(f"UI endpoint not reachable: {e}",
+                     extra={'run_id': self.run_id})
+        return False
+    
+    logger.debug("HTTP endpoints healthy",
+                extra={'run_id': self.run_id,
+                      'metadata': {'api_port': api_port, 'ui_port': ui_port}})
+    return True
 ```
 
 ### Phase 4: HITL Support (Week 2)
@@ -739,116 +997,155 @@ def test_baes_complete_workflow(baes_adapter, tmp_path):
 
 ---
 
-## 5. Required BAEs Framework Modifications
+## 5. Token Tracking Strategy
 
-### 5.1 Token Tracking Enhancement
+### 5.1 Unified Token Tracking Approach
 
-**File**: `baes/llm/openai_client.py` (or wherever OpenAI calls are made)
+**CRITICAL DECISION**: All adapters (GHSpec, ChatDev, BAEs) MUST use the same token tracking method for consistency and comparability.
 
-```python
-class OpenAIClient:
-    def __init__(self):
-        self.token_usage_history = []
-    
-    def create_chat_completion(self, messages, **kwargs):
-        response = openai.ChatCompletion.create(
-            messages=messages,
-            **kwargs
-        )
-        
-        # Track token usage
-        usage = response.get('usage', {})
-        self.token_usage_history.append({
-            'timestamp': time.time(),
-            'prompt_tokens': usage.get('prompt_tokens', 0),
-            'completion_tokens': usage.get('completion_tokens', 0),
-            'total_tokens': usage.get('total_tokens', 0)
-        })
-        
-        return response
-    
-    def get_total_tokens(self):
-        """Get total tokens used"""
-        return {
-            'prompt_tokens': sum(u['prompt_tokens'] for u in self.token_usage_history),
-            'completion_tokens': sum(u['completion_tokens'] for u in self.token_usage_history),
-            'total_tokens': sum(u['total_tokens'] for u in self.token_usage_history)
-        }
-    
-    def reset_token_tracking(self):
-        """Reset token tracking"""
-        self.token_usage_history = []
-```
+**Method**: OpenAI Usage API Reconciliation
+- **Primary Source**: Official OpenAI Usage API (accessed via `OPEN_AI_KEY_ADM`)
+- **Script**: `runners/reconcile_usage.sh`
+- **Timing**: Runs 30-60 minutes after experiment completion (API delay requirement)
+- **Per-Framework API Keys**:
+  - GHSpec: `OPENAI_API_KEY_GHSPEC`
+  - ChatDev: `OPENAI_API_KEY_CHATDEV`
+  - BAEs: `OPENAI_API_KEY_BAES`
 
-### 5.2 Kernel Enhancement for Token Access
+### 5.2 BAEs Adapter Implementation
 
-**File**: `baes/core/enhanced_runtime_kernel.py`
+The BAEs adapter MUST follow the same pattern as GHSpec and ChatDev:
 
 ```python
-class EnhancedRuntimeKernel:
-    def get_token_usage(self) -> Dict[str, int]:
-        """Get total token usage from all SWEA agents"""
-        total_prompt = 0
-        total_completion = 0
-        
-        # Collect from all agents
-        for agent in [self.backend_swea, self.frontend_swea, 
-                     self.database_swea, self.test_swea, self.techlead_swea]:
-            if agent and hasattr(agent, 'llm_client'):
-                usage = agent.llm_client.get_total_tokens()
-                total_prompt += usage.get('prompt_tokens', 0)
-                total_completion += usage.get('completion_tokens', 0)
-        
-        # Also check BAEs
-        for bae in self.bae_registry.get_all_baes().values():
-            if hasattr(bae, 'llm_client'):
-                usage = bae.llm_client.get_total_tokens()
-                total_prompt += usage.get('prompt_tokens', 0)
-                total_completion += usage.get('completion_tokens', 0)
-        
-        return {
-            'prompt_tokens': total_prompt,
-            'completion_tokens': total_completion,
-            'total_tokens': total_prompt + total_completion
-        }
+def execute_step(self, step_num: int, command_text: str) -> Tuple[bool, float, int, int, float, float]:
+    """
+    Execute one experiment step.
     
-    def reset_token_tracking(self):
-        """Reset token tracking for all agents"""
-        for agent in [self.backend_swea, self.frontend_swea,
-                     self.database_swea, self.test_swea, self.techlead_swea]:
-            if agent and hasattr(agent, 'llm_client'):
-                agent.llm_client.reset_token_tracking()
+    Returns:
+        Tuple containing:
+        - success (bool): Whether step succeeded
+        - duration_seconds (float): Execution time
+        - tokens_in (int): Input tokens (PLACEHOLDER - reconciliation fills this)
+        - tokens_out (int): Output tokens (PLACEHOLDER - reconciliation fills this)
+        - start_timestamp (float): Unix timestamp when step started
+        - end_timestamp (float): Unix timestamp when step completed
+    """
+    start_timestamp = time.time()
+    
+    # Set BAEs API key for this run
+    os.environ['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY_BAES')
+    
+    logger.info("Executing BAEs step",
+               extra={'run_id': self.run_id, 'step': step_num,
+                     'event': 'step_start',
+                     'metadata': {'command': command_text[:100]}})
+    
+    try:
+        # Translate command to BAEs requests
+        requests = self._translate_command_to_requests(command_text)
         
-        for bae in self.bae_registry.get_all_baes().values():
-            if hasattr(bae, 'llm_client'):
-                bae.llm_client.reset_token_tracking()
+        # Execute each BAEs request
+        all_success = True
+        for idx, request in enumerate(requests):
+            # Call BAEs kernel
+            result = self.kernel.process_natural_language_request(
+                request=request,
+                start_servers=(step_num == 1 and idx == 0)  # Only first time
+            )
+            
+            if not result.get('success', False):
+                all_success = False
+                logger.error(f"BAEs request failed: {request}",
+                           extra={'run_id': self.run_id, 'step': step_num})
+                break
+        
+        end_timestamp = time.time()
+        duration = end_timestamp - start_timestamp
+        
+        # Token placeholders (will be filled by reconciliation)
+        # The reconcile_usage.sh script queries Usage API with OPEN_AI_KEY_ADM
+        # and updates run metadata with actual token counts per step
+        tokens_in = 0
+        tokens_out = 0
+        
+        logger.info("BAEs step completed",
+                   extra={'run_id': self.run_id, 'step': step_num,
+                         'event': 'step_complete',
+                         'metadata': {
+                             'success': all_success,
+                             'duration': duration,
+                             'note': 'Token counts filled by reconciliation'
+                         }})
+        
+        return all_success, duration, tokens_in, tokens_out, start_timestamp, end_timestamp
+        
+    except Exception as e:
+        end_timestamp = time.time()
+        logger.error(f"BAEs step failed: {e}",
+                    extra={'run_id': self.run_id, 'step': step_num})
+        return False, end_timestamp - start_timestamp, 0, 0, start_timestamp, end_timestamp
 ```
 
-### 5.3 Result Structure Enhancement
+### 5.3 Why NOT Track Tokens in Adapter
 
-**File**: `baes/core/enhanced_runtime_kernel.py`
+**Rationale for unified approach**:
 
-Add token usage to result:
+1. **Consistency**: All three frameworks measured identically
+2. **Accuracy**: Official OpenAI source of truth (no parsing/calculation errors)
+3. **Simplicity**: No framework-specific token extraction logic
+4. **Auditability**: Single reconciliation report for all frameworks
+5. **Comparability**: Fair apples-to-apples comparison
+
+**What adapters should NOT do**:
+- ❌ Parse token counts from framework outputs
+- ❌ Call OpenAI API directly to get usage
+- ❌ Maintain separate token tracking mechanisms
+- ❌ Return non-zero token counts in execute_step()
+
+**What reconciliation does**:
+- ✅ Queries Usage API with `OPEN_AI_KEY_ADM` 
+- ✅ Filters by framework-specific API key (e.g., `OPENAI_API_KEY_BAES`)
+- ✅ Matches API calls to experiment steps by timestamp
+- ✅ Updates run metadata with actual token counts
+- ✅ Generates reconciliation report
+
+### 5.4 Optional: BAEs Internal Metrics (For Debugging Only)
+
+BAEs may have internal metrics tracking via `metrics_tracker.py`. This can be useful for debugging but should NOT be the primary token source:
 
 ```python
-def process_natural_language_request(self, request: str, start_servers=True):
-    # ... existing code ...
+def execute_step(self, step_num: int, command_text: str) -> Tuple[bool, float, int, int, float, float]:
+    # ... main execution code ...
     
-    # Get token usage
-    token_usage = self.get_token_usage()
+    # OPTIONAL: Log internal metrics for debugging/validation
+    try:
+        from baes.utils.metrics_tracker import get_snapshot
+        metrics = get_snapshot()
+        
+        logger.debug("BAEs internal metrics",
+                    extra={'run_id': self.run_id, 'step': step_num,
+                          'metadata': {
+                              'baes_reported_tokens': metrics.get('tokens_total', 0),
+                              'baes_llm_calls': metrics.get('llm_calls', 0),
+                              'note': 'For debugging only - reconciliation is source of truth'
+                          }})
+    except Exception as e:
+        logger.debug(f"Could not retrieve BAEs metrics: {e}",
+                    extra={'run_id': self.run_id})
     
-    result = {
-        "success": True,
-        "entity": entity_name,
-        "execution_results": execution_results,
-        "coordination_plan": coordination_plan,
-        "files_generated": files_generated,
-        "token_usage": token_usage,  # ADD THIS
-        "error": None
-    }
-    
-    return result
+    # Always return 0 for tokens - reconciliation fills actual values
+    return all_success, duration, 0, 0, start_timestamp, end_timestamp
 ```
+
+### 5.5 No BAEs Framework Modifications Required
+
+**IMPORTANT**: With the unified Usage API approach, we do NOT need to modify BAEs framework code:
+
+- ❌ No need to add token tracking to `OpenAIClient`
+- ❌ No need to add `get_token_usage()` to `EnhancedRuntimeKernel`
+- ❌ No need to enhance result structure with `token_usage` field
+
+The BAEs framework can remain unchanged. All token tracking happens externally via the Usage API reconciliation process.
 
 ---
 
@@ -864,6 +1161,42 @@ Add BAEs section:
 frameworks:
   baes:
     enabled: true
+    repo_url: "file:///home/amg/projects/uece/baes/baes_demo"
+    commit_hash: "HEAD"  # Or specific commit for reproducibility
+    api_port: 8100
+    ui_port: 8600
+    managed_system_path: "managed_system"
+    context_store_path: "database/context_store.json"
+    max_retries: 3
+    auto_restart_servers: false  # Disable for experiments
+    use_venv: true  # NEW: Create isolated environment like ChatDev
+```
+
+### 6.2 Environment Variables
+
+**File**: `.env`
+
+BAEs-specific API key for token tracking (already configured):
+
+```bash
+# Admin Key (for reconciliation via Usage API)
+OPEN_AI_KEY_ADM=sk-admin-...
+
+# BAEs Framework (for generation)
+OPENAI_API_KEY_BAES=sk-proj-OpISHqiUYt9o8-mnWMe5...
+
+# ChatDev Framework (for generation)
+OPENAI_API_KEY_CHATDEV=sk-proj-GvVfYDPs8axWjm7g1tZ_...
+
+# GitHub Spec-kit Framework (for generation)
+OPENAI_API_KEY_GHSPEC=sk-proj-2-llx3yW6CegypCmaT3_...
+```
+
+**Reconciliation Interval** (already configured):
+```bash
+RECONCILIATION_VERIFICATION_INTERVAL_MIN=10  # Development
+# RECONCILIATION_VERIFICATION_INTERVAL_MIN=60  # Production
+```
     repo_url: "file:///home/amg/projects/uece/baes/baes_demo"
     commit_hash: "HEAD"
     api_port: 8100
@@ -929,15 +1262,71 @@ class BaseAdapter:
             logger.warning(f"Failed to kill process on port {port}: {e}")
 ```
 
-### 7.2 Shared Token Tracking Utilities
+---
 
-**File**: `src/utils/token_tracker.py`
+## 7.5 Downtime Measurement Clarification
+
+### 7.5.1 What Counts as "Downtime Incident"
+
+**Definition**: A downtime incident (ZDI metric) is an **unplanned** unavailability of the web application caused by:
+- ❌ Server crashes requiring manual restart
+- ❌ Errors that prevent the application from responding
+- ❌ Configuration issues that break the system
+- ❌ Code changes that cause runtime failures
+
+**What does NOT count as downtime**:
+- ✅ Framework-internal restarts (e.g., Uvicorn `--reload` detecting changes)
+- ✅ Planned server stops between experiment steps
+- ✅ Brief unavailability during code deployment (< 2 seconds)
+- ✅ Initial startup time (before first request)
+
+### 7.5.2 BAEs-Specific Considerations
+
+BAEs uses Uvicorn with `--reload` flag, which automatically reloads when code changes:
 
 ```python
-class TokenTracker:
-    """Unified token tracking across frameworks"""
+# In BAEs ManagedSystemManager
+uvicorn_cmd = [
+    "uvicorn",
+    "main:app",
+    "--host", "0.0.0.0",
+    "--port", str(api_port),
+    "--reload"  # Auto-reload on code changes
+]
+```
+
+**Impact**:
+- When BAEs generates new code (e.g., adding validation), Uvicorn detects the change
+- Uvicorn performs a hot reload (~1-2 seconds)
+- This is **NOT a downtime incident** - it's expected framework behavior
+
+**Measurement Approach**:
+- Health checks run AFTER all generation steps complete
+- If the application is responding at that point, ZDI = 0
+- Only count incidents if health check fails or manual intervention needed
+
+### 7.5.3 Implementation in health_check()
+
+```python
+def _check_http_endpoints(self) -> bool:
+    """
+    Verify endpoints are responding AFTER generation completes.
     
-    def __init__(self):
+    This validates:
+    - No crashes occurred during generation
+    - Auto-reload successfully handled code changes
+    - Application is in working state
+    
+    Does NOT penalize:
+    - Brief reloads during generation (expected behavior)
+    """
+    # Check API and UI endpoints as shown in Task 3.2
+    # ...
+```
+
+---
+
+## 8. Timeline & Milestones
         self.history = []
     
     def record(self, prompt_tokens: int, completion_tokens: int):
