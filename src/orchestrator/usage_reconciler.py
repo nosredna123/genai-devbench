@@ -211,9 +211,13 @@ class UsageReconciler:
         # 5. Update aggregate metrics
         total_tokens_in = current_attempt['total_tokens_in']
         total_tokens_out = current_attempt['total_tokens_out']
+        total_api_calls = current_attempt.get('total_api_calls', 0)
+        total_cached_tokens = current_attempt.get('total_cached_tokens', 0)
         
         metrics['aggregate_metrics']['TOK_IN'] = total_tokens_in
         metrics['aggregate_metrics']['TOK_OUT'] = total_tokens_out
+        metrics['aggregate_metrics']['API_CALLS'] = total_api_calls
+        metrics['aggregate_metrics']['CACHED_TOKENS'] = total_cached_tokens
         
         # Recompute AEI (Autonomy Efficiency Index)
         autr = metrics['aggregate_metrics'].get('AUTR', 0)
