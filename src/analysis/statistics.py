@@ -576,18 +576,21 @@ def _generate_relative_performance(framework_means: Dict[str, Dict[str, Dict[str
     return lines
 
 
-def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]]]) -> List[str]:
+def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]]], run_counts: Dict[str, int]) -> List[str]:
     """
     Generate executive summary section with key findings.
     
     Args:
         frameworks_data: Dict mapping framework names to lists of run metrics
+        run_counts: Dict mapping framework names to number of runs
     
     Returns:
         List of markdown lines for the executive summary section
     """
     lines = [
         "## Executive Summary",
+        "",
+        f"*Based on {sum(run_counts.values())} runs across {len(run_counts)} frameworks: {', '.join([f'{fw} (n={n})' for fw, n in run_counts.items()])}*",
         ""
     ]
     
@@ -762,6 +765,11 @@ def generate_statistical_report(
     
     from pathlib import Path
     
+    # Calculate run counts per framework
+    run_counts = {framework: len(runs) for framework, runs in frameworks_data.items()}
+    total_runs = sum(run_counts.values())
+    run_counts_str = ', '.join([f"{fw}: {count}" for fw, count in run_counts.items()])
+    
     # Start markdown document
     lines = [
         "# Statistical Analysis Report",
@@ -769,6 +777,8 @@ def generate_statistical_report(
         f"**Generated:** {_get_timestamp()}",
         "",
         f"**Frameworks:** {', '.join(frameworks_data.keys())}",
+        "",
+        f"**Sample Size:** {total_runs} total runs ({run_counts_str})",
         "",
         "---",
         ""
@@ -801,6 +811,32 @@ def generate_statistical_report(
         "- Repository: `github.com/gesad-lab/baes_demo` (commit: `1dd5736`)",
         "",
         "### 📋 Experimental Protocol",
+        "",
+        "#### **Sample Size and Replication**",
+        "",
+        f"This analysis is based on **{total_runs} experimental runs** across three frameworks:",
+        "",
+    ])
+    
+    # Add per-framework run counts
+    for framework in sorted(frameworks_data.keys()):
+        count = run_counts[framework]
+        lines.append(f"- **{framework}**: {count} independent runs")
+    
+    lines.extend([
+        "",
+        "**Replication Protocol:**",
+        "- Each run executes the complete 6-step evolution scenario independently",
+        "- Runs are performed sequentially (not in parallel) to avoid resource conflicts",
+        "- Each run uses a fresh isolated environment (new virtual environment, clean workspace)",
+        "- Random seed fixed at 42 for frameworks that support deterministic execution",
+        "- Non-deterministic LLM responses introduce natural variance across runs",
+        "",
+        "**Statistical Power:**",
+        f"- Current sample sizes ({run_counts_str}) provide sufficient power for detecting large effect sizes",
+        "- Bootstrap confidence intervals (10,000 resamples) account for sample size uncertainty",
+        "- Stopping rule: Continue until CI half-width ≤ 10% of mean (max 25 runs per framework)",
+        f"- Current status: {', '.join([f'{fw} ({count}/25)' for fw, count in run_counts.items()])}",
         "",
         "#### **Standardized Task Sequence**",
         "",
@@ -940,7 +976,7 @@ def generate_statistical_report(
         "- **Non-Parametric Tests**: Kruskal-Wallis and Dunn-Šidák avoid normality assumptions",
         "- **Effect Sizes**: Cliff's delta quantifies practical significance beyond p-values",
         "- **Bootstrap CI**: 95% confidence intervals with 10,000 resamples for stable estimates",
-        "- **Small Sample Awareness**: Current results (5 runs) show large CI widths; p-values > 0.05 expected",
+        f"- **Small Sample Awareness**: Current results ({run_counts_str}) show large CI widths; p-values > 0.05 expected",
         "  - *Stopping Rule*: Experiment continues until CI half-width ≤ 10% of mean (25 runs max)",
         "",
         "**Interpretation Caveats:**",
@@ -1052,7 +1088,7 @@ def generate_statistical_report(
     ])
     
     # Add Executive Summary
-    lines.extend(_generate_executive_summary(frameworks_data))
+    lines.extend(_generate_executive_summary(frameworks_data, run_counts))
     
     # Collect all metrics
     all_metrics = set()
@@ -1074,9 +1110,9 @@ def generate_statistical_report(
         ""
     ])
     
-    # Table header
-    header = "| Framework | " + " | ".join(all_metrics) + " |"
-    separator = "|-----------|" + "|".join(["-" * 12 for _ in all_metrics]) + "|"
+    # Table header with sample size column
+    header = "| Framework | N | " + " | ".join(all_metrics) + " |"
+    separator = "|-----------|---|" + "|".join(["-" * 12 for _ in all_metrics]) + "|"
     lines.extend([header, separator])
     
     # First pass: collect all mean values for each metric to determine indicators
@@ -1096,7 +1132,8 @@ def generate_statistical_report(
     # Table rows with indicators
     for framework in frameworks_data.keys():
         aggregated = framework_means[framework]
-        row = f"| {framework} |"
+        n = run_counts[framework]
+        row = f"| {framework} | {n} |"
         
         for metric in all_metrics:
             if metric in aggregated:
