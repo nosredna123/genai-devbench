@@ -117,6 +117,32 @@ def generate_statistical_report(
 **Estimated Time:** 3 hours  
 **Target:** Update all docs, add usage examples
 
+### Phase 9: Review and Eliminate Dangerous Fallbacks (CRITICAL PRIORITY)
+**Status:** Not Started  
+**Estimated Time:** 3 hours  
+**Target:** Replace all `.get(key, default)` fallbacks with strict validation
+
+**⚠️ CRITICAL:** Fallback values can mask configuration problems by silently using defaults.
+
+**Current Risky Patterns:**
+- `config.get('model', 'gpt-4o-mini')` - User might not notice wrong model
+- `fw_config.get('repo_url', '')` - Missing repo silently becomes empty string
+- `except: config = {}` - Config load failures hidden, report generates with wrong values
+
+**Solution:**
+- Add `_require_config_value()` helper that raises clear errors
+- Replace all `.get(key, default)` with strict lookups
+- Fail fast with helpful error messages pointing to config/experiment.yaml
+- Remove hardcoded framework_descriptions fallback (move to config or make optional)
+
+**Why This Matters:**
+- **Data Integrity:** Report must always match actual experiment configuration
+- **Fail Fast:** Configuration errors caught immediately, not in production
+- **Clear Errors:** User knows exactly what's missing and where to fix it
+- **No Silent Bugs:** Eliminates "wrong but working" scenarios
+
+**See:** Full Phase 9 specification in REPORT_GENERATION_IMPROVEMENT_PLAN.md
+
 ---
 
 ## Next Steps
@@ -145,11 +171,12 @@ code src/analysis/statistics.py
 ## Metrics
 
 ### Progress Summary
-- **Completed Phases:** 2/8 (25%)
-- **Estimated Total Time:** 23 hours
+- **Completed Phases:** 2/9 (22%)
+- **Estimated Total Time:** 28 hours (including Phase 9)
 - **Time Spent:** ~1 hour
-- **Time Remaining:** ~22 hours
+- **Time Remaining:** ~27 hours
 - **Efficiency:** Running 2-4x faster than estimates!
+- **⚠️ Critical Phase Added:** Phase 9 to eliminate dangerous fallbacks
 
 ### Code Changes
 - **Files Modified:** 1 (src/analysis/statistics.py)
@@ -216,6 +243,26 @@ code src/analysis/statistics.py
    - `config.get('model', 'gpt-4o-mini')` ensures graceful degradation
    - System remains functional even if config incomplete
    - Defensive programming pays off
+   - **⚠️ WARNING:** Added Phase 9 to review this decision - fallbacks can mask problems!
+
+### Critical Realization: Fallbacks Are Dangerous
+
+**After Phase 2-3 implementation, identified critical issue:**
+
+Fallback values (`config.get(key, default)`) create **"silent wrong behavior"**:
+- User thinks they're using gpt-4o, but typo in config → silently uses gpt-4o-mini
+- Framework config missing fields → report shows fallback data, masking the problem
+- Config file corrupted → report generates with wrong values, no error raised
+
+**Solution:** Phase 9 added to replace permissive `.get()` with strict validation
+- Use `_require_config_value()` helper that raises clear errors
+- Fail fast with helpful messages pointing to exact problem
+- Ensure report always matches actual experiment configuration
+- **Principle:** "Fail loudly early" beats "work silently wrong"
+
+### Phase 3 Insights
+
+*To be added after Phase 3 completion*
 
 ### Recommendations for Next Phases
 

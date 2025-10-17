@@ -585,10 +585,276 @@ def generate_statistical_report(
 | Phase 6 | MEDIUM | 3 | Phase 1 |
 | Phase 7 | LOW | 2 | Phase 3 |
 | Phase 8 | LOW | 1 | None |
-| **Total** | | **19 hours** | |
+| **Phase 9** | **CRITICAL** | **3** | **Phases 1-8** |
+| **Total** | | **24 hours** | |
 
 **Testing & Documentation:** +4 hours  
-**Total Project Time:** ~23 hours (~3 working days)
+**Total Project Time:** ~28 hours (~3.5 working days)
+
+## Phase 9: Review and Eliminate Dangerous Fallbacks (CRITICAL PRIORITY)
+
+**⚠️ CRITICAL CONCERN:** Fallback values can mask configuration/run problems by silently using defaults instead of failing fast.
+
+### Problem Statement
+
+Current implementation uses fallback values that could hide serious issues:
+
+1. **Model Configuration:**
+   ```python
+   model_name = config.get('model', 'gpt-4o-mini')  # ❌ Silently defaults
+   ```
+   **Risk:** User thinks they're using gpt-4o, but actually using gpt-4o-mini due to typo in config.
+
+2. **Framework Descriptions:**
+   ```python
+   framework_descriptions = {
+       'chatdev': {'full_name': 'ChatDev', ...}  # ❌ Hardcoded fallback
+   }
+   ```
+   **Risk:** Config points to wrong framework, but report shows correct description, masking the issue.
+
+3. **Config Loading:**
+   ```python
+   except Exception as e:
+       logger.warning(f"Failed to load config, using defaults: {e}")
+       config = {}  # ❌ Silently continues with empty config
+   ```
+   **Risk:** Config file corrupted/missing, but report generates with wrong values.
+
+### Implementation Plan
+
+#### Step 1: Audit All Fallbacks (1 hour)
+
+Search for all `.get()` calls with defaults and `try/except` blocks:
+
+```bash
+# Find all fallback patterns
+grep -n "\.get(" src/analysis/statistics.py
+grep -n "try:" src/analysis/statistics.py | grep -A 5 "config"
+```
+
+**List to audit:**
+- Model name fallback
+- Framework metadata fallbacks
+- Stopping rule parameters
+- Bootstrap parameters
+- Significance levels
+- Timeout values
+- Any other config.get() with defaults
+
+#### Step 2: Create Validation Functions (1 hour)
+
+Add strict validation helpers:
+
+```python
+def _require_config_value(config: Dict, key: str, description: str) -> Any:
+    """
+    Get required config value or raise ValueError.
+    
+    Args:
+        config: Configuration dictionary
+        key: Config key to retrieve
+        description: Human-readable description for error message
+        
+    Returns:
+        Config value
+        
+    Raises:
+        ValueError: If key missing or None
+    """
+    if key not in config:
+        raise ValueError(
+            f"Missing required configuration: '{key}' ({description}). "
+            f"Please check config/experiment.yaml"
+        )
+    value = config[key]
+    if value is None:
+        raise ValueError(
+            f"Configuration '{key}' is None ({description}). "
+            f"Please set a valid value in config/experiment.yaml"
+        )
+    return value
+
+def _require_framework_field(
+    fw_config: Dict, 
+    framework: str, 
+    field: str, 
+    description: str
+) -> Any:
+    """Get required framework config field or raise ValueError."""
+    if field not in fw_config:
+        raise ValueError(
+            f"Missing required field '{field}' for framework '{framework}' "
+            f"({description}). Please check config/experiment.yaml"
+        )
+    value = fw_config[field]
+    if value is None or (isinstance(value, str) and not value.strip()):
+        raise ValueError(
+            f"Invalid '{field}' for framework '{framework}' ({description}). "
+            f"Please set a valid value in config/experiment.yaml"
+        )
+    return value
+```
+
+#### Step 3: Replace Permissive Code (1 hour)
+
+**Before (Phase 1-3):**
+```python
+# ❌ Silently defaults - masks problems
+model_name = config.get('model', 'gpt-4o-mini')
+
+fw_config = frameworks_config.get(fw_key, {})
+repo_url = fw_config.get('repo_url', '')
+commit_hash = fw_config.get('commit_hash', 'unknown')
+```
+
+**After (Phase 9):**
+```python
+# ✅ Fails fast - exposes problems immediately
+model_name = _require_config_value(config, 'model', 'LLM model name')
+
+fw_config = frameworks_config.get(fw_key)
+if not fw_config:
+    raise ValueError(
+        f"Framework '{fw_key}' found in run data but not in config. "
+        f"Please add configuration for '{fw_key}' in config/experiment.yaml"
+    )
+
+repo_url = _require_framework_field(fw_config, fw_key, 'repo_url', 'Git repository URL')
+commit_hash = _require_framework_field(fw_config, fw_key, 'commit_hash', 'Git commit hash')
+```
+
+#### Step 4: Handle Framework Descriptions
+
+**Option A: Remove Fallback (Recommended)**
+```python
+# Remove hardcoded framework_descriptions dictionary
+# Require all metadata in config
+
+# In config/experiment.yaml:
+frameworks:
+  chatdev:
+    repo_url: "..."
+    commit_hash: "..."
+    full_name: "ChatDev"
+    org: "OpenBMB/ChatDev"
+    description:
+      - "Multi-agent collaborative framework..."
+      - "Waterfall-inspired workflow..."
+```
+
+**Option B: Keep as Documentation (If config approach too heavy)**
+```python
+# Keep framework_descriptions but warn if not in config
+if 'full_name' not in fw_config:
+    logger.warning(
+        f"Framework '{fw_key}' missing 'full_name' in config, "
+        f"using fallback description. Consider adding to config/experiment.yaml"
+    )
+```
+
+#### Step 5: Update Config Loader
+
+Replace permissive config loading:
+
+```python
+# Before: ❌ Silently continues with empty config
+if config is None:
+    try:
+        config = load_config()
+    except Exception as e:
+        logger.warning(f"Failed to load config, using defaults: {e}")
+        config = {}
+
+# After: ✅ Fails fast if config missing
+if config is None:
+    try:
+        config = load_config()
+    except FileNotFoundError:
+        raise ValueError(
+            "Configuration file not found: config/experiment.yaml. "
+            "Cannot generate report without configuration."
+        )
+    except Exception as e:
+        raise ValueError(
+            f"Failed to load configuration: {e}. "
+            f"Please check config/experiment.yaml for errors."
+        )
+```
+
+### Benefits
+
+1. **Fail Fast:** Errors surface immediately, not in production
+2. **Clear Messages:** User knows exactly what's wrong and where
+3. **Data Integrity:** Report always matches actual experiment setup
+4. **No Silent Errors:** Eliminates "silent wrong behavior"
+5. **Easier Debugging:** Configuration problems caught early
+
+### Testing Strategy
+
+1. **Test Missing Config:**
+   - Remove config file → should raise clear error
+   - Remove model field → should raise "Missing required configuration: 'model'"
+
+2. **Test Missing Framework Fields:**
+   - Remove repo_url → should raise framework-specific error
+   - Remove commit_hash → should raise with framework name
+
+3. **Test Invalid Values:**
+   - Set model to empty string → should raise validation error
+   - Set commit_hash to None → should raise validation error
+
+4. **Test Valid Config:**
+   - Normal config → should work exactly as before
+   - All required fields present → no errors
+
+### Migration Impact
+
+**Breaking Change:** Yes - report generation will fail if config incomplete
+
+**Mitigation:**
+1. Add comprehensive config validation to runner scripts
+2. Update documentation with required config fields
+3. Provide clear error messages pointing to solution
+4. Test all existing workflows before merging
+
+### Code Examples
+
+```python
+# Complete Phase 9 implementation in generate_statistical_report():
+
+def generate_statistical_report(...):
+    # Phase 1: Config loading (STRICT)
+    if config is None:
+        try:
+            config = load_config()
+            logger.info("Loaded configuration from config/experiment.yaml")
+        except FileNotFoundError:
+            raise ValueError(
+                "Configuration file not found: config/experiment.yaml. "
+                "Report generation requires valid configuration."
+            )
+        except Exception as e:
+            raise ValueError(f"Failed to load configuration: {e}")
+    
+    # Phase 2: Model config (STRICT)
+    model_name = _require_config_value(config, 'model', 'LLM model name')
+    
+    # Phase 3: Framework metadata (STRICT)
+    frameworks_config = config.get('frameworks', {})
+    
+    for fw_key in frameworks_data.keys():
+        if fw_key not in frameworks_config:
+            raise ValueError(
+                f"Framework '{fw_key}' in run data but not in config. "
+                f"Add to config/experiment.yaml under 'frameworks.{fw_key}'"
+            )
+        
+        fw_config = frameworks_config[fw_key]
+        repo_url = _require_framework_field(fw_config, fw_key, 'repo_url', 'repository URL')
+        commit_hash = _require_framework_field(fw_config, fw_key, 'commit_hash', 'commit hash')
+        # ... etc
+```
 
 ## Conclusion
 
