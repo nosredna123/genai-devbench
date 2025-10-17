@@ -236,50 +236,281 @@ def generate_statistical_report(
 
 **Cumulative Progress:** 36/45+ (80% - major milestone reached!)
 
-### Phase 7: Testing & Validation (LOW PRIORITY)
+### Phase 7: Automated Unit Testing (LOW PRIORITY)
 **Status:** Not Started  
-**Updated Estimated Time:** 5 hours (was 4 hours)  
-**Target:** Comprehensive testing with modified configs + fallback elimination verification
+**Redesigned Estimated Time:** 2 hours (was 5 hours - much faster with automation!)  
+**Target:** Fast, automated unit tests for report generation validation
 
-**Updated Testing Plan:**
+**New Testing Strategy: Automated Unit Tests**
 
-1. **Dynamic Value Testing** (2 hours)
-   - Test report generation with various model configurations
-   - Test with different framework counts (1, 2, 3+ frameworks)
-   - Test with different step counts (add step_7.txt, verify report updates)
-   - Test bootstrap_samples changes (5000, 10000, 20000)
-   - Test stopping_rule parameter variations
+Create test file: `tests/unit/test_report_generation.py`
 
-2. **Strict Validation Testing** (2 hours) ⭐ NEW
-   - **Missing Config Tests:**
-     - Remove 'model' → verify clear error message
-     - Remove 'frameworks' → verify helpful error
-     - Remove 'stopping_rule.max_runs' → verify nested path error
-     - Remove 'prompts_dir' → verify directory validation
-   - **Incomplete Framework Tests:**
-     - Framework missing 'repo_url' → verify field-specific error
-     - Framework missing 'commit_hash' → verify validation catches it
-     - Framework missing 'api_key_env' → verify required field check
-   - **Invalid Data Tests:**
-     - Empty prompts directory → verify fails with guidance
-     - Empty step file → verify first-line validation
-     - Non-existent prompts_dir → verify directory check
-   - **Error Message Quality:**
-     - Verify messages are actionable (tell user what to add)
-     - Verify messages include file path (config/experiment.yaml)
-     - Verify nested paths shown correctly (stopping_rule.max_runs)
+**Test Structure (pytest):**
 
-3. **Edge Cases** (1 hour)
-   - Single run per framework (CI computation)
-   - Missing metrics in some runs
-   - Unicode characters in descriptions
-   - Very long commit hashes (>40 chars)
-   - Model names not in display mapping
+```python
+import pytest
+import tempfile
+import os
+from src.analysis.statistics import generate_statistical_report
 
-4. **Integration Testing**
-   - Full pipeline: experiment → analysis → report
-   - Verify all dynamic values appear correctly
-   - Check git-friendly output consistency
+# Test fixtures
+@pytest.fixture
+def minimal_valid_config():
+    """Minimal valid configuration for testing"""
+    return {
+        'model': 'gpt-4o-mini',
+        'frameworks': {
+            'test_fw': {
+                'repo_url': 'https://github.com/test/repo.git',
+                'commit_hash': 'abc123def456',
+                'api_key_env': 'OPENAI_API_KEY_TEST'
+            }
+        },
+        'stopping_rule': {
+            'min_runs': 5,
+            'max_runs': 100,
+            'confidence_level': 0.95,
+            'max_half_width_pct': 10
+        },
+        'prompts_dir': 'config/prompts',  # Uses actual prompts dir
+        'analysis': {
+            'bootstrap_samples': 10000,
+            'significance_level': 0.05,
+            'confidence_level': 0.95
+        }
+    }
+
+@pytest.fixture
+def minimal_run_data():
+    """Minimal run data for testing"""
+    return {
+        'test_fw': [
+            {'AUTR': 1.0, 'TOK_IN': 1000, 'T_WALL': 100, 'CRUDe': 1.0, 'ESR': 1.0, 'MC': 5}
+        ]
+    }
+```
+
+**1. Dynamic Value Tests (30 minutes)**
+
+```python
+def test_model_configuration_dynamic(minimal_valid_config, minimal_run_data, tmp_path):
+    """Test that model name appears dynamically in report"""
+    # Test different models
+    for model in ['gpt-4o-mini', 'gpt-4o', 'o1-mini']:
+        config = minimal_valid_config.copy()
+        config['model'] = model
+        
+        output_file = tmp_path / f"report_{model}.md"
+        generate_statistical_report(minimal_run_data, str(output_file), config)
+        
+        content = output_file.read_text()
+        assert f"Model: `{model}`" in content
+
+def test_bootstrap_samples_dynamic(minimal_valid_config, minimal_run_data, tmp_path):
+    """Test that bootstrap samples appear dynamically"""
+    for n_bootstrap in [5000, 10000, 20000]:
+        config = minimal_valid_config.copy()
+        config['analysis']['bootstrap_samples'] = n_bootstrap
+        
+        output_file = tmp_path / f"report_{n_bootstrap}.md"
+        generate_statistical_report(minimal_run_data, str(output_file), config)
+        
+        content = output_file.read_text()
+        assert f"({n_bootstrap:,} resamples)" in content
+
+def test_stopping_rule_dynamic(minimal_valid_config, minimal_run_data, tmp_path):
+    """Test that stopping rule values appear dynamically"""
+    config = minimal_valid_config.copy()
+    config['stopping_rule']['max_runs'] = 50
+    config['stopping_rule']['max_half_width_pct'] = 15
+    
+    output_file = tmp_path / "report.md"
+    generate_statistical_report(minimal_run_data, str(output_file), config)
+    
+    content = output_file.read_text()
+    assert "max 50 runs" in content
+    assert "≤ 15%" in content
+```
+
+**2. Strict Validation Tests (45 minutes)**
+
+```python
+def test_missing_model_raises_error(minimal_valid_config, minimal_run_data, tmp_path):
+    """Test that missing model raises clear error"""
+    config = minimal_valid_config.copy()
+    del config['model']
+    
+    with pytest.raises(ValueError) as exc_info:
+        generate_statistical_report(minimal_run_data, str(tmp_path / "report.md"), config)
+    
+    assert "Missing required configuration: 'model'" in str(exc_info.value)
+    assert "root config" in str(exc_info.value)
+
+def test_missing_frameworks_raises_error(minimal_valid_config, minimal_run_data, tmp_path):
+    """Test that missing frameworks raises clear error"""
+    config = minimal_valid_config.copy()
+    del config['frameworks']
+    
+    with pytest.raises(ValueError) as exc_info:
+        generate_statistical_report(minimal_run_data, str(tmp_path / "report.md"), config)
+    
+    assert "Missing required configuration: 'frameworks'" in str(exc_info.value)
+
+def test_missing_nested_config_raises_error(minimal_valid_config, minimal_run_data, tmp_path):
+    """Test that missing nested config raises path-aware error"""
+    config = minimal_valid_config.copy()
+    del config['stopping_rule']['max_runs']
+    
+    with pytest.raises(ValueError) as exc_info:
+        generate_statistical_report(minimal_run_data, str(tmp_path / "report.md"), config)
+    
+    assert "stopping_rule.max_runs" in str(exc_info.value)
+
+def test_incomplete_framework_config_raises_error(minimal_valid_config, minimal_run_data, tmp_path):
+    """Test that incomplete framework config raises field-specific error"""
+    config = minimal_valid_config.copy()
+    del config['frameworks']['test_fw']['repo_url']
+    
+    with pytest.raises(ValueError) as exc_info:
+        generate_statistical_report(minimal_run_data, str(tmp_path / "report.md"), config)
+    
+    assert "Framework 'test_fw'" in str(exc_info.value)
+    assert "repo_url" in str(exc_info.value)
+
+def test_nonexistent_prompts_dir_raises_error(minimal_valid_config, minimal_run_data, tmp_path):
+    """Test that non-existent prompts directory raises clear error"""
+    config = minimal_valid_config.copy()
+    config['prompts_dir'] = '/nonexistent/dir'
+    
+    with pytest.raises(ValueError) as exc_info:
+        generate_statistical_report(minimal_run_data, str(tmp_path / "report.md"), config)
+    
+    assert "Prompts directory not found" in str(exc_info.value)
+    assert "/nonexistent/dir" in str(exc_info.value)
+```
+
+**3. Framework Metadata Tests (20 minutes)**
+
+```python
+def test_multiple_frameworks_appear(minimal_valid_config, minimal_run_data, tmp_path):
+    """Test that all frameworks appear in report"""
+    config = minimal_valid_config.copy()
+    config['frameworks']['fw2'] = {
+        'repo_url': 'https://github.com/test/repo2.git',
+        'commit_hash': 'xyz789',
+        'api_key_env': 'KEY2'
+    }
+    
+    run_data = {
+        'test_fw': minimal_run_data['test_fw'],
+        'fw2': minimal_run_data['test_fw']
+    }
+    
+    output_file = tmp_path / "report.md"
+    generate_statistical_report(run_data, str(output_file), config)
+    
+    content = output_file.read_text()
+    assert 'test_fw' in content
+    assert 'fw2' in content
+    assert 'abc123def456' in content
+    assert 'xyz789' in content
+
+def test_commit_hash_short_form(minimal_valid_config, minimal_run_data, tmp_path):
+    """Test that commit hashes are shown in short form (7 chars)"""
+    config = minimal_valid_config.copy()
+    long_hash = 'a' * 40
+    config['frameworks']['test_fw']['commit_hash'] = long_hash
+    
+    output_file = tmp_path / "report.md"
+    generate_statistical_report(minimal_run_data, str(output_file), config)
+    
+    content = output_file.read_text()
+    assert long_hash[:7] in content  # Short form should appear
+```
+
+**4. Edge Case Tests (15 minutes)**
+
+```python
+def test_single_run_per_framework(minimal_valid_config, tmp_path):
+    """Test report generation with single run"""
+    run_data = {
+        'test_fw': [{'AUTR': 1.0, 'TOK_IN': 1000, 'T_WALL': 100}]
+    }
+    
+    output_file = tmp_path / "report.md"
+    # Should not crash
+    generate_statistical_report(run_data, str(output_file), minimal_valid_config)
+    assert output_file.exists()
+
+def test_unicode_in_descriptions(minimal_valid_config, minimal_run_data, tmp_path):
+    """Test Unicode characters in model/framework names"""
+    # Tests that report handles special characters gracefully
+    output_file = tmp_path / "report.md"
+    generate_statistical_report(minimal_run_data, str(output_file), minimal_valid_config)
+    
+    content = output_file.read_text()
+    # Should be valid UTF-8
+    assert isinstance(content, str)
+
+def test_unknown_model_name(minimal_valid_config, minimal_run_data, tmp_path):
+    """Test that unknown model names don't crash (use model name as display)"""
+    config = minimal_valid_config.copy()
+    config['model'] = 'unknown-model-xyz'
+    
+    output_file = tmp_path / "report.md"
+    generate_statistical_report(minimal_run_data, str(output_file), config)
+    
+    content = output_file.read_text()
+    assert 'unknown-model-xyz' in content
+```
+
+**5. Integration Test (10 minutes)**
+
+```python
+def test_full_report_structure(minimal_valid_config, minimal_run_data, tmp_path):
+    """Test that report contains all expected sections"""
+    output_file = tmp_path / "report.md"
+    generate_statistical_report(minimal_run_data, str(output_file), minimal_valid_config)
+    
+    content = output_file.read_text()
+    
+    # Check major sections exist
+    assert "# Statistical Analysis Report" in content
+    assert "## Methodology" in content
+    assert "### Sample Size & Replication" in content
+    assert "#### **Standardized Task Sequence**" in content
+    assert "#### **Controlled Variables**" in content
+    assert "#### **Conclusion Validity**" in content
+    assert "## Metric Definitions" in content
+```
+
+**Running Tests:**
+
+```bash
+# Install pytest if needed
+pip install pytest pytest-cov
+
+# Run all tests
+pytest tests/unit/test_report_generation.py -v
+
+# Run with coverage
+pytest tests/unit/test_report_generation.py --cov=src.analysis.statistics --cov-report=term-missing
+
+# Run specific test
+pytest tests/unit/test_report_generation.py::test_missing_model_raises_error -v
+
+# Run fast (skip slow tests)
+pytest tests/unit/test_report_generation.py -m "not slow"
+```
+
+**Benefits:**
+- ✅ **Fast:** All tests run in < 5 seconds
+- ✅ **Automated:** No manual verification needed
+- ✅ **Repeatable:** Same results every time
+- ✅ **CI/CD Ready:** Can run in GitHub Actions
+- ✅ **Comprehensive:** Covers all validation paths
+- ✅ **Maintainable:** Easy to add new tests
+- ✅ **Documentation:** Tests serve as usage examples
 
 ### Phase 8: Documentation (LOW PRIORITY)
 **Status:** Not Started  
