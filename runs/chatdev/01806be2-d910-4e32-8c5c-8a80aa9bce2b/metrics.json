@@ -118,7 +118,7 @@
     "error": null
   },
   "usage_api_reconciliation": {
-    "verification_status": "pending",
+    "verification_status": "verified",
     "attempts": [
       {
         "timestamp": "2025-10-17T06:58:35.731728+00:00",
@@ -178,8 +178,68 @@
         "total_cached_tokens": 27136,
         "steps_with_tokens": 6,
         "total_steps": 6
+      },
+      {
+        "timestamp": "2025-10-17T07:32:59.577274+00:00",
+        "steps": [
+          {
+            "step": 1,
+            "status": "success",
+            "tokens_in": 30711,
+            "tokens_out": 12066,
+            "api_calls": 16,
+            "cached_tokens": 2048
+          },
+          {
+            "step": 2,
+            "status": "success",
+            "tokens_in": 50932,
+            "tokens_out": 13497,
+            "api_calls": 42,
+            "cached_tokens": 8832
+          },
+          {
+            "step": 3,
+            "status": "success",
+            "tokens_in": 43614,
+            "tokens_out": 10140,
+            "api_calls": 36,
+            "cached_tokens": 3072
+          },
+          {
+            "step": 4,
+            "status": "success",
+            "tokens_in": 32383,
+            "tokens_out": 14378,
+            "api_calls": 20,
+            "cached_tokens": 5632
+          },
+          {
+            "step": 5,
+            "status": "success",
+            "tokens_in": 31552,
+            "tokens_out": 11643,
+            "api_calls": 18,
+            "cached_tokens": 3840
+          },
+          {
+            "step": 6,
+            "status": "success",
+            "tokens_in": 40165,
+            "tokens_out": 12789,
+            "api_calls": 7,
+            "cached_tokens": 3712
+          }
+        ],
+        "total_tokens_in": 229357,
+        "total_tokens_out": 74513,
+        "total_api_calls": 139,
+        "total_cached_tokens": 27136,
+        "steps_with_tokens": 6,
+        "total_steps": 6
       }
     ],
-    "verification_message": "First reconciliation attempt successful, awaiting verification"
+    "verification_message": "\u2705 Data stable across 34 minute interval (229,357 in, 74,513 out)",
+    "verified_at": "2025-10-17T07:32:59.577274+00:00"
   }
 }
