@@ -778,8 +778,96 @@ def generate_statistical_report(
     
     from pathlib import Path
     
-    # Extract model configuration (with fallback defaults)
-    model_name = config.get('model', 'gpt-4o-mini')
+    # ============================================================================
+    # PHASE 9: Strict Configuration Validation Helpers
+    # ============================================================================
+    # These helpers replace permissive .get() calls with strict validation.
+    # Principle: "Fail loudly early" beats "work silently wrong"
+    # ============================================================================
+    
+    def _require_config_value(config_dict: Dict, key: str, context: str = "") -> Any:
+        """
+        Extract required configuration value with clear error message.
+        
+        Args:
+            config_dict: Configuration dictionary to search
+            key: Configuration key to extract
+            context: Human-readable context for error message (e.g., "model", "stopping_rule")
+        
+        Returns:
+            Configuration value
+            
+        Raises:
+            ValueError: If key is missing with helpful error message
+        """
+        if key not in config_dict:
+            context_msg = f" in {context}" if context else ""
+            raise ValueError(
+                f"Missing required configuration: '{key}'{context_msg}. "
+                f"Please add '{key}' to config/experiment.yaml"
+            )
+        return config_dict[key]
+    
+    def _require_nested_config(config: Dict, *keys: str) -> Any:
+        """
+        Extract nested configuration value with path-aware error messages.
+        
+        Args:
+            config: Root configuration dictionary
+            *keys: Path to nested value (e.g., 'stopping_rule', 'max_runs')
+        
+        Returns:
+            Nested configuration value
+            
+        Raises:
+            ValueError: If any key in path is missing
+        """
+        current = config
+        path_parts = []
+        
+        for key in keys:
+            path_parts.append(key)
+            path_str = '.'.join(path_parts)
+            
+            if not isinstance(current, dict):
+                raise ValueError(
+                    f"Configuration path '{'.'.join(path_parts[:-1])}' is not a dictionary. "
+                    f"Cannot access '{key}'. Check config/experiment.yaml structure."
+                )
+            
+            if key not in current:
+                raise ValueError(
+                    f"Missing required configuration: '{path_str}'. "
+                    f"Please add it to config/experiment.yaml"
+                )
+            
+            current = current[key]
+        
+        return current
+    
+    def _validate_framework_config(fw_key: str, fw_config: Dict) -> None:
+        """
+        Validate that framework configuration has all required fields.
+        
+        Args:
+            fw_key: Framework key (e.g., 'baes', 'chatdev')
+            fw_config: Framework configuration dictionary
+            
+        Raises:
+            ValueError: If required fields are missing
+        """
+        required_fields = ['repo_url', 'commit_hash', 'api_key_env']
+        missing = [f for f in required_fields if f not in fw_config]
+        
+        if missing:
+            raise ValueError(
+                f"Framework '{fw_key}' configuration is incomplete. "
+                f"Missing required fields: {', '.join(missing)}. "
+                f"Please add them to config/experiment.yaml under frameworks.{fw_key}"
+            )
+    
+    # Extract model configuration (STRICT - no fallback)
+    model_name = _require_config_value(config, 'model', 'root config')
     
     # Model display name mapping for report readability
     model_display_names = {
@@ -791,8 +879,8 @@ def generate_statistical_report(
     }
     model_display = model_display_names.get(model_name, model_name)
     
-    # Extract framework configurations (with fallback defaults)
-    frameworks_config = config.get('frameworks', {})
+    # Extract framework configurations (STRICT - no fallback)
+    frameworks_config = _require_config_value(config, 'frameworks', 'root config')
     
     # Framework metadata with descriptions
     # Default descriptions if not in config
@@ -827,19 +915,30 @@ def generate_statistical_report(
     # Build framework metadata from config
     framework_metadata = {}
     for fw_key in frameworks_data.keys():
-        fw_config = frameworks_config.get(fw_key, {})
+        # Get framework config (STRICT - must exist)
+        if fw_key not in frameworks_config:
+            raise ValueError(
+                f"Framework '{fw_key}' found in run data but not in config. "
+                f"Please add '{fw_key}' configuration to config/experiment.yaml under 'frameworks'"
+            )
+        
+        fw_config = frameworks_config[fw_key]
+        
+        # Validate required fields
+        _validate_framework_config(fw_key, fw_config)
+        
         fw_desc = framework_descriptions.get(fw_key, {})
         
-        # Extract repo URL and parse components
-        repo_url = fw_config.get('repo_url', '')
+        # Extract repo URL (STRICT - required)
+        repo_url = fw_config['repo_url']
         repo_display = repo_url.replace('https://github.com/', '').replace('.git', '') if repo_url else 'N/A'
         
-        # Extract commit hash (short form for display)
-        commit_hash = fw_config.get('commit_hash', 'unknown')
+        # Extract commit hash (STRICT - required)
+        commit_hash = fw_config['commit_hash']
         commit_short = commit_hash[:7] if len(commit_hash) >= 7 else commit_hash
         
-        # Extract API key env var
-        api_key_env = fw_config.get('api_key_env', f'OPENAI_API_KEY_{fw_key.upper()}')
+        # Extract API key env var (STRICT - required)
+        api_key_env = fw_config['api_key_env']
         
         framework_metadata[fw_key] = {
             'key': fw_key,
@@ -853,20 +952,34 @@ def generate_statistical_report(
             'api_key_env': api_key_env
         }
     
-    # Extract stopping rule configuration (with fallback defaults)
-    stopping_rule = config.get('stopping_rule', {})
-    min_runs = stopping_rule.get('min_runs', 5)
-    max_runs = stopping_rule.get('max_runs', 100)
-    max_half_width_pct = stopping_rule.get('max_half_width_pct', 10)
-    confidence_level = stopping_rule.get('confidence_level', 0.95)
+    # Extract stopping rule configuration (STRICT - no fallbacks)
+    min_runs = _require_nested_config(config, 'stopping_rule', 'min_runs')
+    max_runs = _require_nested_config(config, 'stopping_rule', 'max_runs')
+    max_half_width_pct = _require_nested_config(config, 'stopping_rule', 'max_half_width_pct')
+    confidence_level = _require_nested_config(config, 'stopping_rule', 'confidence_level')
     confidence_pct = int(confidence_level * 100)  # Convert 0.95 -> 95
     
-    # === Extract experimental protocol details ===
-    prompts_dir = config.get('prompts_dir', 'config/prompts')
+    # === Extract experimental protocol details (STRICT) ===
+    prompts_dir = _require_config_value(config, 'prompts_dir', 'root config')
     
     # Discover step files dynamically
     import os
+    
+    # Validate prompts directory exists
+    if not os.path.isdir(prompts_dir):
+        raise ValueError(
+            f"Prompts directory not found: '{prompts_dir}'. "
+            f"Please ensure the directory exists or update 'prompts_dir' in config/experiment.yaml"
+        )
+    
     step_files = sorted([f for f in os.listdir(prompts_dir) if f.startswith('step_') and f.endswith('.txt')])
+    
+    if not step_files:
+        raise ValueError(
+            f"No step files (step_*.txt) found in prompts directory: '{prompts_dir}'. "
+            f"Please add step files or update 'prompts_dir' in config/experiment.yaml"
+        )
+    
     num_steps = len(step_files)
     
     # Extract first line from each step file as the step description
@@ -874,12 +987,18 @@ def generate_statistical_report(
     for step_file in step_files:
         step_num = step_file.replace('step_', '').replace('.txt', '')
         step_path = os.path.join(prompts_dir, step_file)
-        with open(step_path, 'r') as f:
-            first_line = f.readline().strip()
-            step_descriptions[step_num] = first_line
+        
+        try:
+            with open(step_path, 'r') as f:
+                first_line = f.readline().strip()
+                if not first_line:
+                    raise ValueError(f"Step file '{step_file}' is empty or has no description on first line")
+                step_descriptions[step_num] = first_line
+        except IOError as e:
+            raise ValueError(f"Failed to read step file '{step_path}': {e}")
     
-    # Extract Python version requirement (from step_1.txt or system)
-    python_version = "3.11+"  # Default fallback
+    # Extract Python version requirement (from step_1.txt)
+    python_version = "3.11+"  # Safe default if not found in description
     if '1' in step_descriptions:
         # Look for Python version in step 1 description
         import re
@@ -887,10 +1006,9 @@ def generate_statistical_report(
         if match:
             python_version = match.group(1) + "+"
     
-    # === Extract statistical analysis configuration ===
-    analysis_config = config.get('analysis', {})
-    n_bootstrap = analysis_config.get('bootstrap_samples', 10000)
-    significance_level = analysis_config.get('significance_level', 0.05)
+    # === Extract statistical analysis configuration (STRICT) ===
+    n_bootstrap = _require_nested_config(config, 'analysis', 'bootstrap_samples')
+    significance_level = _require_nested_config(config, 'analysis', 'significance_level')
     # confidence_level already extracted from stopping_rule above
     
     # Calculate run counts per framework
