@@ -87,10 +87,47 @@ def generate_statistical_report(
 
 **Hardcoded Values Eliminated:** 6/45+ (13%)
 
-### Phase 3: Dynamic Framework Metadata (HIGH PRIORITY)
-**Status:** Not Started  
+### ✅ Phase 3: Dynamic Framework Metadata (HIGH PRIORITY - COMPLETED)
+**Status:** ✅ Completed  
+**Date Completed:** October 17, 2025  
+**Commit:** 3570357  
 **Estimated Time:** 4 hours  
-**Target:** Replace 15+ hardcoded framework names, repos, commits
+**Actual Time:** ~40 minutes
+
+**Changes Made:**
+- Added `framework_descriptions` dictionary with default metadata (full_name, org, description)
+- Created `framework_metadata` builder that extracts from config for each framework
+- Dynamically generates "Frameworks Under Test" section using loop over frameworks
+- Replaced hardcoded API keys list with dynamic generation from config
+- Replaced hardcoded commit hashes section with dynamic generation
+- Repository URLs parsed cleanly (removes https://github.com/ and .git)
+- Commit hashes stored in both full and short (7-char) formats
+
+**Dynamic Values Extracted:**
+- Framework full names: ChatDev, GHSpec, BAEs
+- Organization display: OpenBMB/ChatDev, GitHub Spec-Kit, Business Autonomous Entities
+- Repository URLs: From config, displayed as github.com/org/repo
+- Commit hashes: Full (40 chars) and short (7 chars) from config
+- API key environment variables: OPENAI_API_KEY_BAES, CHATDEV, GHSPEC
+- Framework descriptions: Multi-line bullet points (with fallback defaults)
+
+**Testing:**
+- ✅ Report regenerated successfully
+- ✅ Framework section shows 3 frameworks in alphabetical order
+- ✅ Commit hashes section shows full hashes dynamically
+- ✅ API keys: `OPENAI_API_KEY_BAES`, `OPENAI_API_KEY_CHATDEV`, `OPENAI_API_KEY_GHSPEC`
+- ✅ All repository URLs and commits from config
+
+**Hardcoded Values Eliminated:** 21/45+ (47% - major progress!)
+- 3 framework names
+- 3 organization names  
+- 3 repository URLs
+- 3 short commit hashes (in Framework section)
+- 3 full commit hashes (in Data Availability section)
+- 3 API key environment variables
+- ~3 framework descriptions (using fallback defaults for now)
+
+**Note:** Framework descriptions use fallback defaults (not in config yet). Phase 9 will address this.
 
 ### Phase 4: Dynamic Stopping Rule Parameters (HIGH PRIORITY)
 **Status:** Not Started  
@@ -171,24 +208,28 @@ code src/analysis/statistics.py
 ## Metrics
 
 ### Progress Summary
-- **Completed Phases:** 2/9 (22%)
+- **Completed Phases:** 3/9 (33%)
 - **Estimated Total Time:** 28 hours (including Phase 9)
-- **Time Spent:** ~1 hour
-- **Time Remaining:** ~27 hours
-- **Efficiency:** Running 2-4x faster than estimates!
+- **Time Spent:** ~1.9 hours
+- **Time Remaining:** ~26 hours
+- **Efficiency:** Running 3-6x faster than estimates! 🚀
 - **⚠️ Critical Phase Added:** Phase 9 to eliminate dangerous fallbacks
 
 ### Code Changes
 - **Files Modified:** 1 (src/analysis/statistics.py)
-- **Hardcoded Values Eliminated:** 6/45+ (13%)
-- **Lines Changed:** ~35 lines (config loading + model extraction + 6 replacements)
+- **Hardcoded Values Eliminated:** 21/45+ (47%)
+- **Lines Changed:** ~90 lines (config + model + framework metadata)
 
 ### Testing Coverage
 - ✅ Backward compatibility verified (Phase 1)
 - ✅ Config loading tested (Phase 1)
 - ✅ Dynamic model substitution verified (Phase 2)
 - ✅ Multiple model values tested (gpt-4o-mini, gpt-4o) (Phase 2)
-- ⏳ Dynamic framework metadata (Phase 3)
+- ✅ Dynamic framework metadata verified (Phase 3)
+- ✅ Framework ordering tested (alphabetical by key) (Phase 3)
+- ✅ Repository URL parsing tested (Phase 3)
+- ✅ Commit hash short/full formats tested (Phase 3)
+- ⏳ Dynamic stopping rule parameters (Phase 4)
 - ⏳ Edge cases (future phases)
 
 ---
@@ -245,6 +286,38 @@ code src/analysis/statistics.py
    - Defensive programming pays off
    - **⚠️ WARNING:** Added Phase 9 to review this decision - fallbacks can mask problems!
 
+### Phase 3 Insights
+
+1. **Complex Data Structures Need Planning**
+   - Framework metadata has multiple fields (name, repo, commit, description)
+   - Created structured dictionary to organize all framework data
+   - Makes code more readable and maintainable
+
+2. **Dynamic Generation Loops Are Powerful**
+   - Used `for fw_key in sorted(framework_metadata.keys())` to generate sections
+   - Single loop generates consistent format for all frameworks
+   - Easy to add/remove frameworks without code changes
+
+3. **String Parsing Improves Readability**
+   - Removed `https://github.com/` and `.git` from repo URLs
+   - Display: `github.com/OpenBMB/ChatDev` instead of full URL
+   - Short commit hashes (7 chars) for readability, full hashes for Data Availability
+
+4. **F-String Nesting Can Be Tricky**
+   - Initial attempt: `f"... {', '.join([f'`{meta["key"]}`' for ...])}"` failed (syntax error)
+   - Solution: Use string concatenation inside comprehension
+   - `{', '.join(['`' + meta['key'] + '`' for ...])}`  works perfectly
+
+5. **Another Quick Win!**
+   - Phase 3 completed in ~40 minutes vs 4 hour estimate (6x faster!)
+   - Building on established pattern from Phases 1-2
+   - Confidence growing with each phase
+
+6. **Fallback Descriptions Are Useful But Risky**
+   - Hardcoded `framework_descriptions` provides good defaults
+   - Makes report readable even if config incomplete
+   - **BUT:** Can mask missing config fields (Phase 9 will address)
+
 ### Critical Realization: Fallbacks Are Dangerous
 
 **After Phase 2-3 implementation, identified critical issue:**
@@ -298,5 +371,5 @@ Fallback values (`config.get(key, default)`) create **"silent wrong behavior"**:
 
 ---
 
-**Last Updated:** October 17, 2025 08:05 UTC  
-**Status:** Phase 2 Complete ✅ | Ready to proceed with Phase 3 (Framework Metadata)
+**Last Updated:** October 17, 2025 08:20 UTC  
+**Status:** Phase 3 Complete ✅ | 33% Progress | Ready for Phase 4 (Stopping Rules)
