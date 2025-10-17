@@ -1,6 +1,6 @@
 # Statistical Analysis Report
 
-**Generated:** 2025-10-17 08:23:23 UTC
+**Generated:** 2025-10-17 08:31:45 UTC
 
 **Frameworks:** baes, chatdev, ghspec
 
@@ -57,14 +57,14 @@ This analysis is based on **48 experimental runs** across three frameworks:
 
 #### **Standardized Task Sequence**
 
-All frameworks execute the **identical six-step evolution scenario** in strict sequential order:
+All frameworks execute the **identical 6-step evolution scenario** in strict sequential order:
 
-1. **Step 1**: Create CRUD application (Student/Course/Teacher with FastAPI + SQLite)
-2. **Step 2**: Add enrollment relationship (many-to-many Student-Course)
-3. **Step 3**: Add teacher assignment (many-to-one Course-Teacher)
-4. **Step 4**: Implement validation and error handling
-5. **Step 5**: Add pagination and filtering to all endpoints
-6. **Step 6**: Create comprehensive web UI for all operations
+1. **Step 1**: Create a Student/Course/Teacher CRUD application with Python, FastAPI, and SQLite.
+2. **Step 2**: Add enrollment relationship between Student and Course entities.
+3. **Step 3**: Add teacher assignment relationship to Course entity.
+4. **Step 4**: Implement comprehensive data validation and error handling.
+5. **Step 5**: Add pagination and filtering to all list endpoints.
+6. **Step 6**: Add comprehensive user interface for all CRUD operations.
 
 *Natural language commands stored in version-controlled files (`config/prompts/step_1.txt` through `step_6.txt`) ensure perfect reproducibility across runs.*
 
@@ -338,9 +338,9 @@ These metrics show zero values because **generated applications are not executed
 
 | Framework | N | AEI | API_CALLS | AUTR | CACHED_TOKENS | CRUDe | ESR | HEU | HIT | MC | Q_star | TOK_IN | TOK_OUT | T_WALL_seconds | UTT | ZDI |
 |-----------|---|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|
-| baes | 17 | 0.099 [0.098, 0.099] 🟢 | 14.88 [13.88, 15.76] 🔴 | 1.000 [1.000, 1.000] 🟢 | 715.29 [0.00, 1844.71] 🔴 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 25,564 [23,780, 27,192] 🟢 | 6,941 [6,428, 7,441] 🟢 | 178.2 [162.2, 195.8] 🟢 | 6 [6, 6] 🟢 | 36 [33, 39] 🟢 |
-| chatdev | 16 | 0.081 [0.081, 0.081] 🔴 | 128.94 [121.69, 136.12] 🟢 | 1.000 [1.000, 1.000] 🟢 | 33312.00 [29952.00, 36848.00] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 229,904 [221,742, 238,245] 🔴 | 81,113 [77,779, 84,643] 🔴 | 1701.1 [1554.5, 1852.5] 🔴 | 6 [6, 6] 🟢 | 341 [310, 371] 🔴 |
-| ghspec | 15 | 0.092 [0.091, 0.093] 🟡 | 59.87 [53.87, 64.53] 🟡 | 1.000 [1.000, 1.000] 🟢 | 1297.07 [136.53, 3003.73] 🟡 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 52,531 [47,519, 57,136] 🟡 | 25,397 [22,348, 28,018] 🟡 | 600.7 [528.3, 671.8] 🟡 | 6 [6, 6] 🟢 | 121 [106, 135] 🟡 |
+| baes | 17 | 0.099 [0.098, 0.099] 🟢 | 14.88 [13.88, 15.76] 🔴 | 1.000 [1.000, 1.000] 🟢 | 715.29 [0.00, 1844.71] 🔴 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 25,564 [23,757, 27,200] 🟢 | 6,941 [6,435, 7,451] 🟢 | 178.2 [162.3, 195.7] 🟢 | 6 [6, 6] 🟢 | 36 [32, 39] 🟢 |
+| chatdev | 16 | 0.081 [0.081, 0.081] 🔴 | 128.94 [121.75, 136.31] 🟢 | 1.000 [1.000, 1.000] 🟢 | 33312.00 [29928.00, 36896.00] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 229,904 [221,676, 238,053] 🔴 | 81,113 [77,805, 84,735] 🔴 | 1701.1 [1552.5, 1851.1] 🔴 | 6 [6, 6] 🟢 | 341 [311, 370] 🔴 |
+| ghspec | 15 | 0.092 [0.091, 0.093] 🟡 | 59.87 [53.80, 64.47] 🟡 | 1.000 [1.000, 1.000] 🟢 | 1297.07 [136.53, 2935.47] 🟡 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 52,531 [47,619, 57,083] 🟡 | 25,397 [22,371, 28,007] 🟡 | 600.7 [527.8, 675.0] 🟡 | 6 [6, 6] 🟢 | 121 [105, 135] 🟡 |
 
 
 ## 2. Relative Performance

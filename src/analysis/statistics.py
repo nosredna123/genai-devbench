@@ -861,6 +861,32 @@ def generate_statistical_report(
     confidence_level = stopping_rule.get('confidence_level', 0.95)
     confidence_pct = int(confidence_level * 100)  # Convert 0.95 -> 95
     
+    # === Extract experimental protocol details ===
+    prompts_dir = config.get('prompts_dir', 'config/prompts')
+    
+    # Discover step files dynamically
+    import os
+    step_files = sorted([f for f in os.listdir(prompts_dir) if f.startswith('step_') and f.endswith('.txt')])
+    num_steps = len(step_files)
+    
+    # Extract first line from each step file as the step description
+    step_descriptions = {}
+    for step_file in step_files:
+        step_num = step_file.replace('step_', '').replace('.txt', '')
+        step_path = os.path.join(prompts_dir, step_file)
+        with open(step_path, 'r') as f:
+            first_line = f.readline().strip()
+            step_descriptions[step_num] = first_line
+    
+    # Extract Python version requirement (from step_1.txt or system)
+    python_version = "3.11+"  # Default fallback
+    if '1' in step_descriptions:
+        # Look for Python version in step 1 description
+        import re
+        match = re.search(r'Python\s+([\d.]+)\+?', step_descriptions['1'])
+        if match:
+            python_version = match.group(1) + "+"
+    
     # Calculate run counts per framework
     run_counts = {framework: len(runs) for framework, runs in frameworks_data.items()}
     total_runs = sum(run_counts.values())
@@ -918,7 +944,7 @@ def generate_statistical_report(
     lines.extend([
         "",
         "**Replication Protocol:**",
-        "- Each run executes the complete 6-step evolution scenario independently",
+        f"- Each run executes the complete {num_steps}-step evolution scenario independently",
         "- Runs are performed sequentially (not in parallel) to avoid resource conflicts",
         "- Each run uses a fresh isolated environment (new virtual environment, clean workspace)",
         "- Random seed fixed at 42 for frameworks that support deterministic execution",
@@ -932,16 +958,17 @@ def generate_statistical_report(
         "",
         "#### **Standardized Task Sequence**",
         "",
-        "All frameworks execute the **identical six-step evolution scenario** in strict sequential order:",
+        f"All frameworks execute the **identical {num_steps}-step evolution scenario** in strict sequential order:",
         "",
-        "1. **Step 1**: Create CRUD application (Student/Course/Teacher with FastAPI + SQLite)",
-        "2. **Step 2**: Add enrollment relationship (many-to-many Student-Course)",
-        "3. **Step 3**: Add teacher assignment (many-to-one Course-Teacher)",
-        "4. **Step 4**: Implement validation and error handling",
-        "5. **Step 5**: Add pagination and filtering to all endpoints",
-        "6. **Step 6**: Create comprehensive web UI for all operations",
+    ])
+    
+    # Add dynamically loaded step descriptions
+    for step_num in sorted(step_descriptions.keys(), key=int):
+        lines.append(f"{step_num}. **Step {step_num}**: {step_descriptions[step_num]}")
+    
+    lines.extend([
         "",
-        "*Natural language commands stored in version-controlled files (`config/prompts/step_1.txt` through `step_6.txt`) ensure perfect reproducibility across runs.*",
+        f"*Natural language commands stored in version-controlled files (`{prompts_dir}/step_1.txt` through `step_{num_steps}.txt`) ensure perfect reproducibility across runs.*",
         "",
         "#### **Controlled Variables**",
         "",
@@ -959,7 +986,7 @@ def generate_statistical_report(
         "- Time-window queries (Unix timestamps) ensure accurate attribution to each execution step",
         "",
         "**Execution Environment**:",
-        "- Python 3.11+ isolated virtual environments per framework",
+        f"- Python {python_version} isolated virtual environments per framework",
         "- Dependencies installed from framework-specific requirements at pinned commits",
         "- Single-threaded sequential execution (no parallelism)",
         "- 10-minute timeout per step (`step_timeout_seconds: 600`)",
