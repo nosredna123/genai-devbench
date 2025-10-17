@@ -46,6 +46,9 @@ def minimal_valid_config():
             'confidence_level': 0.95,
             'max_half_width_pct': 10
         },
+        'timeouts': {
+            'step_timeout_seconds': 600
+        },
         'prompts_dir': 'config/prompts',  # Uses actual prompts directory
         'analysis': {
             'bootstrap_samples': 10000,

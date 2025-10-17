@@ -959,6 +959,10 @@ def generate_statistical_report(
     confidence_level = _require_nested_config(config, 'stopping_rule', 'confidence_level')
     confidence_pct = int(confidence_level * 100)  # Convert 0.95 -> 95
     
+    # Extract timeout configuration (STRICT - no fallbacks)
+    step_timeout_seconds = _require_nested_config(config, 'timeouts', 'step_timeout_seconds')
+    step_timeout_minutes = step_timeout_seconds // 60
+    
     # === Extract experimental protocol details (STRICT) ===
     prompts_dir = _require_config_value(config, 'prompts_dir', 'root config')
     
@@ -1113,7 +1117,7 @@ def generate_statistical_report(
         f"- Python {python_version} isolated virtual environments per framework",
         "- Dependencies installed from framework-specific requirements at pinned commits",
         "- Single-threaded sequential execution (no parallelism)",
-        "- 10-minute timeout per step (`step_timeout_seconds: 600`)",
+        f"- {step_timeout_minutes}-minute timeout per step (`step_timeout_seconds: {step_timeout_seconds}`)",
         "",
         "**Random Seed**:",
         "- Fixed seed: `random_seed: 42` (for frameworks that support deterministic execution)",
@@ -1186,7 +1190,7 @@ def generate_statistical_report(
         "  - *Mitigation*: Documented in adapter implementations; accepted as inherent framework characteristics",
         f"- **Non-Deterministic LLM Responses**: `{model_name}` may produce different outputs for identical inputs",
         "  - *Mitigation*: Fixed random seed (42) helps but doesn't guarantee full determinism",
-        "  - *Statistical Control*: Multiple runs (5-25 per framework) with bootstrap CI to capture variance",
+        f"  - *Statistical Control*: Multiple runs ({min_runs}-{max_runs} per framework) with bootstrap CI to capture variance",
         "- **HITL Detection Accuracy**: Human-in-the-loop counts rely on keyword matching in logs",
         "  - *Limitation*: May miss implicit clarifications or false-positive on debug messages",
         "",
