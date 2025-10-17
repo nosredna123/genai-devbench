@@ -138,7 +138,7 @@ baes_experiment/
 ## Metrics Reference
 
 ### Quality Metrics (5)
-- **AUTR** (Automated User Testing Rate): Proportion of automated tests [0-1]
+- **AUTR** (Automated User Testing Rate): Autonomy rate = 1 - (HIT/UTT), measuring independence from human intervention [0-1]
 - **Q\*** (Quality Star): Composite score = 0.4·ESR + 0.3·(CRUDe/12) + 0.3·MC [0-1]
 - **ESR** (Emerging State Rate): Successful incremental evolution steps [0-1]
 - **CRUDe** (CRUD Evolution): CRUD operation coverage [0-12]

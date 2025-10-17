@@ -366,7 +366,9 @@ def compute_composite_scores(metrics: Dict[str, float]) -> Dict[str, float]:
     # AEI = AUTR / log(1 + TOK_IN)
     # AUTR is a rate [0,1]
     # log(1 + TOK_IN) normalizes token consumption
-    aei = metrics['AUTR'] / math.log(1 + metrics['TOK_IN'])
+    # Handle case where TOK_IN is 0 (avoid division by zero)
+    log_tokens = math.log(1 + metrics['TOK_IN'])
+    aei = metrics['AUTR'] / log_tokens if log_tokens > 0 else 0.0
     
     return {
         'Q*': q_star,
@@ -634,14 +636,14 @@ def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]
     
     lines.extend(["", "### 📊 Key Insights", ""])
     
-    # Test automation analysis
+    # Autonomy analysis
     if all('AUTR' in data for data in aggregated.values()):
         autr_values = [data['AUTR'] for data in aggregated.values()]
         if all(v == 1.0 for v in autr_values):
-            lines.append("- ✅ All frameworks achieved perfect test automation (AUTR = 1.0)")
+            lines.append("- ✅ All frameworks achieved perfect autonomy (AUTR = 1.0) - no human intervention required")
         else:
             avg_autr = sum(autr_values) / len(autr_values)
-            lines.append(f"- Test automation varies across frameworks (average AUTR = {avg_autr:.2f})")
+            lines.append(f"- Autonomy varies across frameworks (average AUTR = {avg_autr:.2f})")
     
     # Quality metrics analysis
     quality_metrics = ['Q_star', 'ESR', 'CRUDe', 'MC']
@@ -1328,7 +1330,7 @@ def generate_statistical_report(
         "- Zero-Downtime Intervals (ZDI): Idle time between consecutive steps",
         "",
         "**Automation Metrics (AUTR, HIT, HEU)**:",
-        "- AUTR: Automated testing rate (test files generated / total steps)",
+        "- AUTR: Autonomy rate = 1 - (HIT / UTT), measuring independence from human intervention",
         "- HIT: Human-in-the-loop count (clarification requests detected in logs)",
         "- HEU: Human effort units (manual interventions required)",
         "",
@@ -1383,8 +1385,8 @@ def generate_statistical_report(
         "  - Validation requires running servers and testing endpoints",
         "  - Current experiment scope: **Code generation efficiency**, not **runtime quality**",
         "  - *Action Required*: Implement server startup and endpoint testing for quality evaluation (see `docs/QUALITY_METRICS_INVESTIGATION.md`)",
-        "- **AUTR (Automated Testing Rate)**: All frameworks achieve 100% but test quality not measured",
-        "  - *Limitation*: Presence of test files ≠ comprehensive test coverage",
+        "- **AUTR (Autonomy Rate)**: All frameworks achieve 100% autonomy (no human intervention required)",
+        "  - *Note*: AUTR = 1.0 means HIT = 0 (no human-in-the-loop interventions needed)",
         "",
         "#### **Conclusion Validity**",
         "",
@@ -1429,7 +1431,7 @@ def generate_statistical_report(
         "",
         "| Metric | Full Name | Description | Range | Ideal Value | Status |",
         "|--------|-----------|-------------|-------|-------------|--------|",
-        "| **AUTR** | Automated User Testing Rate | % of tests auto-generated | 0-1 | Higher ↑ | ✅ Measured |",
+        "| **AUTR** | Automated User Testing Rate | Autonomy: 1 - (HIT/UTT) | 0-1 | Higher ↑ | ✅ Measured |",
         "| **AEI** | Automation Efficiency Index | Quality per token consumed | 0-∞ | Higher ↑ | ✅ Measured |",
         "| **Q\\*** | Quality Star | Composite quality score | 0-1 | Higher ↑ | ⚠️ Not Measured* |",
         "| **ESR** | Emerging State Rate | % steps with successful evolution | 0-1 | Higher ↑ | ⚠️ Not Measured* |",
@@ -1871,8 +1873,8 @@ def generate_statistical_report(
         autr_values = [data['AUTR'] for data in simple_aggregated.values()]
         if all(v == 1.0 for v in autr_values):
             recommendations.append(
-                "**🤖 Automation**: All frameworks achieve perfect test automation (AUTR = 1.0) - "
-                "automation quality is not a differentiating factor."
+                "**🤖 Autonomy**: All frameworks achieve perfect autonomy (AUTR = 1.0) - "
+                "no human intervention required during execution."
             )
     
     # Check for quality concerns
