@@ -791,6 +791,68 @@ def generate_statistical_report(
     }
     model_display = model_display_names.get(model_name, model_name)
     
+    # Extract framework configurations (with fallback defaults)
+    frameworks_config = config.get('frameworks', {})
+    
+    # Framework metadata with descriptions
+    # Default descriptions if not in config
+    framework_descriptions = {
+        'chatdev': {
+            'full_name': 'ChatDev',
+            'org': 'OpenBMB/ChatDev',
+            'description': [
+                'Multi-agent collaborative framework with role-based AI agents (CEO, CTO, Programmer, Reviewer)',
+                'Waterfall-inspired workflow with distinct phases (design, coding, testing, documentation)'
+            ]
+        },
+        'ghspec': {
+            'full_name': 'GHSpec',
+            'org': 'GitHub Spec-Kit',
+            'description': [
+                'Specification-driven development framework following structured phases',
+                'Four-phase workflow: specification → planning → task breakdown → implementation',
+                'Sequential task execution with full context awareness'
+            ]
+        },
+        'baes': {
+            'full_name': 'BAEs',
+            'org': 'Business Autonomous Entities',
+            'description': [
+                'API-based autonomous business entity framework',
+                'Kernel-mediated request processing with specialized entities'
+            ]
+        }
+    }
+    
+    # Build framework metadata from config
+    framework_metadata = {}
+    for fw_key in frameworks_data.keys():
+        fw_config = frameworks_config.get(fw_key, {})
+        fw_desc = framework_descriptions.get(fw_key, {})
+        
+        # Extract repo URL and parse components
+        repo_url = fw_config.get('repo_url', '')
+        repo_display = repo_url.replace('https://github.com/', '').replace('.git', '') if repo_url else 'N/A'
+        
+        # Extract commit hash (short form for display)
+        commit_hash = fw_config.get('commit_hash', 'unknown')
+        commit_short = commit_hash[:7] if len(commit_hash) >= 7 else commit_hash
+        
+        # Extract API key env var
+        api_key_env = fw_config.get('api_key_env', f'OPENAI_API_KEY_{fw_key.upper()}')
+        
+        framework_metadata[fw_key] = {
+            'key': fw_key,
+            'full_name': fw_desc.get('full_name', fw_key.title()),
+            'org': fw_desc.get('org', fw_key),
+            'description': fw_desc.get('description', []),
+            'repo_url': repo_url,
+            'repo_display': repo_display,
+            'commit_hash': commit_hash,
+            'commit_short': commit_short,
+            'api_key_env': api_key_env
+        }
+    
     # Calculate run counts per framework
     run_counts = {framework: len(runs) for framework, runs in frameworks_data.items()}
     total_runs = sum(run_counts.values())
@@ -820,22 +882,18 @@ def generate_statistical_report(
         "",
         "### 🎯 Frameworks Under Test",
         "",
-        "**1. ChatDev** (OpenBMB/ChatDev)",
-        "- Multi-agent collaborative framework with role-based AI agents (CEO, CTO, Programmer, Reviewer)",
-        "- Waterfall-inspired workflow with distinct phases (design, coding, testing, documentation)",
-        "- Repository: `github.com/OpenBMB/ChatDev` (commit: `52edb89`)",
-        "",
-        "**2. GHSpec** (GitHub Spec-Kit)",
-        "- Specification-driven development framework following structured phases",
-        "- Four-phase workflow: specification → planning → task breakdown → implementation",
-        "- Sequential task execution with full context awareness",
-        "- Repository: `github.com/github/spec-kit` (commit: `89f4b0b`)",
-        "",
-        "**3. BAEs** (Business Autonomous Entities)",
-        "- API-based autonomous business entity framework",
-        "- Kernel-mediated request processing with specialized entities",
-        "- Repository: `github.com/gesad-lab/baes_demo` (commit: `1dd5736`)",
-        "",
+    ])
+    
+    # Generate framework descriptions dynamically
+    for i, fw_key in enumerate(sorted(framework_metadata.keys()), 1):
+        meta = framework_metadata[fw_key]
+        lines.append(f"**{i}. {meta['full_name']}** ({meta['org']})")
+        for desc_line in meta['description']:
+            lines.append(f"- {desc_line}")
+        lines.append(f"- Repository: `{meta['repo_display']}` (commit: `{meta['commit_short']}`)")
+        lines.append("")
+    
+    lines.extend([
         "### 📋 Experimental Protocol",
         "",
         "#### **Sample Size and Replication**",
@@ -888,7 +946,7 @@ def generate_statistical_report(
         "",
         "**API Infrastructure**:",
         "- Each framework uses a **dedicated OpenAI API key** (prevents quota conflicts)",
-        "- API keys: `OPENAI_API_KEY_BAES`, `OPENAI_API_KEY_CHATDEV`, `OPENAI_API_KEY_GHSPEC`",
+        f"- API keys: {', '.join(['`' + meta['api_key_env'] + '`' for meta in framework_metadata.values()])}",
         "- Token consumption measured via **OpenAI Usage API** (`/v1/organization/usage/completions`)",
         "- Time-window queries (Unix timestamps) ensure accurate attribution to each execution step",
         "",
@@ -1020,9 +1078,14 @@ def generate_statistical_report(
         "- Analysis Scripts: `src/analysis/statistics.py` (this report generator), `src/analysis/visualizations.py`",
         "",
         "**Commit Hashes**:",
-        "- ChatDev: `52edb89997b4312ad27d8c54584d0a6c59940135`",
-        "- GHSpec: `89f4b0b38a42996376c0f083d47281a4c9196761`",
-        "- BAEs: `1dd573633a98b8baa636c200bc1684cec7a8179f`",
+    ])
+    
+    # Generate commit hashes dynamically
+    for fw_key in sorted(framework_metadata.keys()):
+        meta = framework_metadata[fw_key]
+        lines.append(f"- {meta['full_name']}: `{meta['commit_hash']}`")
+    
+    lines.extend([
         "",
         "---",
         ""

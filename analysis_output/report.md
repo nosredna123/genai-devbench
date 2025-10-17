@@ -1,6 +1,6 @@
 # Statistical Analysis Report
 
-**Generated:** 2025-10-17 08:03:01 UTC
+**Generated:** 2025-10-17 08:08:41 UTC
 
 **Frameworks:** baes, chatdev, ghspec
 
@@ -16,21 +16,21 @@ This study compares three autonomous AI-powered software development frameworks 
 
 ### 🎯 Frameworks Under Test
 
-**1. ChatDev** (OpenBMB/ChatDev)
+**1. BAEs** (Business Autonomous Entities)
+- API-based autonomous business entity framework
+- Kernel-mediated request processing with specialized entities
+- Repository: `gesad-lab/baes_demo` (commit: `1dd5736`)
+
+**2. ChatDev** (OpenBMB/ChatDev)
 - Multi-agent collaborative framework with role-based AI agents (CEO, CTO, Programmer, Reviewer)
 - Waterfall-inspired workflow with distinct phases (design, coding, testing, documentation)
-- Repository: `github.com/OpenBMB/ChatDev` (commit: `52edb89`)
+- Repository: `OpenBMB/ChatDev` (commit: `52edb89`)
 
-**2. GHSpec** (GitHub Spec-Kit)
+**3. GHSpec** (GitHub Spec-Kit)
 - Specification-driven development framework following structured phases
 - Four-phase workflow: specification → planning → task breakdown → implementation
 - Sequential task execution with full context awareness
-- Repository: `github.com/github/spec-kit` (commit: `89f4b0b`)
-
-**3. BAEs** (Business Autonomous Entities)
-- API-based autonomous business entity framework
-- Kernel-mediated request processing with specialized entities
-- Repository: `github.com/gesad-lab/baes_demo` (commit: `1dd5736`)
+- Repository: `github/spec-kit` (commit: `89f4b0b`)
 
 ### 📋 Experimental Protocol
 
@@ -211,9 +211,9 @@ python run.py --task "<step_text>" --name "BAEs_Step1_<run_id>" \
 - Analysis Scripts: `src/analysis/statistics.py` (this report generator), `src/analysis/visualizations.py`
 
 **Commit Hashes**:
+- BAEs: `1dd573633a98b8baa636c200bc1684cec7a8179f`
 - ChatDev: `52edb89997b4312ad27d8c54584d0a6c59940135`
 - GHSpec: `89f4b0b38a42996376c0f083d47281a4c9196761`
-- BAEs: `1dd573633a98b8baa636c200bc1684cec7a8179f`
 
 ---
 
@@ -338,9 +338,9 @@ These metrics show zero values because **generated applications are not executed
 
 | Framework | N | AEI | API_CALLS | AUTR | CACHED_TOKENS | CRUDe | ESR | HEU | HIT | MC | Q_star | TOK_IN | TOK_OUT | T_WALL_seconds | UTT | ZDI |
 |-----------|---|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|
-| baes | 17 | 0.099 [0.098, 0.099] 🟢 | 14.88 [13.94, 15.76] 🔴 | 1.000 [1.000, 1.000] 🟢 | 715.29 [0.00, 1844.71] 🔴 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 25,564 [23,779, 27,206] 🟢 | 6,941 [6,431, 7,441] 🟢 | 178.2 [162.3, 195.9] 🟢 | 6 [6, 6] 🟢 | 36 [33, 39] 🟢 |
-| chatdev | 16 | 0.081 [0.081, 0.081] 🔴 | 128.94 [121.75, 136.19] 🟢 | 1.000 [1.000, 1.000] 🟢 | 33312.00 [29824.00, 36768.00] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 229,904 [221,633, 237,742] 🔴 | 81,113 [77,822, 84,725] 🔴 | 1701.1 [1552.5, 1853.1] 🔴 | 6 [6, 6] 🟢 | 341 [310, 370] 🔴 |
-| ghspec | 15 | 0.092 [0.091, 0.093] 🟡 | 59.87 [53.87, 64.53] 🟡 | 1.000 [1.000, 1.000] 🟢 | 1297.07 [136.53, 3072.00] 🟡 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 52,531 [47,580, 57,102] 🟡 | 25,397 [22,457, 28,055] 🟡 | 600.7 [528.6, 672.8] 🟡 | 6 [6, 6] 🟢 | 121 [106, 135] 🟡 |
+| baes | 17 | 0.099 [0.098, 0.099] 🟢 | 14.88 [13.94, 15.76] 🔴 | 1.000 [1.000, 1.000] 🟢 | 715.29 [0.00, 1731.76] 🔴 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 25,564 [23,765, 27,187] 🟢 | 6,941 [6,425, 7,431] 🟢 | 178.2 [162.0, 196.0] 🟢 | 6 [6, 6] 🟢 | 36 [33, 39] 🟢 |
+| chatdev | 16 | 0.081 [0.081, 0.081] 🔴 | 128.94 [121.56, 136.12] 🟢 | 1.000 [1.000, 1.000] 🟢 | 33312.00 [29880.00, 36848.00] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 229,904 [221,688, 238,190] 🔴 | 81,113 [77,826, 84,782] 🔴 | 1701.1 [1554.6, 1855.1] 🔴 | 6 [6, 6] 🟢 | 341 [310, 372] 🔴 |
+| ghspec | 15 | 0.092 [0.091, 0.093] 🟡 | 59.87 [53.80, 64.53] 🟡 | 1.000 [1.000, 1.000] 🟢 | 1297.07 [136.53, 3072.00] 🟡 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 52,531 [47,574, 57,116] 🟡 | 25,397 [22,442, 28,021] 🟡 | 600.7 [527.6, 673.2] 🟡 | 6 [6, 6] 🟢 | 121 [106, 135] 🟡 |
 
 
 ## 2. Relative Performance
