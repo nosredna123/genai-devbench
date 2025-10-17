@@ -1,10 +1,167 @@
 # Statistical Analysis Report
 
-**Generated:** 2025-10-17 09:08:03 UTC
+**Generated:** 2025-10-17 09:35:44 UTC
 
 **Frameworks:** baes, chatdev, ghspec
 
 **Sample Size:** 48 total runs (baes: 17, chatdev: 16, ghspec: 15)
+
+---
+
+## 📚 Foundational Concepts
+
+This section provides the essential background knowledge to understand the experiment's design, methodology, and findings.
+
+### 🤖 What Are Autonomous AI Software Development Frameworks?
+
+**Definition**: Autonomous AI software development frameworks are systems that use Large Language Models (LLMs) to automate software creation with minimal or no human intervention. Unlike traditional AI coding assistants (e.g., GitHub Copilot) that *assist* developers, these frameworks aim to independently:
+
+1. **Interpret requirements** - Understand natural language task descriptions
+2. **Design solutions** - Plan software architecture and implementation strategy
+3. **Write code** - Generate complete, functional source code across multiple files
+4. **Test & debug** - Create tests, detect errors, and apply fixes autonomously
+5. **Iterate** - Refine the solution through multiple improvement cycles
+
+**Key Distinction**: These are *autonomous agents* (work independently) vs. *copilots* (work alongside humans).
+
+### 🎯 Research Question
+
+**Primary Question**: How do different autonomous AI frameworks compare in terms of:
+- **Efficiency** - Resource consumption (API tokens, execution time)
+- **Automation** - Degree of independence from human intervention
+- **Consistency** - Result stability across multiple runs with identical inputs
+
+**Why This Matters**: As AI-powered development tools become mainstream, understanding their comparative strengths/weaknesses helps:
+- **Researchers** - Identify design patterns that work well
+- **Practitioners** - Choose appropriate tools for specific use cases
+- **Framework developers** - Learn from competing approaches
+
+### 🔬 Experimental Paradigm: Controlled Comparative Study
+
+**Study Type**: Quantitative, controlled laboratory experiment with repeated measures
+
+**Core Principle**: Hold all variables constant *except* the framework being tested. This ensures observed differences are attributable to framework design, not environmental factors.
+
+**Independent Variable**: Framework choice (ChatDev, GHSpec, BAEs)
+**Dependent Variables**: Performance metrics (tokens, time, automation rate, etc.)
+**Control Variables**: Task prompts, AI model, execution environment, measurement methods
+
+**Repeated Measures Design**:
+- Each framework performs the **same task** multiple times (5-50 runs)
+- Captures natural variability from LLM non-determinism
+- Enables robust statistical comparison with confidence intervals
+
+### 📊 Key Concepts for Understanding Results
+
+#### **Statistical Significance vs. Practical Significance**
+
+- **Statistical Significance** (p-value): Probability that observed differences occurred by random chance
+  - p < 0.05: Less than 5% chance of randomness → "statistically significant"
+  - *Does NOT* measure magnitude or importance of difference
+
+- **Practical Significance** (effect size): *How large* is the difference?
+  - Measured by Cliff's Delta (δ): ranges from -1 (complete separation) to +1
+  - Large effect size = differences matter in practice
+  - Small effect size = statistically significant but negligible impact
+
+**Both Required**: A difference must be both statistically significant (p < 0.05) AND have meaningful effect size (|δ| ≥ 0.33) to be considered important.
+
+#### **Non-Parametric Statistics**
+
+**Why Not Use t-tests?** Traditional parametric tests assume:
+- Data follows normal (bell-curve) distribution
+- Equal variance across groups
+- Large sample sizes
+
+**Our Reality**: With 5-50 runs per framework, these assumptions often don't hold.
+
+**Solution**: Non-parametric methods (Kruskal-Wallis, Mann-Whitney, Cliff's δ):
+- Work with ranks instead of raw values (robust to outliers)
+- No distribution assumptions required
+- Valid for small sample sizes
+- Appropriate for comparing medians rather than means
+
+#### **Multiple Comparisons Problem**
+
+**The Issue**: With 3 frameworks, we make 3 pairwise comparisons (A vs B, A vs C, B vs C). Each test has 5% false positive rate. Multiple tests increase overall error rate:
+- 1 test: 5% chance of false positive
+- 3 tests: ~14% chance of at least one false positive
+- 10 tests: ~40% chance!
+
+**Solution - Dunn-Šidák Correction**: Adjusts significance threshold to maintain overall 5% error rate across all comparisons. Instead of p < 0.05 for each test, we use stricter threshold p < α_corrected.
+
+#### **Confidence Intervals (CI)**
+
+**Intuitive Meaning**: "If we repeated this entire experiment 100 times, the true population mean would fall within the CI range in 95 of those experiments."
+
+**Example Interpretation**:
+```
+TOK_IN: 45,230 [38,500, 52,100]
+```
+- Point estimate: 45,230 tokens (observed average)
+- 95% CI: [38,500, 52,100] (plausible range for true mean)
+- Interpretation: True average token consumption likely between 38,500-52,100
+
+**CI Width Indicates Precision**:
+- Narrow CI → high confidence in estimate, stable results
+- Wide CI → high uncertainty, need more data
+
+### 🎲 Randomness & Reproducibility
+
+**Sources of Randomness**:
+
+1. **LLM Non-Determinism**: Even with fixed temperature/seed, LLMs may produce different outputs due to:
+   - Sampling algorithms in the model
+   - Infrastructure variations (GPU scheduling, batching)
+   - OpenAI API updates/changes
+
+2. **Framework Internal Decisions**: Many frameworks use stochastic elements:
+   - Random selection of agents/roles
+   - Probabilistic retry logic
+   - Non-deterministic parsing of LLM responses
+
+**Managing Randomness**:
+- ✅ **Fixed random seed** (42) where possible → reduces some variance
+- ✅ **Multiple runs** → captures remaining natural variability
+- ✅ **Statistical methods** → quantifies uncertainty via confidence intervals
+- ✅ **Version pinning** → exact framework/dependency versions ensure reproducibility
+
+**Reproducibility Guarantee**: Given identical:
+- Framework version (commit hash)
+- Task prompts (`config/prompts/step_*.txt`)
+- AI model version
+- Random seed
+
+Results will be *similar* (not identical) due to irreducible LLM stochasticity. This is *expected* and *scientifically acceptable* — our statistical methods account for this variance.
+
+### 📏 Measurement Validity
+
+#### **Token Counting Accuracy**
+
+**Challenge**: Frameworks make multiple API calls per step. How do we accurately count tokens?
+
+**Our Solution - OpenAI Usage API**:
+- **Authoritative source**: Same API OpenAI uses for billing (maximum accuracy)
+- **Time-window queries**: Request token counts between step start/end timestamps
+- **Model filtering**: Isolate specific model usage to avoid cross-contamination
+- **Advantages**: Captures ALL API calls (including internal retries, error handling)
+
+**Why Not Local Tokenizers?**
+- Miss tokens from internal framework retries
+- Don't account for special tokens added by API
+- No visibility into prompt caching (new feature)
+
+#### **Wall-Clock Time vs. Compute Time**
+
+**T_WALL (Wall-Clock Time)**: Total elapsed time from step start to step end
+- Includes: computation + API latency + network delays + framework overhead
+- Represents *user-experienced duration*
+- More variable due to network conditions
+
+**Why Not Pure Compute Time?**
+- API latency is *inherent* to these frameworks (can't be separated)
+- Users care about total time-to-completion
+- Wall-clock time is the practical measure
 
 ---
 
@@ -44,14 +201,21 @@ This analysis is based on **48 experimental runs** across three frameworks:
 
 **Replication Protocol:**
 - Each run executes the complete 6-step evolution scenario independently
-- Runs are performed sequentially (not in parallel) to avoid resource conflicts
+- **Runs are performed strictly sequentially** (not in parallel) to enable accurate API usage tracking:
+  - OpenAI Usage API aggregates data across all parallel requests using the same API key
+  - Sequential execution ensures each run's API usage can be isolated and measured distinctly
+  - This is the only reliable method to attribute token consumption to individual experimental runs
 - Each run uses a fresh isolated environment (new virtual environment, clean workspace)
 - Random seed fixed at 42 for frameworks that support deterministic execution
 - Non-deterministic LLM responses introduce natural variance across runs
 
 **Statistical Power:**
 - Current sample sizes (baes: 17, chatdev: 16, ghspec: 15) provide sufficient power for detecting large effect sizes
-- Bootstrap confidence intervals (10,000 resamples) account for sample size uncertainty
+- **Bootstrap confidence intervals** (10,000 resamples) quantify uncertainty in our estimates:
+  - Simulates collecting 10,000 alternative datasets by resampling our actual data with replacement
+  - Each resample calculates the metric (e.g., mean AUTR), creating a distribution of possible values
+  - 95% CI shows the range where we expect the true population mean to fall 95% of the time
+  - This accounts for the fact that we only have a limited sample (not infinite runs)
 - Stopping rule: Continue until CI half-width ≤ 10% of mean (max 50 runs per framework)
 - Current status: baes (17/50), chatdev (16/50), ghspec (15/50)
 
@@ -160,7 +324,7 @@ python run.py --task "<step_text>" --name "BAEs_Step1_<run_id>" \
   - *Mitigation*: Documented in adapter implementations; accepted as inherent framework characteristics
 - **Non-Deterministic LLM Responses**: `gpt-4o-mini` may produce different outputs for identical inputs
   - *Mitigation*: Fixed random seed (42) helps but doesn't guarantee full determinism
-  - *Statistical Control*: Multiple runs (5-25 per framework) with bootstrap CI to capture variance
+  - *Statistical Control*: Multiple runs (5-50 per framework) with bootstrap CI to capture variance
 - **HITL Detection Accuracy**: Human-in-the-loop counts rely on keyword matching in logs
   - *Limitation*: May miss implicit clarifications or false-positive on debug messages
 
@@ -252,10 +416,31 @@ This report uses non-parametric statistics to compare frameworks robustly.
 
 ### 📖 Key Concepts
 
-**Bootstrap Confidence Intervals (CI)**
-- Estimates the range where true mean likely falls (95% confidence)
-- Example: `30,772 [2,503, 59,040]` means we're 95% confident the true mean is between 2,503 and 59,040
-- Wider intervals = more uncertainty; narrower intervals = more precise estimates
+**Bootstrap Confidence Intervals (CI)** - Understanding Uncertainty
+
+*What is bootstrapping?* A computational technique to estimate how much our results might vary if we ran the experiment again:
+
+1. **The Problem**: We have limited data (e.g., 5-50 runs per framework), but we want to know what the 'true' average would be with infinite runs
+2. **The Solution**: Bootstrap resampling simulates having multiple datasets:
+   - Take our actual data (e.g., 10 AUTR values: [0.8, 0.9, 0.85, ...])
+   - Create 10,000 'fake' datasets by randomly picking values from the original (with replacement)
+   - 'With replacement' means the same value can appear multiple times in a resample
+   - Example resample: [0.9, 0.8, 0.9, 0.85, ...] (notice 0.9 appears twice)
+3. **Calculate**: Compute the mean for each of the 10,000 resamples
+4. **Result**: We get 10,000 different means, showing the distribution of possible values
+5. **95% CI**: The middle 95% of this distribution becomes our confidence interval
+
+*Reading the numbers:*
+- Example: `AUTR: 0.85 [0.78, 0.92]`
+  - 0.85 is the observed mean from our actual data
+  - [0.78, 0.92] is the 95% confidence interval
+  - Interpretation: 'We are 95% confident the true population mean is between 0.78 and 0.92'
+  - If we repeated the entire experiment, we'd expect the mean to fall in this range 95% of the time
+
+*What do interval widths tell us?*
+- **Narrow interval** (e.g., [0.83, 0.87]): High precision, low uncertainty, stable results
+- **Wide interval** (e.g., [0.50, 0.95]): High uncertainty, need more runs for reliable estimates
+- Width decreases as we collect more runs (sample size increases)
 
 **Kruskal-Wallis H-Test**
 - Non-parametric test comparing multiple groups (doesn't assume normal distribution)
@@ -338,9 +523,9 @@ These metrics show zero values because **generated applications are not executed
 
 | Framework | N | AEI | API_CALLS | AUTR | CACHED_TOKENS | CRUDe | ESR | HEU | HIT | MC | Q_star | TOK_IN | TOK_OUT | T_WALL_seconds | UTT | ZDI |
 |-----------|---|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|
-| baes | 17 | 0.099 [0.098, 0.099] 🟢 | 14.88 [13.88, 15.76] 🔴 | 1.000 [1.000, 1.000] 🟢 | 715.29 [0.00, 1731.76] 🔴 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 25,564 [23,756, 27,176] 🟢 | 6,941 [6,427, 7,430] 🟢 | 178.2 [162.2, 195.8] 🟢 | 6 [6, 6] 🟢 | 36 [33, 39] 🟢 |
-| chatdev | 16 | 0.081 [0.081, 0.081] 🔴 | 128.94 [121.56, 136.06] 🟢 | 1.000 [1.000, 1.000] 🟢 | 33312.00 [29936.00, 36872.00] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 229,904 [221,806, 238,095] 🔴 | 81,113 [77,799, 84,660] 🔴 | 1701.1 [1553.2, 1852.6] 🔴 | 6 [6, 6] 🟢 | 341 [311, 372] 🔴 |
-| ghspec | 15 | 0.092 [0.091, 0.093] 🟡 | 59.87 [53.73, 64.53] 🟡 | 1.000 [1.000, 1.000] 🟢 | 1297.07 [136.53, 3003.73] 🟡 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 52,531 [47,544, 57,111] 🟡 | 25,397 [22,370, 27,951] 🟡 | 600.7 [527.6, 673.0] 🟡 | 6 [6, 6] 🟢 | 121 [105, 135] 🟡 |
+| baes | 17 | 0.099 [0.098, 0.099] 🟢 | 14.88 [13.94, 15.76] 🔴 | 1.000 [1.000, 1.000] 🟢 | 715.29 [0.00, 1844.71] 🔴 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 25,564 [23,771, 27,195] 🟢 | 6,941 [6,424, 7,425] 🟢 | 178.2 [162.1, 195.6] 🟢 | 6 [6, 6] 🟢 | 36 [33, 39] 🟢 |
+| chatdev | 16 | 0.081 [0.081, 0.081] 🔴 | 128.94 [121.81, 136.06] 🟢 | 1.000 [1.000, 1.000] 🟢 | 33312.00 [29952.00, 36848.00] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 229,904 [221,519, 238,067] 🔴 | 81,113 [77,854, 84,715] 🔴 | 1701.1 [1550.3, 1850.6] 🔴 | 6 [6, 6] 🟢 | 341 [311, 371] 🔴 |
+| ghspec | 15 | 0.092 [0.091, 0.093] 🟡 | 59.87 [54.07, 64.53] 🟡 | 1.000 [1.000, 1.000] 🟢 | 1297.07 [136.53, 3003.73] 🟡 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 52,531 [47,558, 56,980] 🟡 | 25,397 [22,372, 27,936] 🟡 | 600.7 [527.1, 672.0] 🟡 | 6 [6, 6] 🟢 | 121 [105, 135] 🟡 |
 
 
 ## 2. Relative Performance
