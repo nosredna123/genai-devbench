@@ -778,6 +778,19 @@ def generate_statistical_report(
     
     from pathlib import Path
     
+    # Extract model configuration (with fallback defaults)
+    model_name = config.get('model', 'gpt-4o-mini')
+    
+    # Model display name mapping for report readability
+    model_display_names = {
+        'gpt-4o-mini': 'OpenAI GPT-4 Omni Mini',
+        'gpt-4o': 'OpenAI GPT-4 Omni',
+        'gpt-4': 'OpenAI GPT-4',
+        'o1-mini': 'OpenAI O1 Mini',
+        'o1-preview': 'OpenAI O1 Preview',
+    }
+    model_display = model_display_names.get(model_name, model_name)
+    
     # Calculate run counts per framework
     run_counts = {framework: len(runs) for framework, runs in frameworks_data.items()}
     total_runs = sum(run_counts.values())
@@ -869,7 +882,7 @@ def generate_statistical_report(
         "To ensure fair comparison, the following variables are **held constant** across all frameworks:",
         "",
         "**Generative AI Model**:",
-        "- Model: `gpt-4o-mini` (OpenAI GPT-4 Omni Mini)",
+        f"- Model: `{model_name}` ({model_display})",
         "- Temperature: Framework default (typically 0.7-1.0)",
         "- All frameworks use the **same model version** for all steps",
         "",
@@ -917,7 +930,7 @@ def generate_statistical_report(
         "**Token Counting (TOK_IN, TOK_OUT)**:",
         "- Primary source: **OpenAI Usage API** (authoritative, billing-grade accuracy)",
         "- Query parameters: `start_time` (step start Unix timestamp), `end_time` (step end timestamp)",
-        "- Model filter: `models=[\"gpt-4o-mini\"]` (isolates framework's usage)",
+        f"- Model filter: `models=[\"{model_name}\"]` (isolates framework's usage)",
         "- Aggregates all API calls within time window (handles multi-request steps)",
         "",
         "**Timing (T_WALL_seconds, ZDI)**:",
@@ -945,7 +958,7 @@ def generate_statistical_report(
         "#### **Internal Validity**",
         "",
         "**✅ Controlled Threats:**",
-        "- **Model Consistency**: All frameworks use identical `gpt-4o-mini` model",
+        f"- **Model Consistency**: All frameworks use identical `{model_name}` model",
         "- **Command Consistency**: Same 6 natural language prompts in identical order",
         "- **Timing Isolation**: Dedicated API keys prevent cross-framework interference",
         "- **Environment Isolation**: Separate virtual environments prevent dependency conflicts",
@@ -954,7 +967,7 @@ def generate_statistical_report(
         "**⚠️ Uncontrolled Threats:**",
         "- **Framework-Specific Behavior**: Each framework has unique internal prompts, agent coordination, and retry logic",
         "  - *Mitigation*: Documented in adapter implementations; accepted as inherent framework characteristics",
-        "- **Non-Deterministic LLM Responses**: `gpt-4o-mini` may produce different outputs for identical inputs",
+        f"- **Non-Deterministic LLM Responses**: `{model_name}` may produce different outputs for identical inputs",
         "  - *Mitigation*: Fixed random seed (42) helps but doesn't guarantee full determinism",
         "  - *Statistical Control*: Multiple runs (5-25 per framework) with bootstrap CI to capture variance",
         "- **HITL Detection Accuracy**: Human-in-the-loop counts rely on keyword matching in logs",
@@ -965,8 +978,8 @@ def generate_statistical_report(
         "**Generalization Concerns:**",
         "- **Single Task Domain**: CRUD application (Student/Course/Teacher) may not represent all software types",
         "  - *Scope*: Results apply to data-driven web API development; may differ for other domains (ML, systems, mobile)",
-        "- **Single Model**: Results specific to `gpt-4o-mini`; other models (GPT-4, Claude, Gemini) may alter rankings",
-        "  - *Trade-off*: Chose `gpt-4o-mini` for cost and speed; representative of practical usage",
+        f"- **Single Model**: Results specific to `{model_name}`; other models (GPT-4, Claude, Gemini) may alter rankings",
+        f"  - *Trade-off*: Chose `{model_name}` for cost and speed; representative of practical usage",
         "- **Framework Versions**: Pinned commits may not reflect latest improvements",
         "  - *Justification*: Ensures reproducibility; future studies can test newer versions",
         "",
