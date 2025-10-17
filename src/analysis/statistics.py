@@ -735,7 +735,8 @@ def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]
 
 def generate_statistical_report(
     frameworks_data: Dict[str, List[Dict[str, float]]],
-    output_path: str
+    output_path: str,
+    config: Dict[str, Any] = None
 ) -> None:
     """
     Generate comprehensive statistical report in Markdown format.
@@ -756,12 +757,24 @@ def generate_statistical_report(
                             ...
                         }
         output_path: Path to save the markdown report.
+        config: Optional configuration dictionary. If not provided, will attempt
+                to load from config/experiment.yaml for backward compatibility.
     
     Raises:
         ValueError: If frameworks_data is empty or invalid.
     """
     if not frameworks_data:
         raise ValueError("frameworks_data cannot be empty")
+    
+    # Load config if not provided (backward compatibility)
+    if config is None:
+        try:
+            from src.orchestrator.config_loader import load_config
+            config = load_config()
+            logger.info("Loaded configuration from config/experiment.yaml")
+        except Exception as e:
+            logger.warning(f"Failed to load config, using defaults: {e}")
+            config = {}
     
     from pathlib import Path
     
