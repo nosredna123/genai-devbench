@@ -619,7 +619,7 @@ def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]
     # Most efficient (AEI)
     if all('AEI' in data for data in aggregated.values()):
         best_aei = max(aggregated.items(), key=lambda x: x[1].get('AEI', 0))
-        lines.append(f"- **Most Efficient (AEI)**: {best_aei[0]} ({best_aei[1]['AEI']:.3f}) - best quality-per-token ratio")
+        lines.append(f"- **Most Efficient (AEI)**: {best_aei[0]} ({best_aei[1]['AEI']:.3f}) - ⚠️ Note: AEI not reliably measured for BAEs")
     
     # Fastest (T_WALL_seconds)
     if all('T_WALL_seconds' in data for data in aggregated.values()):
@@ -636,14 +636,16 @@ def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]
     
     lines.extend(["", "### 📊 Key Insights", ""])
     
-    # Autonomy analysis
+    # Autonomy analysis - with measurement caveat
     if all('AUTR' in data for data in aggregated.values()):
         autr_values = [data['AUTR'] for data in aggregated.values()]
         if all(v == 1.0 for v in autr_values):
-            lines.append("- ✅ All frameworks achieved perfect autonomy (AUTR = 1.0) - no human intervention required")
+            lines.append("- ⚠️ AUTR = 1.0 shown for all frameworks, but **not uniformly measured** (see HITL Detection notes)")
+            lines.append("  - ChatDev & GHSpec: ✅ Properly measured (active detection)")
+            lines.append("  - BAEs: ❌ Hardcoded value (no detection mechanism)")
         else:
             avg_autr = sum(autr_values) / len(autr_values)
-            lines.append(f"- Autonomy varies across frameworks (average AUTR = {avg_autr:.2f})")
+            lines.append(f"- ⚠️ Autonomy varies across frameworks (average AUTR = {avg_autr:.2f}) - measurement reliability varies")
     
     # Quality metrics analysis
     quality_metrics = ['Q_star', 'ESR', 'CRUDe', 'MC']
@@ -700,6 +702,20 @@ def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]
         alerts.append("")
         alerts.append("**To Enable Quality Metrics**: Implement server startup and endpoint testing (20-40 hours estimated)")
         alerts.append("")
+    
+    # Add HITL detection alert
+    alerts.append("**HITL-Based Metrics Partially Measured**: `AUTR`, `AEI`, `HIT`, `HEU`")
+    alerts.append("")
+    alerts.append("These metrics depend on Human-in-the-Loop (HITL) detection, which is **not uniformly implemented**:")
+    alerts.append("- ✅ **ChatDev**: Active pattern-based detection (reliable measurement)")
+    alerts.append("- ✅ **GHSpec**: Active marker-based detection (reliable measurement)")
+    alerts.append("- ❌ **BAEs**: Hardcoded to zero - **no detection mechanism** (unreliable measurement)")
+    alerts.append("")
+    alerts.append("**Scientific Implication**: AUTR and AEI comparisons involving BAEs are **methodologically unsound**.")
+    alerts.append("BAEs values (AUTR=1.0, HIT=0) are assumptions, not measurements. See 'HITL Detection Implementation Notes' for details.")
+    alerts.append("")
+    alerts.append("**Recommendation**: Focus analysis on **reliably measured metrics** (TOK_IN, TOK_OUT, T_WALL, API_CALLS).")
+    alerts.append("")
     
     # Check for other unexpected zero metrics
     all_metrics = set()
@@ -1362,8 +1378,13 @@ def generate_statistical_report(
         f"- **Non-Deterministic LLM Responses**: `{model_name}` may produce different outputs for identical inputs",
         "  - *Mitigation*: Fixed random seed (42) helps but doesn't guarantee full determinism",
         f"  - *Statistical Control*: Multiple runs ({min_runs}-{max_runs} per framework) with bootstrap CI to capture variance",
-        "- **HITL Detection Accuracy**: Human-in-the-loop counts rely on keyword matching in logs",
-        "  - *Limitation*: May miss implicit clarifications or false-positive on debug messages",
+        "- **HITL Detection Accuracy**: Human-in-the-loop counts rely on pattern matching in logs",
+        "  - *ChatDev*: 5 regex patterns detect clarification requests (lines 821-832)",
+        "  - *GHSpec*: Explicit `[NEEDS CLARIFICATION:]` marker detection (line 544)",
+        "  - *BAEs*: ⚠️ **No detection implemented** - hardcoded to zero (lines 330, 348)",
+        "  - *Mitigation (BAEs)*: Manual investigation of 23 runs confirmed zero HITL events (see `BAES_HITL_INVESTIGATION.md`)",
+        "  - *Limitation*: Pattern matching may miss implicit clarifications or produce false positives",
+        "  - *Risk*: BAEs cannot detect HITL events in future experiments with ambiguous requirements",
         "",
         "#### **External Validity**",
         "",
@@ -1387,6 +1408,8 @@ def generate_statistical_report(
         "  - *Action Required*: Implement server startup and endpoint testing for quality evaluation (see `docs/QUALITY_METRICS_INVESTIGATION.md`)",
         "- **AUTR (Autonomy Rate)**: All frameworks achieve 100% autonomy (no human intervention required)",
         "  - *Note*: AUTR = 1.0 means HIT = 0 (no human-in-the-loop interventions needed)",
+        "  - *Implementation Variance*: ChatDev and GHSpec use active HITL detection; BAEs hardcodes zero",
+        "  - *Validation*: See 'HITL Detection Implementation Notes' section for framework-specific details",
         "",
         "#### **Conclusion Validity**",
         "",
@@ -1431,8 +1454,8 @@ def generate_statistical_report(
         "",
         "| Metric | Full Name | Description | Range | Ideal Value | Status |",
         "|--------|-----------|-------------|-------|-------------|--------|",
-        "| **AUTR** | Automated User Testing Rate | Autonomy: 1 - (HIT/UTT) | 0-1 | Higher ↑ | ✅ Measured |",
-        "| **AEI** | Automation Efficiency Index | Quality per token consumed | 0-∞ | Higher ↑ | ✅ Measured |",
+        "| **AUTR** | Automated User Testing Rate | Autonomy: 1 - (HIT/UTT) | 0-1 | Higher ↑ | ⚠️ Partially Measured** |",
+        "| **AEI** | Automation Efficiency Index | AUTR / log(1 + TOK_IN) | 0-∞ | Higher ↑ | ⚠️ Partially Measured** |",
         "| **Q\\*** | Quality Star | Composite quality score | 0-1 | Higher ↑ | ⚠️ Not Measured* |",
         "| **ESR** | Emerging State Rate | % steps with successful evolution | 0-1 | Higher ↑ | ⚠️ Not Measured* |",
         "| **CRUDe** | CRUD Evolution Coverage | CRUD operations implemented | 0-12 | Higher ↑ | ⚠️ Not Measured* |",
@@ -1443,16 +1466,103 @@ def generate_statistical_report(
         "| **CACHED_TOKENS** | Cached Input Tokens | Input tokens served from cache | 0-∞ | Higher ↑ | ✅ Measured |",
         "| **T_WALL_seconds** | Wall Clock Time | Total elapsed time (seconds) | 0-∞ | Lower ↓ | ✅ Measured |",
         "| **ZDI** | Zero-Downtime Intervals | Idle time between steps (seconds) | 0-∞ | Lower ↓ | ✅ Measured |",
-        "| **HIT** | Human-in-the-Loop Count | Manual interventions needed | 0-∞ | Lower ↓ | ✅ Measured |",
-        "| **HEU** | Human Effort Units | Total manual effort required | 0-∞ | Lower ↓ | ✅ Measured |",
+        "| **HIT** | Human-in-the-Loop Count | Manual interventions needed | 0-∞ | Lower ↓ | ⚠️ Partially Measured** |",
+        "| **HEU** | Human Effort Units | Total manual effort required | 0-∞ | Lower ↓ | ⚠️ Partially Measured** |",
         "| **UTT** | User Task Total | Number of evolution steps | Fixed | 6 | ✅ Measured |",
         "",
         "**\\* Quality Metrics Not Measured**: CRUDe, ESR, MC, and Q\\* show zero values because **generated applications are not executed during experiments**. The validation logic requires running servers to test CRUD endpoints (`http://localhost:8000-8002`), but servers are deliberately not started (`auto_restart_servers: false` in config). This experiment measures **code generation efficiency** (tokens, time, automation), not **runtime code quality**. See `docs/QUALITY_METRICS_INVESTIGATION.md` for details.",
+        "",
+        "**\\*\\* HITL-Based Metrics Partially Measured**: AUTR, AEI, HIT, and HEU depend on Human-in-the-Loop (HITL) event detection, which is **not uniformly implemented** across all frameworks:",
+        "- ✅ **ChatDev**: Active pattern-based HITL detection (5 regex patterns)",
+        "- ✅ **GHSpec**: Active marker-based HITL detection (`[NEEDS CLARIFICATION:]`)",
+        "- ❌ **BAEs**: No HITL detection - hardcoded to zero (lines 330, 348 in adapter)",
+        "",
+        "**Scientific Implication**: AUTR and AEI values for **BAEs are not reliable** because HITL events (if they occur) would not be detected. Current values (AUTR=1.0, HIT=0) may be accurate for this specific experiment but cannot be verified. For **ChatDev and GHSpec**, these metrics are properly measured. See 'HITL Detection Implementation Notes' section for full details.",
         "",
         "**New Metrics Added (Oct 2025)**:",
         "- **API_CALLS**: Number of LLM API requests - measures call efficiency (lower = better batching, fewer retries)",
         "- **CACHED_TOKENS**: Tokens served from OpenAI's prompt cache - represents cost savings (~50% discount)",
         "- **Cache Hit Rate**: Calculated as `(CACHED_TOKENS / TOK_IN) × 100%` - measures prompt reuse efficiency",
+        "",
+        "### 🔍 HITL Detection Implementation Notes",
+        "",
+        "**Human-in-the-Loop (HITL) Detection** varies significantly across frameworks due to architectural differences:",
+        "",
+        "#### **ChatDev Adapter** ✅ Active Detection",
+        "- **Method**: Pattern-based log analysis with 5 regex patterns",
+        "- **Patterns Detected**:",
+        "  - `clarif(y|ication)` - Explicit clarification requests",
+        "  - `ambiguous|unclear` - Ambiguity indicators",
+        "  - `need.*input|require.*input` - Direct input requests",
+        "  - `cannot proceed|blocked` - Execution blockers",
+        "  - `manual.*intervention` - Manual intervention flags",
+        "- **Implementation**: `src/adapters/chatdev_adapter.py` (lines 821-832)",
+        "- **Status**: ✅ Actively detecting HITL events in ChatDev logs",
+        "",
+        "#### **GHSpec Adapter** ✅ Active Detection",
+        "- **Method**: Explicit marker detection",
+        "- **Pattern**: `[NEEDS CLARIFICATION:]` in framework output",
+        "- **Rationale**: GHSpec uses standardized markers for human interaction points",
+        "- **Implementation**: `src/adapters/ghspec_adapter.py` (line 544)",
+        "- **Status**: ✅ Actively detecting HITL events via GHSpec markers",
+        "",
+        "#### **BAEs Adapter** ❌ No Detection Implemented",
+        "- **Current Implementation**: `hitl_count` hardcoded to `0` (lines 330 & 348 in `src/adapters/baes_adapter.py`)",
+        "- **Scientific Implication**: **HITL-based metrics (HIT, AUTR, AEI, HEU) are not reliably measured for BAEs**",
+        "  - Cannot detect if HITL events occur during execution",
+        "  - Current values (HIT=0, AUTR=1.0) are **assumptions**, not measurements",
+        "  - Results may appear artificially high (perfect autonomy) regardless of actual behavior",
+        "",
+        "- **Observational Evidence** (October 2025 - Informational Only):",
+        "  - Manual review of 23 BAEs runs found no clarification patterns in logs",
+        "  - Suggests BAEs likely operates autonomously for this specific task domain",
+        "  - However, this is **not a substitute for proper instrumentation**",
+        "",
+        "- **Why Hardcoded Zero Is Insufficient**:",
+        "  - ❌ Not scientifically verifiable - no measurement mechanism",
+        "  - ❌ Cannot distinguish \"no HITL events\" from \"events not detected\"",
+        "  - ❌ Prevents valid comparison with ChatDev and GHSpec (which have detection)",
+        "  - ❌ May hide issues in future experiments with different task types",
+        "",
+        "- **Required Future Work**: Implement BAEs-specific HITL detection:",
+        "  - Add pattern matching for: `clarification`, `ambiguous`, `cannot determine`, `unclear`",
+        "  - Search kernel output logs for entity communication failures",
+        "  - Track request-response validation errors",
+        "  - Update lines 330 & 348 to use detected count instead of hardcoded zero",
+        "",
+        "#### **Impact on Experimental Validity**",
+        "",
+        "**Metric Reliability by Framework**:",
+        "",
+        "| Framework | HITL Detection | HIT Reliability | AUTR Reliability | AEI Reliability |",
+        "|-----------|----------------|-----------------|------------------|-----------------|",
+        "| ChatDev   | ✅ Implemented | ✅ Measured     | ✅ Measured      | ✅ Measured     |",
+        "| GHSpec    | ✅ Implemented | ✅ Measured     | ✅ Measured      | ✅ Measured     |",
+        "| BAEs      | ❌ Not Implemented | ❌ Hardcoded (0) | ❌ Assumed (1.0) | ❌ Unreliable |",
+        "",
+        "**Interpretation Guidelines**:",
+        "",
+        "1. **For ChatDev and GHSpec**: AUTR=1.0 is a **verified measurement** (active detection confirmed no HITL events)",
+        "",
+        "2. **For BAEs**: AUTR=1.0 is an **unverified assumption** (no detection mechanism)",
+        "   - May be accurate (manual review suggests it is for current tasks)",
+        "   - Cannot be scientifically confirmed without proper instrumentation",
+        "   - **Should not be directly compared** with ChatDev/GHSpec AUTR values",
+        "",
+        "3. **Cross-Framework Comparisons**:",
+        "   - ✅ **Valid**: TOK_IN, TOK_OUT, T_WALL, API_CALLS, CACHED_TOKENS (all properly measured)",
+        "   - ⚠️ **Questionable**: AUTR, AEI comparisons involving BAEs (measurement method inconsistent)",
+        "   - ❌ **Invalid**: Claims about BAEs autonomy superiority (not measured, only assumed)",
+        "",
+        "**Critical Limitation for This Experiment**:",
+        "- AUTR and AEI comparisons are **methodologically unsound** when BAEs is included",
+        "- Recommendation: **Report BAEs AUTR/AEI as \"Not Measured\"** or clearly mark as estimated",
+        "- Alternative: Focus comparisons on **reliably measured metrics** (tokens, time, API calls)",
+        "",
+        "**Documentation References**:",
+        "- Full adapter analysis: `AUTR_ADAPTER_ANALYSIS.md`",
+        "- BAEs investigation report: `BAES_HITL_INVESTIGATION.md`",
+        "- Adapter implementations: `src/adapters/` (all three adapters)",
         "",
         "---",
         ""
