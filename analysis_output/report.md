@@ -1,6 +1,6 @@
 # Statistical Analysis Report
 
-**Generated:** 2025-10-17 08:43:58 UTC
+**Generated:** 2025-10-17 09:08:03 UTC
 
 **Frameworks:** baes, chatdev, ghspec
 
@@ -52,8 +52,8 @@ This analysis is based on **48 experimental runs** across three frameworks:
 **Statistical Power:**
 - Current sample sizes (baes: 17, chatdev: 16, ghspec: 15) provide sufficient power for detecting large effect sizes
 - Bootstrap confidence intervals (10,000 resamples) account for sample size uncertainty
-- Stopping rule: Continue until CI half-width ≤ 10% of mean (max 100 runs per framework)
-- Current status: baes (17/100), chatdev (16/100), ghspec (15/100)
+- Stopping rule: Continue until CI half-width ≤ 10% of mean (max 50 runs per framework)
+- Current status: baes (17/50), chatdev (16/50), ghspec (15/50)
 
 #### **Standardized Task Sequence**
 
@@ -194,7 +194,7 @@ python run.py --task "<step_text>" --name "BAEs_Step1_<run_id>" \
 - **Effect Sizes**: Cliff's delta quantifies practical significance beyond p-values
 - **Bootstrap CI**: 95% confidence intervals with 10,000 resamples for stable estimates
 - **Small Sample Awareness**: Current results (baes: 17, chatdev: 16, ghspec: 15) show large CI widths; p-values > 0.05 expected
-  - *Stopping Rule*: Experiment continues until CI half-width ≤ 10% of mean (100 runs max)
+  - *Stopping Rule*: Experiment continues until CI half-width ≤ 10% of mean (50 runs max)
 
 **Interpretation Caveats:**
 - **Non-Significant Results**: p > 0.05 does NOT prove frameworks are equivalent, only insufficient evidence of difference
@@ -338,9 +338,9 @@ These metrics show zero values because **generated applications are not executed
 
 | Framework | N | AEI | API_CALLS | AUTR | CACHED_TOKENS | CRUDe | ESR | HEU | HIT | MC | Q_star | TOK_IN | TOK_OUT | T_WALL_seconds | UTT | ZDI |
 |-----------|---|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|
-| baes | 17 | 0.099 [0.098, 0.099] 🟢 | 14.88 [13.88, 15.76] 🔴 | 1.000 [1.000, 1.000] 🟢 | 715.29 [0.00, 1844.71] 🔴 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 25,564 [23,729, 27,187] 🟢 | 6,941 [6,433, 7,436] 🟢 | 178.2 [162.2, 195.4] 🟢 | 6 [6, 6] 🟢 | 36 [33, 39] 🟢 |
-| chatdev | 16 | 0.081 [0.081, 0.081] 🔴 | 128.94 [121.75, 136.25] 🟢 | 1.000 [1.000, 1.000] 🟢 | 33312.00 [29912.00, 36744.00] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 229,904 [221,722, 238,092] 🔴 | 81,113 [77,860, 84,728] 🔴 | 1701.1 [1553.8, 1856.8] 🔴 | 6 [6, 6] 🟢 | 341 [311, 369] 🔴 |
-| ghspec | 15 | 0.092 [0.091, 0.093] 🟡 | 59.87 [54.07, 64.47] 🟡 | 1.000 [1.000, 1.000] 🟢 | 1297.07 [136.53, 2935.47] 🟡 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 52,531 [47,584, 57,169] 🟡 | 25,397 [22,403, 28,027] 🟡 | 600.7 [526.1, 673.7] 🟡 | 6 [6, 6] 🟢 | 121 [106, 135] 🟡 |
+| baes | 17 | 0.099 [0.098, 0.099] 🟢 | 14.88 [13.88, 15.76] 🔴 | 1.000 [1.000, 1.000] 🟢 | 715.29 [0.00, 1731.76] 🔴 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 25,564 [23,756, 27,176] 🟢 | 6,941 [6,427, 7,430] 🟢 | 178.2 [162.2, 195.8] 🟢 | 6 [6, 6] 🟢 | 36 [33, 39] 🟢 |
+| chatdev | 16 | 0.081 [0.081, 0.081] 🔴 | 128.94 [121.56, 136.06] 🟢 | 1.000 [1.000, 1.000] 🟢 | 33312.00 [29936.00, 36872.00] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 229,904 [221,806, 238,095] 🔴 | 81,113 [77,799, 84,660] 🔴 | 1701.1 [1553.2, 1852.6] 🔴 | 6 [6, 6] 🟢 | 341 [311, 372] 🔴 |
+| ghspec | 15 | 0.092 [0.091, 0.093] 🟡 | 59.87 [53.73, 64.53] 🟡 | 1.000 [1.000, 1.000] 🟢 | 1297.07 [136.53, 3003.73] 🟡 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 52,531 [47,544, 57,111] 🟡 | 25,397 [22,370, 27,951] 🟡 | 600.7 [527.6, 673.0] 🟡 | 6 [6, 6] 🟢 | 121 [105, 135] 🟡 |
 
 
 ## 2. Relative Performance
