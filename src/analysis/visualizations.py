@@ -54,11 +54,12 @@ def radar_chart(
     Args:
         frameworks_data: Dict mapping framework names to metric dictionaries.
                         Example: {
-                            "BAEs": {"AUTR": 0.85, "TOK_IN": 12000, ...},
-                            "ChatDev": {"AUTR": 0.72, "TOK_IN": 15000, ...}
+                            "BAEs": {"TOK_IN": 12000, "TOK_OUT": 8000, ...},
+                            "ChatDev": {"TOK_IN": 15000, "TOK_OUT": 10000, ...}
                         }
         output_path: Path to save the SVG file.
-        metrics: List of metric names to plot. Defaults to [AUTR, TOK_IN, T_WALL_seconds, CRUDe, ESR, MC].
+        metrics: List of metric names to plot. Defaults to 6 reliably measured metrics:
+                [TOK_IN, TOK_OUT, T_WALL_seconds, API_CALLS, CACHED_TOKENS, ZDI].
         title: Chart title.
     
     Raises:
@@ -67,9 +68,10 @@ def radar_chart(
     if not frameworks_data:
         raise ValueError("frameworks_data cannot be empty")
     
-    # Default metrics: 7 key metrics from experiment spec (including API efficiency)
+    # Default metrics: 6 reliably measured metrics (no AUTR/CRUDe/ESR/MC)
+    # See docs/RELIABLE_METRICS_IMPLEMENTATION_PLAN.md for rationale
     if metrics is None:
-        metrics = ["AUTR", "API_CALLS", "TOK_IN", "T_WALL_seconds", "CRUDe", "ESR", "MC"]
+        metrics = ["TOK_IN", "TOK_OUT", "T_WALL_seconds", "API_CALLS", "CACHED_TOKENS", "ZDI"]
     
     # Validate all frameworks have all metrics
     for framework, data in frameworks_data.items():
@@ -158,6 +160,10 @@ def pareto_plot(
     """
     Generate a Pareto plot showing quality (Q*) vs cost (TOK_IN).
     
+    ⚠️ DEPRECATED: This visualization uses Q* which is not measured
+    in current experiments (always 0). Will be re-enabled once quality
+    metrics are implemented. See docs/RELIABLE_METRICS_IMPLEMENTATION_PLAN.md
+    
     This scatter plot helps identify the optimal trade-off between
     quality and token consumption across frameworks.
     
@@ -170,6 +176,15 @@ def pareto_plot(
     Raises:
         ValueError: If frameworks_data is empty or missing required metrics.
     """
+    import warnings
+    warnings.warn(
+        "pareto_plot() deprecated: uses unmeasured metric Q* (always 0). "
+        "Skipping visualization generation. See docs/RELIABLE_METRICS_IMPLEMENTATION_PLAN.md",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    return  # Early exit - skip generation
+    
     if not frameworks_data:
         raise ValueError("frameworks_data cannot be empty")
     
@@ -273,6 +288,10 @@ def timeline_chart(
     """
     Generate a timeline chart showing CRUD coverage and downtime over steps.
     
+    ⚠️ DEPRECATED: This visualization uses CRUDe which is not measured
+    in current experiments (always 0). Will be re-enabled once quality
+    metrics are implemented. See docs/RELIABLE_METRICS_IMPLEMENTATION_PLAN.md
+    
     This dual-axis chart displays:
     - Left axis (bars): CRUD coverage count (0-12) per step
     - Right axis (line): Downtime incidents per step
@@ -292,6 +311,15 @@ def timeline_chart(
     Raises:
         ValueError: If timeline_data is empty or missing required metrics.
     """
+    import warnings
+    warnings.warn(
+        "timeline_chart() deprecated: uses unmeasured metric CRUDe (always 0). "
+        "Skipping visualization generation. See docs/RELIABLE_METRICS_IMPLEMENTATION_PLAN.md",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    return  # Early exit - skip generation
+    
     if not timeline_data:
         raise ValueError("timeline_data cannot be empty")
     
@@ -763,4 +791,420 @@ def api_calls_timeline(
     plt.tight_layout()
     plt.savefig(output_path, format='svg', dpi=300, bbox_inches='tight')
     plt.close()
+
+
+def token_efficiency_chart(
+    frameworks_data: Dict[str, List[Dict[str, float]]],
+    output_path: str,
+    title: str = "Token Efficiency: Input vs Output"
+) -> None:
+    """
+    Generate scatter plot showing input vs output token relationship.
+    
+    Shows how frameworks trade off input context vs output generation.
+    Marker size represents execution time, enabling 3-dimensional comparison.
+    
+    Args:
+        frameworks_data: Dict mapping framework names to lists of run metrics.
+                        Each run must contain: TOK_IN, TOK_OUT, T_WALL_seconds
+        output_path: Path to save the SVG file.
+        title: Chart title.
+    
+    Raises:
+        ValueError: If frameworks_data is empty or missing required metrics.
+    """
+    if not frameworks_data:
+        raise ValueError("frameworks_data cannot be empty")
+    
+    # Validate required metrics
+    required = ["TOK_IN", "TOK_OUT", "T_WALL_seconds"]
+    for framework, runs in frameworks_data.items():
+        if not runs:
+            raise ValueError(f"Framework {framework} has no run data")
+        for run in runs:
+            missing = [m for m in required if m not in run]
+            if missing:
+                raise ValueError(f"Framework {framework} run missing metrics: {missing}")
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # Define colors for frameworks
+    colors = {'baes': '#1f77b4', 'chatdev': '#ff7f0e', 'ghspec': '#2ca02c'}
+    markers = {'baes': 'o', 'chatdev': 's', 'ghspec': '^'}
+    
+    # Plot each framework
+    for framework, runs in frameworks_data.items():
+        tok_in = [run["TOK_IN"] for run in runs]
+        tok_out = [run["TOK_OUT"] for run in runs]
+        t_wall = [run["T_WALL_seconds"] for run in runs]
+        
+        # Normalize time for marker sizes (50-500 range)
+        min_time = min(t_wall)
+        max_time = max(t_wall)
+        if max_time > min_time:
+            sizes = [50 + 450 * ((t - min_time) / (max_time - min_time)) for t in t_wall]
+        else:
+            sizes = [250] * len(t_wall)
+        
+        color = colors.get(framework.lower(), '#666666')
+        marker = markers.get(framework.lower(), 'o')
+        
+        ax.scatter(
+            tok_in,
+            tok_out,
+            s=sizes,
+            c=color,
+            marker=marker,
+            alpha=0.6,
+            edgecolors='black',
+            linewidth=1.5,
+            label=framework
+        )
+        
+        # Add trend line
+        if len(tok_in) > 1:
+            z = np.polyfit(tok_in, tok_out, 1)
+            p = np.poly1d(z)
+            x_trend = np.linspace(min(tok_in), max(tok_in), 100)
+            ax.plot(x_trend, p(x_trend), '--', color=color, alpha=0.5, linewidth=2)
+    
+    # Add diagonal reference line (1:1 ratio)
+    all_tokens = []
+    for runs in frameworks_data.values():
+        all_tokens.extend([run["TOK_IN"] for run in runs])
+        all_tokens.extend([run["TOK_OUT"] for run in runs])
+    
+    if all_tokens:
+        max_token = max(all_tokens)
+        ax.plot([0, max_token], [0, max_token], 'k:', alpha=0.3, linewidth=1, label='1:1 ratio')
+    
+    # Labels and formatting
+    ax.set_xlabel('Input Tokens (TOK_IN)', fontsize=14, fontweight='bold')
+    ax.set_ylabel('Output Tokens (TOK_OUT)', fontsize=14, fontweight='bold')
+    ax.set_title(title, fontsize=16, fontweight='bold', pad=20)
+    ax.grid(True, alpha=0.3, linestyle='--')
+    ax.legend(loc='upper left', fontsize=12, framealpha=0.9)
+    
+    # Add interpretation note
+    note = ("Marker size ∝ Execution time\n"
+            "Points above 1:1 line = More verbose output\n"
+            "Points below 1:1 line = Concise output")
+    ax.text(0.98, 0.02, note, transform=ax.transAxes,
+           fontsize=9, alpha=0.7, ha='right', va='bottom',
+           bbox=dict(boxstyle='round,pad=0.5', facecolor='lightyellow', alpha=0.5))
+    
+    # Save as SVG
+    output_path_obj = Path(output_path)
+    output_path_obj.parent.mkdir(parents=True, exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(output_path, format='svg', bbox_inches='tight', dpi=300)
+    plt.close()
+    
+    print(f"Token efficiency chart saved to {output_path}")
+
+
+def api_efficiency_bar_chart(
+    frameworks_data: Dict[str, Dict[str, float]],
+    output_path: str,
+    title: str = "API Call Efficiency by Framework"
+) -> None:
+    """
+    Generate bar chart comparing API call efficiency.
+    
+    Shows API_CALLS count with annotations for tokens-per-call ratio,
+    enabling comparison of batching and retry strategies.
+    
+    Args:
+        frameworks_data: Dict mapping framework names to aggregated metrics.
+                        Must contain: API_CALLS, TOK_IN
+        output_path: Path to save the SVG file.
+        title: Chart title.
+    
+    Raises:
+        ValueError: If frameworks_data is empty or missing required metrics.
+    """
+    if not frameworks_data:
+        raise ValueError("frameworks_data cannot be empty")
+    
+    # Validate required metrics
+    required = ["API_CALLS", "TOK_IN"]
+    for framework, data in frameworks_data.items():
+        missing = [m for m in required if m not in data]
+        if missing:
+            raise ValueError(f"Framework {framework} missing metrics: {missing}")
+    
+    # Extract data
+    frameworks = list(frameworks_data.keys())
+    api_calls = [frameworks_data[fw]["API_CALLS"] for fw in frameworks]
+    tok_in = [frameworks_data[fw]["TOK_IN"] for fw in frameworks]
+    
+    # Calculate tokens per call
+    tokens_per_call = [tok / calls if calls > 0 else 0 
+                      for tok, calls in zip(tok_in, api_calls)]
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # Define colors
+    colors = {'baes': '#1f77b4', 'chatdev': '#ff7f0e', 'ghspec': '#2ca02c'}
+    bar_colors = [colors.get(fw.lower(), '#666666') for fw in frameworks]
+    
+    # Create bars
+    x_pos = np.arange(len(frameworks))
+    bars = ax.bar(x_pos, api_calls, color=bar_colors, alpha=0.7, 
+                  edgecolor='black', linewidth=1.5)
+    
+    # Add value labels on bars
+    for i, (bar, calls, tpc) in enumerate(zip(bars, api_calls, tokens_per_call)):
+        height = bar.get_height()
+        # API calls count
+        ax.text(bar.get_x() + bar.get_width()/2., height,
+               f'{int(calls)}',
+               ha='center', va='bottom', fontsize=12, fontweight='bold')
+        # Tokens per call
+        ax.text(bar.get_x() + bar.get_width()/2., height/2,
+               f'{int(tpc):,}\ntok/call',
+               ha='center', va='center', fontsize=10, 
+               bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
+    
+    # Labels and formatting
+    ax.set_xlabel('Framework', fontsize=14, fontweight='bold')
+    ax.set_ylabel('API Calls (count)', fontsize=14, fontweight='bold')
+    ax.set_title(title, fontsize=16, fontweight='bold', pad=20)
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(frameworks, fontsize=12)
+    ax.grid(True, axis='y', alpha=0.3, linestyle='--')
+    ax.set_axisbelow(True)
+    
+    # Add interpretation note
+    note = ("Lower bars = Fewer API calls (more efficient batching)\n"
+            "Higher tok/call = Better token utilization per request")
+    ax.text(0.98, 0.98, note, transform=ax.transAxes,
+           fontsize=9, alpha=0.7, ha='right', va='top',
+           bbox=dict(boxstyle='round,pad=0.5', facecolor='lightyellow', alpha=0.5))
+    
+    # Save as SVG
+    output_path_obj = Path(output_path)
+    output_path_obj.parent.mkdir(parents=True, exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(output_path, format='svg', bbox_inches='tight', dpi=300)
+    plt.close()
+    
+    print(f"API efficiency bar chart saved to {output_path}")
+
+
+def cache_efficiency_chart(
+    frameworks_data: Dict[str, Dict[str, float]],
+    output_path: str,
+    title: str = "Cache Hit Rate Comparison"
+) -> None:
+    """
+    Generate stacked bar chart showing cache efficiency.
+    
+    Shows proportion of cached vs uncached tokens, with percentage labels
+    indicating cache hit rate for each framework.
+    
+    Args:
+        frameworks_data: Dict mapping framework names to aggregated metrics.
+                        Must contain: TOK_IN, CACHED_TOKENS
+        output_path: Path to save the SVG file.
+        title: Chart title.
+    
+    Raises:
+        ValueError: If frameworks_data is empty or missing required metrics.
+    """
+    if not frameworks_data:
+        raise ValueError("frameworks_data cannot be empty")
+    
+    # Validate required metrics
+    required = ["TOK_IN", "CACHED_TOKENS"]
+    for framework, data in frameworks_data.items():
+        missing = [m for m in required if m not in data]
+        if missing:
+            raise ValueError(f"Framework {framework} missing metrics: {missing}")
+    
+    # Extract data
+    frameworks = list(frameworks_data.keys())
+    tok_in = [frameworks_data[fw]["TOK_IN"] for fw in frameworks]
+    cached = [frameworks_data[fw]["CACHED_TOKENS"] for fw in frameworks]
+    uncached = [tin - cac for tin, cac in zip(tok_in, cached)]
+    
+    # Calculate hit rates
+    hit_rates = [(cac / tin * 100) if tin > 0 else 0 
+                 for cac, tin in zip(cached, tok_in)]
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # Define colors
+    colors_uncached = {'baes': '#1f77b4', 'chatdev': '#ff7f0e', 'ghspec': '#2ca02c'}
+    colors_cached = {'baes': '#88c9ff', 'chatdev': '#ffb366', 'ghspec': '#7fdb7f'}
+    
+    bar_colors_uncached = [colors_uncached.get(fw.lower(), '#666666') for fw in frameworks]
+    bar_colors_cached = [colors_cached.get(fw.lower(), '#aaaaaa') for fw in frameworks]
+    
+    # Create stacked bars
+    x_pos = np.arange(len(frameworks))
+    width = 0.6
+    
+    bars_uncached = ax.bar(x_pos, uncached, width, label='Uncached Tokens',
+                           color=bar_colors_uncached, alpha=0.8, 
+                           edgecolor='black', linewidth=1.5)
+    
+    bars_cached = ax.bar(x_pos, cached, width, bottom=uncached,
+                         label='Cached Tokens', color=bar_colors_cached, 
+                         alpha=0.8, edgecolor='black', linewidth=1.5)
+    
+    # Add percentage labels
+    for i, (fw, rate, tin) in enumerate(zip(frameworks, hit_rates, tok_in)):
+        # Total tokens at top
+        ax.text(i, tin, f'{int(tin):,}', ha='center', va='bottom',
+               fontsize=11, fontweight='bold')
+        
+        # Cache hit rate in middle
+        ax.text(i, tin/2, f'{rate:.1f}%\ncache hit',
+               ha='center', va='center', fontsize=12, fontweight='bold',
+               bbox=dict(boxstyle='round,pad=0.4', facecolor='white', 
+                        edgecolor='black', linewidth=2, alpha=0.9))
+    
+    # Labels and formatting
+    ax.set_xlabel('Framework', fontsize=14, fontweight='bold')
+    ax.set_ylabel('Tokens', fontsize=14, fontweight='bold')
+    ax.set_title(title, fontsize=16, fontweight='bold', pad=20)
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(frameworks, fontsize=12)
+    ax.grid(True, axis='y', alpha=0.3, linestyle='--')
+    ax.set_axisbelow(True)
+    ax.legend(loc='upper right', fontsize=12, framealpha=0.9)
+    
+    # Add interpretation note
+    note = ("Higher cache hit rate = Better prompt reuse\n"
+            "Lower total tokens = More efficient overall")
+    ax.text(0.02, 0.98, note, transform=ax.transAxes,
+           fontsize=9, alpha=0.7, ha='left', va='top',
+           bbox=dict(boxstyle='round,pad=0.5', facecolor='lightyellow', alpha=0.5))
+    
+    # Save as SVG
+    output_path_obj = Path(output_path)
+    output_path_obj.parent.mkdir(parents=True, exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(output_path, format='svg', bbox_inches='tight', dpi=300)
+    plt.close()
+    
+    print(f"Cache efficiency chart saved to {output_path}")
+
+
+def time_distribution_chart(
+    frameworks_data: Dict[str, List[Dict[str, float]]],
+    output_path: str,
+    title: str = "Execution Time Distribution"
+) -> None:
+    """
+    Generate box plot showing execution time variability.
+    
+    Shows distribution of T_WALL_seconds across runs for each framework,
+    including median, quartiles, and outliers.
+    
+    Args:
+        frameworks_data: Dict mapping framework names to lists of run metrics.
+                        Each run must contain: T_WALL_seconds
+        output_path: Path to save the SVG file.
+        title: Chart title.
+    
+    Raises:
+        ValueError: If frameworks_data is empty or missing required metrics.
+    """
+    if not frameworks_data:
+        raise ValueError("frameworks_data cannot be empty")
+    
+    # Validate required metrics and extract time data
+    time_data = []
+    frameworks = []
+    for framework, runs in frameworks_data.items():
+        if not runs:
+            raise ValueError(f"Framework {framework} has no run data")
+        
+        times = []
+        for run in runs:
+            if "T_WALL_seconds" not in run:
+                raise ValueError(f"Framework {framework} run missing T_WALL_seconds")
+            times.append(run["T_WALL_seconds"])
+        
+        frameworks.append(framework)
+        time_data.append(times)
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # Define colors
+    colors = {'baes': '#1f77b4', 'chatdev': '#ff7f0e', 'ghspec': '#2ca02c'}
+    box_colors = [colors.get(fw.lower(), '#666666') for fw in frameworks]
+    
+    # Create box plot
+    bp = ax.boxplot(time_data, labels=frameworks, patch_artist=True,
+                    widths=0.6, showmeans=True,
+                    meanprops=dict(marker='D', markerfacecolor='red', 
+                                  markeredgecolor='black', markersize=8),
+                    medianprops=dict(color='black', linewidth=2),
+                    boxprops=dict(linewidth=1.5, edgecolor='black'),
+                    whiskerprops=dict(linewidth=1.5),
+                    capprops=dict(linewidth=1.5),
+                    flierprops=dict(marker='o', markerfacecolor='red', 
+                                   markersize=8, alpha=0.5))
+    
+    # Color the boxes
+    for patch, color in zip(bp['boxes'], box_colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.7)
+    
+    # Overlay individual points with jitter
+    for i, (times, color) in enumerate(zip(time_data, box_colors)):
+        x = np.random.normal(i + 1, 0.04, size=len(times))
+        ax.scatter(x, times, alpha=0.4, s=50, color=color, edgecolors='black', linewidth=0.5)
+    
+    # Add median value labels
+    for i, times in enumerate(time_data):
+        median = np.median(times)
+        mean = np.mean(times)
+        ax.text(i + 1, median, f'  Med: {median:.1f}s',
+               va='center', ha='left', fontsize=10, fontweight='bold',
+               bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
+        ax.text(i + 1, mean, f'  Avg: {mean:.1f}s',
+               va='center', ha='left', fontsize=9, alpha=0.7,
+               bbox=dict(boxstyle='round,pad=0.3', facecolor='lightyellow', alpha=0.8))
+    
+    # Labels and formatting
+    ax.set_xlabel('Framework', fontsize=14, fontweight='bold')
+    ax.set_ylabel('Execution Time (seconds)', fontsize=14, fontweight='bold')
+    ax.set_title(title, fontsize=16, fontweight='bold', pad=20)
+    ax.grid(True, axis='y', alpha=0.3, linestyle='--')
+    ax.set_axisbelow(True)
+    
+    # Add legend for box plot components
+    legend_elements = [
+        plt.Line2D([0], [0], marker='D', color='w', markerfacecolor='red',
+                  markeredgecolor='black', markersize=8, label='Mean'),
+        plt.Line2D([0], [0], color='black', linewidth=2, label='Median'),
+        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='red',
+                  markersize=8, alpha=0.5, label='Outliers')
+    ]
+    ax.legend(handles=legend_elements, loc='upper right', fontsize=11, framealpha=0.9)
+    
+    # Add interpretation note
+    note = ("Box = Q1 to Q3 (middle 50%)\n"
+            "Whiskers = Min/Max (excluding outliers)\n"
+            "Narrow box = Consistent performance")
+    ax.text(0.02, 0.98, note, transform=ax.transAxes,
+           fontsize=9, alpha=0.7, ha='left', va='top',
+           bbox=dict(boxstyle='round,pad=0.5', facecolor='lightyellow', alpha=0.5))
+    
+    # Save as SVG
+    output_path_obj = Path(output_path)
+    output_path_obj.parent.mkdir(parents=True, exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(output_path, format='svg', bbox_inches='tight', dpi=300)
+    plt.close()
+    
+    print(f"Time distribution chart saved to {output_path}")
 

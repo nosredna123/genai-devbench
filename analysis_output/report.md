@@ -1,10 +1,10 @@
 # Statistical Analysis Report
 
-**Generated:** 2025-10-17 18:31:58 UTC
+**Generated:** 2025-10-17 18:54:05 UTC
 
 **Frameworks:** baes, chatdev, ghspec
 
-**Sample Size:** 63 total runs (baes: 24, chatdev: 21, ghspec: 18)
+**Sample Size:** 61 total runs (baes: 23, chatdev: 20, ghspec: 18)
 
 ---
 
@@ -193,10 +193,10 @@ This study compares three autonomous AI-powered software development frameworks 
 
 #### **Sample Size and Replication**
 
-This analysis is based on **63 experimental runs** across three frameworks:
+This analysis is based on **61 experimental runs** across three frameworks:
 
-- **baes**: 24 independent runs
-- **chatdev**: 21 independent runs
+- **baes**: 23 independent runs
+- **chatdev**: 20 independent runs
 - **ghspec**: 18 independent runs
 
 **Replication Protocol:**
@@ -210,14 +210,14 @@ This analysis is based on **63 experimental runs** across three frameworks:
 - Non-deterministic LLM responses introduce natural variance across runs
 
 **Statistical Power:**
-- Current sample sizes (baes: 24, chatdev: 21, ghspec: 18) provide sufficient power for detecting large effect sizes
+- Current sample sizes (baes: 23, chatdev: 20, ghspec: 18) provide sufficient power for detecting large effect sizes
 - **Bootstrap confidence intervals** (10,000 resamples) quantify uncertainty in our estimates:
   - Simulates collecting 10,000 alternative datasets by resampling our actual data with replacement
   - Each resample calculates the metric (e.g., mean AUTR), creating a distribution of possible values
   - 95% CI shows the range where we expect the true population mean to fall 95% of the time
   - This accounts for the fact that we only have a limited sample (not infinite runs)
 - Stopping rule: Continue until CI half-width ≤ 10% of mean (max 50 runs per framework)
-- Current status: baes (24/50), chatdev (21/50), ghspec (18/50)
+- Current status: baes (23/50), chatdev (20/50), ghspec (18/50)
 
 #### **Standardized Task Sequence**
 
@@ -364,7 +364,7 @@ python run.py --task "<step_text>" --name "BAEs_Step1_<run_id>" \
 - **Non-Parametric Tests**: Kruskal-Wallis and Dunn-Šidák avoid normality assumptions
 - **Effect Sizes**: Cliff's delta quantifies practical significance beyond p-values
 - **Bootstrap CI**: 95% confidence intervals with 10,000 resamples for stable estimates
-- **Small Sample Awareness**: Current results (baes: 24, chatdev: 21, ghspec: 18) show large CI widths; p-values > 0.05 expected
+- **Small Sample Awareness**: Current results (baes: 23, chatdev: 20, ghspec: 18) show large CI widths; p-values > 0.05 expected
   - *Stopping Rule*: Experiment continues until CI half-width ≤ 10% of mean (50 runs max)
 
 **Interpretation Caveats:**
@@ -575,13 +575,13 @@ This report uses non-parametric statistics to compare frameworks robustly.
 
 ## Executive Summary
 
-*Based on 63 runs across 3 frameworks: baes (n=24), chatdev (n=21), ghspec (n=18)*
+*Based on 61 runs across 3 frameworks: baes (n=23), chatdev (n=20), ghspec (n=18)*
 
 ### 🏆 Best Performers
 
-- **Most Efficient (AEI)**: baes (0.095) - ⚠️ Note: AEI not reliably measured for BAEs
-- **Fastest (T_WALL)**: baes (188.6s / 3.1 min)
-- **Lowest Token Usage**: baes (23,827 input tokens)
+- **Most Efficient (AEI)**: baes (0.099) - ⚠️ Note: AEI not reliably measured for BAEs
+- **Fastest (T_WALL)**: baes (178.9s / 3.0 min)
+- **Lowest Token Usage**: baes (24,863 input tokens)
 
 ### 📊 Key Insights
 
@@ -589,8 +589,8 @@ This report uses non-parametric statistics to compare frameworks robustly.
   - ChatDev & GHSpec: ✅ Properly measured (active detection)
   - BAEs: ❌ Hardcoded value (no detection mechanism)
 - ⚠️ Quality metrics (Q_star, ESR, CRUDe, MC) not measured - see Data Quality Alerts below
-- Wall time varies 9.2x between fastest and slowest frameworks
-- Token consumption varies 9.3x across frameworks
+- Wall time varies 9.6x between fastest and slowest frameworks
+- Token consumption varies 9.2x across frameworks
 
 ### ⚠️ Data Quality Alerts
 
@@ -631,9 +631,9 @@ BAEs values (AUTR=1.0, HIT=0) are assumptions, not measurements. See 'HITL Detec
 
 | Framework | N | AEI | API_CALLS | AUTR | CACHED_TOKENS | CRUDe | ESR | HEU | HIT | MC | Q_star | TOK_IN | TOK_OUT | T_WALL_seconds | UTT | ZDI |
 |-----------|---|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|
-| baes | 24 | 0.095 [0.086, 0.099] 🟢 | 13.92 [12.38, 15.12] 🔴 | 1.000 [1.000, 1.000] 🟢 | 506.67 [0.00, 1306.67] 🔴 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 23,827 [21,068, 25,928] 🟢 | 6,498 [5,738, 7,096] 🟢 | 188.6 [169.5, 214.0] 🟢 | 6 [6, 6] 🟢 | 38 [34, 43] 🟢 |
-| chatdev | 21 | 0.081 [0.081, 0.082] 🔴 | 126.76 [116.14, 135.71] 🟢 | 1.000 [1.000, 1.000] 🟢 | 29074.29 [24234.67, 33548.19] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 221,029 [201,934, 235,234] 🔴 | 77,218 [70,117, 82,576] 🔴 | 1734.1 [1608.7, 1855.8] 🔴 | 6 [6, 6] 🟢 | 347 [322, 371] 🔴 |
-| ghspec | 18 | 0.092 [0.092, 0.093] 🟡 | 59.17 [54.00, 63.39] 🟡 | 1.000 [1.000, 1.000] 🟢 | 1080.89 [113.78, 2560.00] 🟡 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 51,566 [47,092, 55,726] 🟡 | 25,377 [22,679, 27,735] 🟡 | 616.4 [546.9, 687.7] 🟡 | 6 [6, 6] 🟢 | 124 [110, 137] 🟡 |
+| baes | 23 | 0.099 [0.098, 0.100] 🟢 | 14.52 [13.74, 15.30] 🔴 | 1.000 [1.000, 1.000] 🟢 | 528.70 [0.00, 1363.48] 🔴 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 24,863 [23,346, 26,299] 🟢 | 6,780 [6,341, 7,210] 🟢 | 178.9 [166.5, 192.2] 🟢 | 6 [6, 6] 🟢 | 36 [33, 38] 🟢 |
+| chatdev | 20 | 0.081 [0.081, 0.081] 🔴 | 130.50 [123.40, 137.55] 🟢 | 1.000 [1.000, 1.000] 🟢 | 30451.20 [26304.00, 34400.00] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 228,377 [218,883, 237,602] 🔴 | 79,956 [76,181, 83,661] 🔴 | 1723.8 [1595.2, 1849.6] 🔴 | 6 [6, 6] 🟢 | 345 [320, 370] 🔴 |
+| ghspec | 18 | 0.092 [0.092, 0.093] 🟡 | 59.17 [54.06, 63.44] 🟡 | 1.000 [1.000, 1.000] 🟢 | 1080.89 [56.89, 2503.11] 🟡 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 51,566 [47,053, 55,672] 🟡 | 25,377 [22,613, 27,781] 🟡 | 616.4 [547.8, 686.4] 🟡 | 6 [6, 6] 🟢 | 124 [110, 137] 🟡 |
 
 
 ## 2. Relative Performance
@@ -645,8 +645,8 @@ Performance normalized to best framework (100% = best performer).
 | Framework | Tokens (↓) | Time (↓) | Test Auto (↑) | Efficiency (↑) | Quality (↑) |
 |-----------|---------------|---------------|---------------|---------------|---------------|
 | baes | 100% 🟢 | 100% 🟢 | 100% 🟢 | 100% 🟢 | 100% 🟢 |
-| chatdev | 928% 🔴 | 919% 🔴 | 100% 🟢 | 86% 🟡 | 100% 🟢 |
-| ghspec | 216% 🔴 | 327% 🔴 | 100% 🟢 | 97% 🟡 | 100% 🟢 |
+| chatdev | 919% 🔴 | 964% 🔴 | 100% 🟢 | 82% 🟡 | 100% 🟢 |
+| ghspec | 207% 🔴 | 345% 🔴 | 100% 🟢 | 93% 🟡 | 100% 🟢 |
 
 
 ## 3. Kruskal-Wallis H-Tests
@@ -657,31 +657,31 @@ Testing for significant differences across all frameworks.
 
 | Metric | H | p-value | Significant | Groups | N |
 |--------|---|---------|-------------|--------|---|
-| AEI | 47.510 | 0.0000 | ✓ Yes | 3 | 63 |
+| AEI | 52.754 | 0.0000 | ✓ Yes | 3 | 61 |
 
 💬 *Strong evidence that frameworks differ significantly on AEI. See pairwise comparisons below.*
 
-| API_CALLS | 53.225 | 0.0000 | ✓ Yes | 3 | 63 |
+| API_CALLS | 53.142 | 0.0000 | ✓ Yes | 3 | 61 |
 
 💬 *Strong evidence that frameworks differ significantly on API_CALLS. See pairwise comparisons below.*
 
-| CACHED_TOKENS | 40.477 | 0.0000 | ✓ Yes | 3 | 63 |
+| CACHED_TOKENS | 39.706 | 0.0000 | ✓ Yes | 3 | 61 |
 
 💬 *Strong evidence that frameworks differ significantly on CACHED_TOKENS. See pairwise comparisons below.*
 
-| TOK_IN | 54.471 | 0.0000 | ✓ Yes | 3 | 63 |
+| TOK_IN | 52.754 | 0.0000 | ✓ Yes | 3 | 61 |
 
 💬 *Strong evidence that frameworks differ significantly on TOK_IN. See pairwise comparisons below.*
 
-| TOK_OUT | 53.279 | 0.0000 | ✓ Yes | 3 | 63 |
+| TOK_OUT | 53.142 | 0.0000 | ✓ Yes | 3 | 61 |
 
 💬 *Strong evidence that frameworks differ significantly on TOK_OUT. See pairwise comparisons below.*
 
-| T_WALL_seconds | 54.595 | 0.0000 | ✓ Yes | 3 | 63 |
+| T_WALL_seconds | 53.012 | 0.0000 | ✓ Yes | 3 | 61 |
 
 💬 *Strong evidence that frameworks differ significantly on T_WALL_seconds. See pairwise comparisons below.*
 
-| ZDI | 54.595 | 0.0000 | ✓ Yes | 3 | 63 |
+| ZDI | 53.012 | 0.0000 | ✓ Yes | 3 | 61 |
 
 💬 *Strong evidence that frameworks differ significantly on ZDI. See pairwise comparisons below.*
 
@@ -701,12 +701,12 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
-| baes vs chatdev | 0.0000 | ✓ | 0.917 | large |
-| baes vs ghspec | 0.0000 | ✓ | 0.903 | large |
+| baes vs chatdev | 0.0000 | ✓ | 1.000 | large |
+| baes vs ghspec | 0.0000 | ✓ | 0.986 | large |
 | chatdev vs ghspec | 0.0000 | ✓ | -1.000 | large |
 
-  *→ baes has large higher AEI than chatdev (δ=0.917)*
-  *→ baes has large higher AEI than ghspec (δ=0.903)*
+  *→ baes has large higher AEI than chatdev (δ=1.000)*
+  *→ baes has large higher AEI than ghspec (δ=0.986)*
   *→ chatdev has large lower AEI than ghspec (δ=-1.000)*
 
 
@@ -716,24 +716,24 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 |------------|---------|-------------|-----------|-------------|
 | baes vs chatdev | 0.0000 | ✓ | -1.000 | large |
 | baes vs ghspec | 0.0000 | ✓ | -1.000 | large |
-| chatdev vs ghspec | 0.0000 | ✓ | 0.923 | large |
+| chatdev vs ghspec | 0.0000 | ✓ | 1.000 | large |
 
   *→ baes has large lower API_CALLS than chatdev (δ=-1.000)*
   *→ baes has large lower API_CALLS than ghspec (δ=-1.000)*
-  *→ chatdev has large higher API_CALLS than ghspec (δ=0.923)*
+  *→ chatdev has large higher API_CALLS than ghspec (δ=1.000)*
 
 
 ### CACHED_TOKENS
 
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
-| baes vs chatdev | 0.0000 | ✓ | -0.992 | large |
-| baes vs ghspec | 0.0000 | ✓ | -0.130 | negligible |
-| chatdev vs ghspec | 0.0000 | ✓ | 0.979 | large |
+| baes vs chatdev | 0.0000 | ✓ | -1.000 | large |
+| baes vs ghspec | 0.0000 | ✓ | -0.126 | negligible |
+| chatdev vs ghspec | 0.0000 | ✓ | 0.994 | large |
 
-  *→ baes has large lower CACHED_TOKENS than chatdev (δ=-0.992)*
+  *→ baes has large lower CACHED_TOKENS than chatdev (δ=-1.000)*
   *→ Statistically significant but practically negligible difference*
-  *→ chatdev has large higher CACHED_TOKENS than ghspec (δ=0.979)*
+  *→ chatdev has large higher CACHED_TOKENS than ghspec (δ=0.994)*
 
 
 ### TOK_IN
@@ -755,11 +755,11 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 |------------|---------|-------------|-----------|-------------|
 | baes vs chatdev | 0.0000 | ✓ | -1.000 | large |
 | baes vs ghspec | 0.0000 | ✓ | -1.000 | large |
-| chatdev vs ghspec | 0.0000 | ✓ | 0.926 | large |
+| chatdev vs ghspec | 0.0000 | ✓ | 1.000 | large |
 
   *→ baes has large lower TOK_OUT than chatdev (δ=-1.000)*
   *→ baes has large lower TOK_OUT than ghspec (δ=-1.000)*
-  *→ chatdev has large higher TOK_OUT than ghspec (δ=0.926)*
+  *→ chatdev has large higher TOK_OUT than ghspec (δ=1.000)*
 
 
 ### T_WALL_seconds
@@ -767,11 +767,11 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | baes vs chatdev | 0.0000 | ✓ | -1.000 | large |
-| baes vs ghspec | 0.0000 | ✓ | -0.991 | large |
+| baes vs ghspec | 0.0000 | ✓ | -0.995 | large |
 | chatdev vs ghspec | 0.0000 | ✓ | 1.000 | large |
 
   *→ baes has large lower T_WALL_seconds than chatdev (δ=-1.000)*
-  *→ baes has large lower T_WALL_seconds than ghspec (δ=-0.991)*
+  *→ baes has large lower T_WALL_seconds than ghspec (δ=-0.995)*
   *→ chatdev has large higher T_WALL_seconds than ghspec (δ=1.000)*
 
 
@@ -780,11 +780,11 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | baes vs chatdev | 0.0000 | ✓ | -1.000 | large |
-| baes vs ghspec | 0.0000 | ✓ | -0.991 | large |
+| baes vs ghspec | 0.0000 | ✓ | -0.995 | large |
 | chatdev vs ghspec | 0.0000 | ✓ | 1.000 | large |
 
   *→ baes has large lower ZDI than chatdev (δ=-1.000)*
-  *→ baes has large lower ZDI than ghspec (δ=-0.991)*
+  *→ baes has large lower ZDI than ghspec (δ=-0.995)*
   *→ chatdev has large higher ZDI than ghspec (δ=1.000)*
 
 
@@ -793,19 +793,7 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 Values > 3σ from median (per framework, per metric).
 
 **baes:**
-  - **AEI**: 1 outlier(s) at runs [23] with values [0.0]
-  - **API_CALLS**: 1 outlier(s) at runs [23] with values [0]
   - **CACHED_TOKENS**: 1 outlier(s) at runs [1] with values [7040]
-  - **TOK_IN**: 1 outlier(s) at runs [23] with values [0]
-  - **TOK_OUT**: 1 outlier(s) at runs [23] with values [0]
-  - **T_WALL_seconds**: 1 outlier(s) at runs [23] with values [412.0262072086334]
-  - **ZDI**: 1 outlier(s) at runs [23] with values [83]
-
-**chatdev:**
-  - **AEI**: 1 outlier(s) at runs [20] with values [0.08918298767236306]
-  - **API_CALLS**: 1 outlier(s) at runs [20] with values [52]
-  - **TOK_IN**: 1 outlier(s) at runs [20] with values [74079]
-  - **TOK_OUT**: 1 outlier(s) at runs [20] with values [22459]
 
 **ghspec:**
   - **AEI**: 1 outlier(s) at runs [14] with values [0.09777570536584618]
@@ -820,8 +808,8 @@ Values > 3σ from median (per framework, per metric).
 
 | Framework | Q* Mean | Q* CI | AEI Mean | AEI CI |
 |-----------|---------|-------|----------|--------|
-| baes | 0.000 | [0.000, 0.000] | 0.095 | [0.086, 0.099] |
-| chatdev | 0.000 | [0.000, 0.000] | 0.081 | [0.081, 0.082] |
+| baes | 0.000 | [0.000, 0.000] | 0.099 | [0.098, 0.100] |
+| chatdev | 0.000 | [0.000, 0.000] | 0.081 | [0.081, 0.081] |
 | ghspec | 0.000 | [0.000, 0.000] | 0.092 | [0.092, 0.093] |
 
 
@@ -849,11 +837,11 @@ The following charts provide visual insights into framework performance:
 
 ### 🎯 Framework Selection Guidance
 
-- **💰 Cost Optimization**: Choose **baes** if minimizing LLM token costs is priority. It uses 9.3x fewer tokens than chatdev.
+- **💰 Cost Optimization**: Choose **baes** if minimizing LLM token costs is priority. It uses 9.2x fewer tokens than chatdev.
 
-- **⚡ Speed Priority**: Choose **baes** for fastest execution. It completes tasks 9.2x faster than chatdev (saves ~25.8 minutes per task).
+- **⚡ Speed Priority**: Choose **baes** for fastest execution. It completes tasks 9.6x faster than chatdev (saves ~25.7 minutes per task).
 
-- **⚙️ Efficiency Leader**: **baes** delivers the best quality-per-token ratio (AEI = 0.095), making it ideal for balancing quality and cost.
+- **⚙️ Efficiency Leader**: **baes** delivers the best quality-per-token ratio (AEI = 0.099), making it ideal for balancing quality and cost.
 
 - **🤖 Autonomy**: All frameworks achieve perfect autonomy (AUTR = 1.0) - no human intervention required during execution.
 

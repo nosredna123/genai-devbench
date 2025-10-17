@@ -106,7 +106,11 @@ from src.analysis.statistics import (
 from src.analysis.visualizations import (
     radar_chart,
     pareto_plot,
-    timeline_chart
+    timeline_chart,
+    token_efficiency_chart,
+    api_efficiency_bar_chart,
+    cache_efficiency_chart,
+    time_distribution_chart
 )
 from src.utils.logger import get_logger
 from src.orchestrator.manifest_manager import get_manifest, find_runs
@@ -160,6 +164,17 @@ for run_entry in all_runs:
         with open(metrics_file, 'r', encoding='utf-8') as f:
             metrics = json.load(f)
         
+        # ✅ FILTER: Only include runs with verified reconciliation status
+        reconciliation = metrics.get('usage_api_reconciliation', {})
+        verification_status = reconciliation.get('verification_status', 'none')
+        
+        if verification_status != 'verified':
+            logger.warning(
+                "Skipping run %s: reconciliation status '%s' (not verified)",
+                run_id, verification_status
+            )
+            continue
+        
         # Extract aggregate metrics for analysis (only numeric metrics)
         if 'aggregate_metrics' in metrics:
             frameworks_data[framework_name].append(metrics['aggregate_metrics'])
@@ -202,9 +217,12 @@ if not frameworks_data:
     logger.error("No valid metrics loaded from manifest runs")
     sys.exit(1)
 
-logger.info("Loaded data for %d frameworks", len(frameworks_data))
+# Log filtering summary
+total_loaded = sum(len(runs) for runs in frameworks_data.values())
+logger.info("✅ Loaded %d VERIFIED runs (reconciliation complete)", total_loaded)
+logger.info("Breakdown by framework:")
 for fw, runs in frameworks_data.items():
-    logger.info("  %s: %d runs", fw, len(runs))
+    logger.info("  %s: %d verified runs", fw, len(runs))
 
 # Step 2: Compute aggregate metrics
 logger.info("Computing aggregate metrics...")
@@ -227,9 +245,9 @@ for framework, runs in frameworks_data.items():
 # Step 3: Generate visualizations
 logger.info("Generating visualizations...")
 
-# Radar chart (7 key metrics including API_CALLS)
+# Radar chart (6 reliable metrics - no AUTR/CRUDe/ESR/MC)
 try:
-    radar_metrics = ['AUTR', 'API_CALLS', 'TOK_IN', 'T_WALL_seconds', 'CRUDe', 'ESR', 'MC']
+    radar_metrics = ['TOK_IN', 'TOK_OUT', 'T_WALL_seconds', 'API_CALLS', 'CACHED_TOKENS', 'ZDI']
     radar_data = {
         fw: {m: aggregated_data[fw][m] for m in radar_metrics if m in aggregated_data[fw]}
         for fw in aggregated_data
@@ -239,7 +257,7 @@ try:
         radar_data,
         str(OUTPUT_DIR / "radar_chart.svg"),
         metrics=radar_metrics,
-        title="Framework Comparison - 7 Key Metrics"
+        title="Framework Comparison - 6 Reliable Metrics"
     )
     logger.info("✓ Radar chart saved")
 except Exception as e:
@@ -371,6 +389,63 @@ try:
 except Exception as e:
     logger.error("Failed to generate API calls timeline: %s", e)
 
+# NEW: Token Efficiency Scatter (TOK_IN vs TOK_OUT)
+try:
+    # Pass run-level data (not aggregated) for scatter plot
+    token_scatter_data = {fw: runs for fw, runs in frameworks_data.items()}
+    
+    if token_scatter_data:
+        token_efficiency_chart(
+            token_scatter_data,
+            str(OUTPUT_DIR / "token_efficiency.svg"),
+            title="Token Efficiency: Input vs Output"
+        )
+        logger.info("✓ Token efficiency scatter saved")
+    else:
+        logger.warning("Insufficient data for token efficiency scatter")
+except Exception as e:
+    logger.error("Failed to generate token efficiency scatter: %s", e)
+
+# NEW: API Efficiency Bar Chart (API_CALLS with tokens/call)
+try:
+    api_bar_data = {
+        fw: {
+            'API_CALLS': data.get('API_CALLS', 0),
+            'TOK_IN': data.get('TOK_IN', 0)
+        }
+        for fw, data in aggregated_data.items()
+        if 'API_CALLS' in data and 'TOK_IN' in data
+    }
+    
+    if api_bar_data:
+        api_efficiency_bar_chart(
+            api_bar_data,
+            str(OUTPUT_DIR / "api_efficiency_bar.svg"),
+            title="API Call Efficiency by Framework"
+        )
+        logger.info("✓ API efficiency bar chart saved")
+    else:
+        logger.warning("Insufficient data for API efficiency bar chart")
+except Exception as e:
+    logger.error("Failed to generate API efficiency bar chart: %s", e)
+
+# NEW: Time Distribution Box Plot (T_WALL variability)
+try:
+    # Pass run-level data for distribution analysis
+    time_dist_data = {fw: runs for fw, runs in frameworks_data.items()}
+    
+    if time_dist_data:
+        time_distribution_chart(
+            time_dist_data,
+            str(OUTPUT_DIR / "time_distribution.svg"),
+            title="Execution Time Distribution by Framework"
+        )
+        logger.info("✓ Time distribution box plot saved")
+    else:
+        logger.warning("Insufficient data for time distribution plot")
+except Exception as e:
+    logger.error("Failed to generate time distribution plot: %s", e)
+
 # Step 4: Generate statistical report
 logger.info("Generating statistical report...")
 
@@ -388,12 +463,15 @@ logger.info("=" * 60)
 logger.info("Analysis complete!")
 logger.info("Output directory: %s", OUTPUT_DIR)
 logger.info("Files generated:")
-logger.info("  - radar_chart.svg")
-logger.info("  - pareto_plot.svg")
-logger.info("  - timeline_chart.svg (if step data available)")
-logger.info("  - api_efficiency_chart.svg (NEW)")
-logger.info("  - cache_efficiency_chart.svg (NEW)")
-logger.info("  - api_calls_timeline.svg (NEW)")
+logger.info("  - radar_chart.svg (6 reliable metrics)")
+logger.info("  - pareto_plot.svg (deprecated - skipped)")
+logger.info("  - timeline_chart.svg (deprecated - skipped)")
+logger.info("  - token_efficiency.svg (NEW)")
+logger.info("  - api_efficiency_bar.svg (NEW)")
+logger.info("  - time_distribution.svg (NEW)")
+logger.info("  - api_efficiency_chart.svg")
+logger.info("  - cache_efficiency_chart.svg")
+logger.info("  - api_calls_timeline.svg")
 logger.info("  - report.md")
 logger.info("=" * 60)
 
@@ -402,14 +480,18 @@ EOF
 # Completion message
 log_info "Analysis complete! Results saved to: $OUTPUT_DIR"
 log_info ""
-log_info "Generated files:"
-log_info "  - radar_chart.svg              : Multi-framework radar comparison (7 metrics)"
-log_info "  - pareto_plot.svg              : Quality vs cost trade-off"
-log_info "  - timeline_chart.svg           : CRUD evolution timeline"
-log_info "  - api_efficiency_chart.svg     : API calls vs token consumption (NEW)"
-log_info "  - cache_efficiency_chart.svg   : Cache hit rates and efficiency (NEW)"
-log_info "  - api_calls_timeline.svg       : API usage evolution across steps (NEW)"
+log_info "Generated files (★ = NEW Reliable-Metrics Visualizations):"
+log_info "  - radar_chart.svg              : Multi-framework comparison (6 reliable metrics)"
+log_info "  - ★ token_efficiency.svg       : Token input vs output scatter"
+log_info "  - ★ api_efficiency_bar.svg     : API calls with tokens/call ratios"
+log_info "  - ★ time_distribution.svg      : Execution time box plots"
+log_info "  - api_efficiency_chart.svg     : API efficiency analysis"
+log_info "  - cache_efficiency_chart.svg   : Cache hit rates and efficiency"
+log_info "  - api_calls_timeline.svg       : API usage evolution across steps"
 log_info "  - report.md                    : Comprehensive statistical report"
+log_info ""
+log_info "⚠️  Deprecated (skipped): pareto_plot.svg, timeline_chart.svg"
+log_info "   (use unmeasured metrics Q*, CRUDe)"
 log_info ""
 log_info "To view the report:"
 log_info "  cat $OUTPUT_DIR/report.md"
