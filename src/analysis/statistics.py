@@ -887,6 +887,12 @@ def generate_statistical_report(
         if match:
             python_version = match.group(1) + "+"
     
+    # === Extract statistical analysis configuration ===
+    analysis_config = config.get('analysis', {})
+    n_bootstrap = analysis_config.get('bootstrap_samples', 10000)
+    significance_level = analysis_config.get('significance_level', 0.05)
+    # confidence_level already extracted from stopping_rule above
+    
     # Calculate run counts per framework
     run_counts = {framework: len(runs) for framework, runs in frameworks_data.items()}
     total_runs = sum(run_counts.values())
@@ -952,7 +958,7 @@ def generate_statistical_report(
         "",
         "**Statistical Power:**",
         f"- Current sample sizes ({run_counts_str}) provide sufficient power for detecting large effect sizes",
-        "- Bootstrap confidence intervals (10,000 resamples) account for sample size uncertainty",
+        f"- Bootstrap confidence intervals ({n_bootstrap:,} resamples) account for sample size uncertainty",
         f"- Stopping rule: Continue until CI half-width ≤ {max_half_width_pct}% of mean (max {max_runs} runs per framework)",
         f"- Current status: {', '.join([f'{fw} ({count}/{max_runs})' for fw, count in run_counts.items()])}",
         "",
@@ -1094,7 +1100,7 @@ def generate_statistical_report(
         "**Statistical Rigor:**",
         "- **Non-Parametric Tests**: Kruskal-Wallis and Dunn-Šidák avoid normality assumptions",
         "- **Effect Sizes**: Cliff's delta quantifies practical significance beyond p-values",
-        f"- **Bootstrap CI**: {confidence_pct}% confidence intervals with 10,000 resamples for stable estimates",
+        f"- **Bootstrap CI**: {confidence_pct}% confidence intervals with {n_bootstrap:,} resamples for stable estimates",
         f"- **Small Sample Awareness**: Current results ({run_counts_str}) show large CI widths; p-values > 0.05 expected",
         f"  - *Stopping Rule*: Experiment continues until CI half-width ≤ {max_half_width_pct}% of mean ({max_runs} runs max)",
         "",
