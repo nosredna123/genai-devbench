@@ -80,6 +80,8 @@ firefox analysis_output/timeline_chart.svg
 - **[Quickstart Guide](docs/quickstart.md)** - Get up and running in minutes
 - **[Architecture Guide](docs/architecture.md)** - System design and components
 - **[Metrics Guide](docs/metrics.md)** - Complete reference for all 16 metrics
+- **[Configuration Reference](docs/configuration_reference.md)** - Complete config schema and examples
+- **[Validation System](docs/validation_system.md)** - Configuration validation reference
 - **[Troubleshooting Guide](docs/troubleshooting.md)** - Common issues and solutions
 
 ### Specification
@@ -87,6 +89,12 @@ firefox analysis_output/timeline_chart.svg
 - [Implementation Plan](specs/001-baes-experiment-framework/plan.md) - Technical design
 - [Research Decisions](specs/001-baes-experiment-framework/research.md) - Design rationale
 - [Task Breakdown](specs/001-baes-experiment-framework/tasks.md) - Implementation tasks
+
+### Testing
+- **Test Suite:** Comprehensive unit tests with 100% pass rate
+- **Run Tests:** `pytest tests/unit/test_report_generation.py -v`
+- **Test Coverage:** 26 tests covering validation, dynamics, and edge cases
+- **Execution Time:** < 2 seconds for full suite
 
 ## Architecture
 

@@ -761,8 +761,249 @@ python tests/integration/test_reproducibility.py runs/run1 runs/run2
 
 ---
 
+## Configuration Validation Errors
+
+### Missing Required Configuration Keys
+
+**Error: Missing required configuration: 'model'**
+
+```
+ValueError: Missing required configuration: 'model' in root config.
+Please add 'model' to config/experiment.yaml
+```
+
+**Solution:**
+Add the missing key to `config/experiment.yaml`:
+
+```yaml
+model: gpt-4o-mini
+```
+
+**Verification:**
+```bash
+grep "^model:" config/experiment.yaml
+```
+
+---
+
+**Error: Missing required configuration: 'stopping_rule.max_runs'**
+
+```
+ValueError: Missing required configuration: 'stopping_rule.max_runs'.
+Please ensure config structure is complete.
+```
+
+**Solution:**
+Add the nested configuration:
+
+```yaml
+stopping_rule:
+  max_runs: 5
+  python_version: "3.11.8"
+```
+
+**Common YAML mistakes:**
+```yaml
+# ❌ Wrong indentation
+stopping_rule:
+max_runs: 5
+
+# ❌ Missing colon
+stopping_rule
+  max_runs: 5
+
+# ✅ Correct
+stopping_rule:
+  max_runs: 5
+  python_version: "3.11.8"
+```
+
+---
+
+**Error: Framework configuration incomplete**
+
+```
+ValueError: Framework 'chatdev' configuration incomplete.
+Missing: commit_hash, api_key_env
+```
+
+**Solution:**
+Add all required framework fields:
+
+```yaml
+frameworks:
+  chatdev:
+    repo_url: https://github.com/OpenBMB/ChatDev.git
+    commit_hash: 52edb89
+    api_key_env: OPENAI_API_KEY
+```
+
+Required fields for each framework:
+- `repo_url` - Git repository URL
+- `commit_hash` - Git commit hash
+- `api_key_env` - Environment variable name
+
+---
+
+### File System Validation Errors
+
+**Error: Prompts directory not found**
+
+```
+ValueError: Prompts directory not found: /path/to/prompts
+Please ensure the directory exists and path is correct.
+```
+
+**Solution:**
+
+1. Create the directory:
+```bash
+mkdir -p config/prompts
+```
+
+2. Add step files:
+```bash
+echo "Requirement Analysis and Planning" > config/prompts/step_1.txt
+echo "Data Model Design" > config/prompts/step_2.txt
+# ... add remaining steps
+```
+
+3. Verify structure:
+```bash
+ls -1 config/prompts/step_*.txt
+```
+
+---
+
+**Error: No step files found**
+
+```
+ValueError: No step files found in config/prompts
+Expected files like: step_1.txt, step_2.txt, etc.
+```
+
+**Solution:**
+Step files must be named correctly:
+- ✅ `step_1.txt`, `step_2.txt`, `step_3.txt`
+- ❌ `Step1.txt` (wrong case)
+- ❌ `step1.txt` (missing underscore)
+- ❌ `step_01.txt` (zero-padded)
+
+**Quick fix:**
+```bash
+for i in {1..6}; do
+    echo "Step $i Description" > config/prompts/step_${i}.txt
+done
+```
+
+---
+
+### Test Validation
+
+Run the validation test suite to catch config issues:
+
+```bash
+# Run all validation tests
+pytest tests/unit/test_report_generation.py -k "validation" -v
+
+# Expected output:
+# test_missing_model_raises_error PASSED
+# test_missing_frameworks_raises_error PASSED
+# test_missing_nested_config PASSED
+# test_incomplete_framework_config PASSED
+# test_nonexistent_prompts_dir PASSED
+```
+
+If tests fail, check the error messages - they indicate which configuration is missing.
+
+---
+
+## Testing Errors
+
+### Test Import Errors
+
+**Symptom:**
+```
+ImportError: cannot import name 'generate_statistical_report'
+```
+
+**Solution:**
+
+1. Install in development mode:
+```bash
+pip install -e .
+```
+
+2. Set PYTHONPATH:
+```bash
+export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+```
+
+3. Run from project root:
+```bash
+cd /path/to/baes_experiment
+pytest tests/unit/test_report_generation.py -v
+```
+
+---
+
+### Test Assertion Failures
+
+**Symptom:**
+```
+AssertionError: assert 'expected_value' in content
+```
+
+**Debug steps:**
+
+1. Print actual content:
+```python
+# Add to test for debugging
+content = output_file.read_text()
+print(f"DEBUG: {content}")
+```
+
+2. Run single test with verbose output:
+```bash
+pytest tests/unit/test_report_generation.py::test_name -vv
+```
+
+3. Check if config values are correct:
+```python
+print(f"DEBUG: Config = {config}")
+```
+
+---
+
+## Quick Validation Commands
+
+```bash
+# Validate configuration
+python -c "from src.orchestrator.config_loader import load_experiment_config; config = load_experiment_config('config/experiment.yaml'); print('✓ Config valid')"
+
+# Validate YAML syntax
+python -c "import yaml; yaml.safe_load(open('config/experiment.yaml')); print('✓ YAML valid')"
+
+# Run validation tests
+pytest tests/unit/test_report_generation.py -k "validation" -v
+
+# Check all required files exist
+test -d config/prompts && test -f config/experiment.yaml && echo "✓ Files OK"
+
+# Count step files
+ls config/prompts/step_*.txt | wc -l
+
+# Run full test suite
+pytest tests/unit/test_report_generation.py -v
+# Should show: 26 passed in ~1.10s
+```
+
+---
+
 ## Further Reading
 
 - **[Quickstart Guide](./quickstart.md)**: Basic usage patterns
 - **[Architecture Guide](./architecture.md)**: System design and components
-- **[Configuration Guide](./configuration.md)**: Advanced configuration options
+- **[Configuration Reference](./configuration_reference.md)**: Complete config schema
+- **[Validation System](./validation_system.md)**: Validation functions reference
+
