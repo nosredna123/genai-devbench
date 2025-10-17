@@ -853,6 +853,14 @@ def generate_statistical_report(
             'api_key_env': api_key_env
         }
     
+    # Extract stopping rule configuration (with fallback defaults)
+    stopping_rule = config.get('stopping_rule', {})
+    min_runs = stopping_rule.get('min_runs', 5)
+    max_runs = stopping_rule.get('max_runs', 100)
+    max_half_width_pct = stopping_rule.get('max_half_width_pct', 10)
+    confidence_level = stopping_rule.get('confidence_level', 0.95)
+    confidence_pct = int(confidence_level * 100)  # Convert 0.95 -> 95
+    
     # Calculate run counts per framework
     run_counts = {framework: len(runs) for framework, runs in frameworks_data.items()}
     total_runs = sum(run_counts.values())
@@ -919,8 +927,8 @@ def generate_statistical_report(
         "**Statistical Power:**",
         f"- Current sample sizes ({run_counts_str}) provide sufficient power for detecting large effect sizes",
         "- Bootstrap confidence intervals (10,000 resamples) account for sample size uncertainty",
-        "- Stopping rule: Continue until CI half-width ≤ 10% of mean (max 100 runs per framework)",
-        f"- Current status: {', '.join([f'{fw} ({count}/100)' for fw, count in run_counts.items()])}",
+        f"- Stopping rule: Continue until CI half-width ≤ {max_half_width_pct}% of mean (max {max_runs} runs per framework)",
+        f"- Current status: {', '.join([f'{fw} ({count}/{max_runs})' for fw, count in run_counts.items()])}",
         "",
         "#### **Standardized Task Sequence**",
         "",
@@ -1059,9 +1067,9 @@ def generate_statistical_report(
         "**Statistical Rigor:**",
         "- **Non-Parametric Tests**: Kruskal-Wallis and Dunn-Šidák avoid normality assumptions",
         "- **Effect Sizes**: Cliff's delta quantifies practical significance beyond p-values",
-        "- **Bootstrap CI**: 95% confidence intervals with 10,000 resamples for stable estimates",
+        f"- **Bootstrap CI**: {confidence_pct}% confidence intervals with 10,000 resamples for stable estimates",
         f"- **Small Sample Awareness**: Current results ({run_counts_str}) show large CI widths; p-values > 0.05 expected",
-        "  - *Stopping Rule*: Experiment continues until CI half-width ≤ 10% of mean (100 runs max)",
+        f"  - *Stopping Rule*: Experiment continues until CI half-width ≤ {max_half_width_pct}% of mean ({max_runs} runs max)",
         "",
         "**Interpretation Caveats:**",
         "- **Non-Significant Results**: p > 0.05 does NOT prove frameworks are equivalent, only insufficient evidence of difference",
