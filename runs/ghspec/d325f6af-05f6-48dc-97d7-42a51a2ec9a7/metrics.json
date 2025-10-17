@@ -24,9 +24,9 @@
       "success": true,
       "retry_count": 0,
       "hitl_count": 0,
-      "tokens_in": 0,
-      "tokens_out": 0,
-      "api_calls": 0,
+      "tokens_in": 5162,
+      "tokens_out": 1861,
+      "api_calls": 5,
       "cached_tokens": 0,
       "start_timestamp": 1760725657,
       "end_timestamp": 1760725687
@@ -52,9 +52,9 @@
       "success": true,
       "retry_count": 0,
       "hitl_count": 0,
-      "tokens_in": 0,
-      "tokens_out": 0,
-      "api_calls": 0,
+      "tokens_in": 17541,
+      "tokens_out": 11462,
+      "api_calls": 21,
       "cached_tokens": 0,
       "start_timestamp": 1760725722,
       "end_timestamp": 1760726004
@@ -66,9 +66,9 @@
       "success": true,
       "retry_count": 0,
       "hitl_count": 0,
-      "tokens_in": 0,
-      "tokens_out": 0,
-      "api_calls": 0,
+      "tokens_in": 16875,
+      "tokens_out": 10356,
+      "api_calls": 16,
       "cached_tokens": 0,
       "start_timestamp": 1760726004,
       "end_timestamp": 1760726302
@@ -93,9 +93,9 @@
     "HIT": 0,
     "AUTR": 1.0,
     "HEU": 0,
-    "TOK_IN": 0,
-    "TOK_OUT": 0,
-    "API_CALLS": 0,
+    "TOK_IN": 39578,
+    "TOK_OUT": 23679,
+    "API_CALLS": 42,
     "CACHED_TOKENS": 0,
     "T_WALL_seconds": 665.1532771587372,
     "CRUDe": 0,
@@ -103,7 +103,7 @@
     "MC": 0.0,
     "ZDI": 133,
     "Q_star": 0.0,
-    "AEI": 0.0
+    "AEI": 0.0944639054729619
   },
   "usage_api_verification": {
     "verified": true,
@@ -116,5 +116,70 @@
     "discrepancy_pct_in": 0,
     "discrepancy_pct_out": 0,
     "error": null
+  },
+  "usage_api_reconciliation": {
+    "verification_status": "pending",
+    "attempts": [
+      {
+        "timestamp": "2025-10-17T19:15:02.825878+00:00",
+        "steps": [
+          {
+            "step": 1,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "api_calls": 0,
+            "cached_tokens": 0
+          },
+          {
+            "step": 2,
+            "status": "success",
+            "tokens_in": 5162,
+            "tokens_out": 1861,
+            "api_calls": 5,
+            "cached_tokens": 0
+          },
+          {
+            "step": 3,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "api_calls": 0,
+            "cached_tokens": 0
+          },
+          {
+            "step": 4,
+            "status": "success",
+            "tokens_in": 17541,
+            "tokens_out": 11462,
+            "api_calls": 21,
+            "cached_tokens": 0
+          },
+          {
+            "step": 5,
+            "status": "success",
+            "tokens_in": 16875,
+            "tokens_out": 10356,
+            "api_calls": 16,
+            "cached_tokens": 0
+          },
+          {
+            "step": 6,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "api_calls": 0,
+            "cached_tokens": 0
+          }
+        ],
+        "total_tokens_in": 39578,
+        "total_tokens_out": 23679,
+        "total_api_calls": 42,
+        "total_cached_tokens": 0,
+        "steps_with_tokens": 3,
+        "total_steps": 6
+      }
+    ],
+    "verification_message": "First reconciliation attempt successful, awaiting verification"
   }
 }

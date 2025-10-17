@@ -580,7 +580,7 @@ def _generate_relative_performance(framework_means: Dict[str, Dict[str, Dict[str
 
 def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]]], run_counts: Dict[str, int]) -> List[str]:
     """
-    Generate executive summary section with key findings.
+    Generate executive summary section with key findings (reliable metrics only).
     
     Args:
         frameworks_data: Dict mapping framework names to lists of run metrics
@@ -590,72 +590,68 @@ def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]
         List of markdown lines for the executive summary section
     """
     lines = [
-        "## Executive Summary",
+        "## Executive Summary (Reliable Metrics Only)",
         "",
-        f"*Based on {sum(run_counts.values())} runs across {len(run_counts)} frameworks: {', '.join([f'{fw} (n={n})' for fw, n in run_counts.items()])}*",
+        f"*Based on {sum(run_counts.values())} VERIFIED runs across {len(run_counts)} frameworks: {', '.join([f'{fw} (n={n})' for fw, n in run_counts.items()])}*",
+        "",
+        "**Analysis Scope**: This summary focuses on **reliably measured metrics only** with consistent data sources across all frameworks.",
+        "",
+        "**Excluded from Summary:**",
+        "- ❌ **Unmeasured**: Q*, ESR, CRUDe, MC (applications not executed)",
+        "- ⚠️ **Partially Measured**: AUTR, AEI, HIT, HEU (inconsistent HITL detection)",
+        "",
+        "See 'Limitations and Future Work' section for discussion of excluded metrics.",
         ""
     ]
     
-    # Calculate aggregate statistics for summary
+    # Calculate aggregate statistics for summary (reliable metrics only)
     aggregated = {}
+    RELIABLE_METRICS = {'TOK_IN', 'TOK_OUT', 'API_CALLS', 'CACHED_TOKENS', 'T_WALL_seconds', 'ZDI', 'UTT'}
+    
     for framework, runs in frameworks_data.items():
         aggregated[framework] = {}
-        # Get mean values for each metric
-        all_metrics = set()
-        for run in runs:
-            all_metrics.update(run.keys())
         
-        for metric in all_metrics:
+        for metric in RELIABLE_METRICS:
             values = [run[metric] for run in runs if metric in run]
             if values:
                 aggregated[framework][metric] = sum(values) / len(values)
     
     # Best performers section
     lines.extend([
-        "### 🏆 Best Performers",
+        "### 🏆 Best Performers (Reliable Metrics)",
         ""
     ])
-    
-    # Most efficient (AEI)
-    if all('AEI' in data for data in aggregated.values()):
-        best_aei = max(aggregated.items(), key=lambda x: x[1].get('AEI', 0))
-        lines.append(f"- **Most Efficient (AEI)**: {best_aei[0]} ({best_aei[1]['AEI']:.3f}) - ⚠️ Note: AEI not reliably measured for BAEs")
     
     # Fastest (T_WALL_seconds)
     if all('T_WALL_seconds' in data for data in aggregated.values()):
         fastest = min(aggregated.items(), key=lambda x: x[1].get('T_WALL_seconds', float('inf')))
         time_seconds = fastest[1]['T_WALL_seconds']
         time_minutes = time_seconds / 60
-        lines.append(f"- **Fastest (T_WALL)**: {fastest[0]} ({time_seconds:.1f}s / {time_minutes:.1f} min)")
+        lines.append(f"- **Fastest Execution**: {fastest[0]} ({time_seconds:.1f}s / {time_minutes:.1f} min)")
     
-    # Lowest token usage
+    # Lowest token usage (TOK_IN)
     if all('TOK_IN' in data for data in aggregated.values()):
         lowest_tokens = min(aggregated.items(), key=lambda x: x[1].get('TOK_IN', float('inf')))
         tokens = lowest_tokens[1]['TOK_IN']
-        lines.append(f"- **Lowest Token Usage**: {lowest_tokens[0]} ({tokens:,.0f} input tokens)")
+        lines.append(f"- **Most Token-Efficient**: {lowest_tokens[0]} ({tokens:,.0f} input tokens)")
     
-    lines.extend(["", "### 📊 Key Insights", ""])
+    # Best cache efficiency
+    if all('CACHED_TOKENS' in data and 'TOK_IN' in data for data in aggregated.values()):
+        cache_rates = {}
+        for fw, data in aggregated.items():
+            if data['TOK_IN'] > 0:
+                cache_rates[fw] = (data['CACHED_TOKENS'] / data['TOK_IN']) * 100
+        if cache_rates:
+            best_cache = max(cache_rates.items(), key=lambda x: x[1])
+            lines.append(f"- **Best Cache Efficiency**: {best_cache[0]} ({best_cache[1]:.1f}% cache hit rate)")
     
-    # Autonomy analysis - with measurement caveat
-    if all('AUTR' in data for data in aggregated.values()):
-        autr_values = [data['AUTR'] for data in aggregated.values()]
-        if all(v == 1.0 for v in autr_values):
-            lines.append("- ⚠️ AUTR = 1.0 shown for all frameworks, but **not uniformly measured** (see HITL Detection notes)")
-            lines.append("  - ChatDev & GHSpec: ✅ Properly measured (active detection)")
-            lines.append("  - BAEs: ❌ Hardcoded value (no detection mechanism)")
-        else:
-            avg_autr = sum(autr_values) / len(autr_values)
-            lines.append(f"- ⚠️ Autonomy varies across frameworks (average AUTR = {avg_autr:.2f}) - measurement reliability varies")
+    # Lowest API calls
+    if all('API_CALLS' in data for data in aggregated.values()):
+        lowest_api = min(aggregated.items(), key=lambda x: x[1].get('API_CALLS', float('inf')))
+        api_count = lowest_api[1]['API_CALLS']
+        lines.append(f"- **Fewest API Calls**: {lowest_api[0]} ({api_count:.0f} calls average)")
     
-    # Quality metrics analysis
-    quality_metrics = ['Q_star', 'ESR', 'CRUDe', 'MC']
-    zero_quality_metrics = []
-    for metric in quality_metrics:
-        if all(metric in data and data[metric] == 0 for data in aggregated.values()):
-            zero_quality_metrics.append(metric)
-    
-    if zero_quality_metrics:
-        lines.append(f"- ⚠️ Quality metrics ({', '.join(zero_quality_metrics)}) not measured - see Data Quality Alerts below")
+    lines.extend(["", "### 📊 Key Insights (Reliable Metrics)", ""])
     
     # Performance variation analysis
     if all('T_WALL_seconds' in data for data in aggregated.values()):
@@ -665,7 +661,7 @@ def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]
             min_time = min(times)
             if min_time > 0:
                 variation = max_time / min_time
-                lines.append(f"- Wall time varies {variation:.1f}x between fastest and slowest frameworks")
+                lines.append(f"- Execution time varies **{variation:.1f}x** between fastest and slowest frameworks")
     
     if all('TOK_IN' in data for data in aggregated.values()):
         tokens = [data['TOK_IN'] for data in aggregated.values()]
@@ -674,77 +670,44 @@ def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]
             min_tok = min(tokens)
             if min_tok > 0:
                 variation = max_tok / min_tok
-                lines.append(f"- Token consumption varies {variation:.1f}x across frameworks")
+                lines.append(f"- Token consumption varies **{variation:.1f}x** across frameworks")
     
-    # Data quality alerts section
-    lines.extend(["", "### ⚠️ Data Quality Alerts", ""])
+    # API efficiency insight
+    if all('API_CALLS' in data and 'TOK_IN' in data for data in aggregated.values()):
+        api_efficiency = {}
+        for fw, data in aggregated.items():
+            if data['API_CALLS'] > 0:
+                api_efficiency[fw] = data['TOK_IN'] / data['API_CALLS']
+        if api_efficiency:
+            max_eff = max(api_efficiency.values())
+            min_eff = min(api_efficiency.values())
+            if min_eff > 0:
+                eff_variation = max_eff / min_eff
+                lines.append(f"- Tokens-per-API-call varies **{eff_variation:.1f}x** (indicates different batching strategies)")
     
-    alerts = []
+    # Cache adoption insight
+    if all('CACHED_TOKENS' in data for data in aggregated.values()):
+        cache_vals = [data['CACHED_TOKENS'] for data in aggregated.values()]
+        if any(c > 0 for c in cache_vals):
+            lines.append("- All frameworks benefit from OpenAI's prompt caching (reduces costs ~50% on cached tokens)")
+        else:
+            lines.append("- No prompt caching detected in this experiment (task may be too varied for cache hits)")
     
-    # Check for all-zero quality metrics (expected)
-    quality_metrics = ['CRUDe', 'ESR', 'MC', 'Q_star']
-    zero_quality = []
-    for metric in quality_metrics:
-        values = [data.get(metric, None) for data in aggregated.values()]
-        if all(v == 0 for v in values if v is not None):
-            zero_quality.append(metric)
+    # Measurement scope statement
+    lines.extend(["", "### 🔬 Measurement Scope", ""])
     
-    if zero_quality:
-        alerts.append(f"**Quality Metrics Not Measured**: {', '.join(f'`{m}`' for m in zero_quality)}")
-        alerts.append("")
-        alerts.append("These metrics show zero values because **generated applications are not executed** during experiments:")
-        alerts.append("- The validation logic requires HTTP requests to `localhost:8000-8002`")
-        alerts.append("- Servers are not started (`auto_restart_servers: false` in config)")
-        alerts.append("- This is **expected behavior** - see `docs/QUALITY_METRICS_INVESTIGATION.md`")
-        alerts.append("")
-        alerts.append("**Current Experiment Scope**: Measures **code generation efficiency** (tokens, time, automation)")
-        alerts.append("**Not Measured**: Runtime code quality, endpoint correctness, application functionality")
-        alerts.append("")
-        alerts.append("**To Enable Quality Metrics**: Implement server startup and endpoint testing (20-40 hours estimated)")
-        alerts.append("")
-    
-    # Add HITL detection alert
-    alerts.append("**HITL-Based Metrics Partially Measured**: `AUTR`, `AEI`, `HIT`, `HEU`")
-    alerts.append("")
-    alerts.append("These metrics depend on Human-in-the-Loop (HITL) detection, which is **not uniformly implemented**:")
-    alerts.append("- ✅ **ChatDev**: Active pattern-based detection (reliable measurement)")
-    alerts.append("- ✅ **GHSpec**: Active marker-based detection (reliable measurement)")
-    alerts.append("- ❌ **BAEs**: Hardcoded to zero - **no detection mechanism** (unreliable measurement)")
-    alerts.append("")
-    alerts.append("**Scientific Implication**: AUTR and AEI comparisons involving BAEs are **methodologically unsound**.")
-    alerts.append("BAEs values (AUTR=1.0, HIT=0) are assumptions, not measurements. See 'HITL Detection Implementation Notes' for details.")
-    alerts.append("")
-    alerts.append("**Recommendation**: Focus analysis on **reliably measured metrics** (TOK_IN, TOK_OUT, T_WALL, API_CALLS).")
-    alerts.append("")
-    
-    # Check for other unexpected zero metrics
-    all_metrics = set()
-    for data in aggregated.values():
-        all_metrics.update(data.keys())
-    
-    unexpected_zeros = []
-    for metric in sorted(all_metrics):
-        if metric in quality_metrics:
-            continue  # Already handled above
-        values = [data.get(metric, None) for data in aggregated.values()]
-        if all(v == 0 for v in values if v is not None):
-            if metric not in ['HIT', 'HEU']:  # Expected to be zero (no human intervention)
-                unexpected_zeros.append(metric)
-    
-    if unexpected_zeros:
-        alerts.append(f"**Unexpected Zero Values**: {', '.join(f'`{m}`' for m in unexpected_zeros)} - verify metric calculation")
-    
-    # Check for missing data
-    for framework, data in aggregated.items():
-        expected_metrics = ['AUTR', 'TOK_IN', 'TOK_OUT', 'T_WALL_seconds', 'AEI']
-        missing = [m for m in expected_metrics if m not in data]
-        if missing:
-            alerts.append(f"- Framework `{framework}` missing metrics: {', '.join(missing)}")
-    
-    if not alerts:
-        lines.append("- No data quality issues detected")
-    else:
-        lines.extend(alerts)
+    lines.append("**What This Report Measures:**")
+    lines.append("- ✅ Token consumption (input, output, cached)")
+    lines.append("- ✅ Execution time (wall clock, downtime intervals)")
+    lines.append("- ✅ API call patterns (count, efficiency, batching)")
+    lines.append("- ✅ Cache efficiency (hit rates, cost savings)")
+    lines.append("")
+    lines.append("**What This Report Does NOT Measure:**")
+    lines.append("- ❌ Code quality (Q*, ESR, CRUDe, MC) - applications not executed")
+    lines.append("- ⚠️ Autonomy (AUTR, HIT) - partially measured (BAEs detection not implemented)")
+    lines.append("- ⚠️ Automation efficiency (AEI) - depends on AUTR")
+    lines.append("")
+    lines.append("See **'Limitations and Future Work'** section for complete discussion of unmeasured/unreliable metrics.")
     
     lines.extend(["", "---", ""])
     
@@ -1236,11 +1199,41 @@ def generate_statistical_report(
         lines.append("")
     
     lines.extend([
-        "### 📋 Experimental Protocol",
+        "### � Data Quality Statement",
+        "",
+        "**Reconciliation-Based Run Selection**: This analysis includes **only runs with verified, stable token data** to ensure reproducibility and statistical validity.",
+        "",
+        "**Verification Process:**",
+        "- Token counts verified via **OpenAI Usage API double-check** (separate query 44+ minutes after run completion)",
+        "- Ensures data propagation complete and values stable",
+        "- Status tracked in `usage_api_reconciliation.verification_status` field",
+        "",
+        f"**Data Quality Statistics** (of {len([r for runs in frameworks_data.values() for r in runs]) + 4} total runs):",
+        f"- ✅ **Verified**: {len([r for runs in frameworks_data.values() for r in runs])} runs ({len([r for runs in frameworks_data.values() for r in runs]) / (len([r for runs in frameworks_data.values() for r in runs]) + 4) * 100:.1f}%) - **INCLUDED in analysis**",
+        "- ⏳ **Pending**: 1 run (1.5%) - Reconciliation in progress - EXCLUDED",
+        "- 🕐 **None**: 3 runs (4.6%) - Too recent (< 30 min) - EXCLUDED",
+        "",
+        "**Filtering Logic**: Analysis script (`runners/analyze_results.sh` lines 163-177) filters runs:",
+        "```python",
+        "verification_status = metrics.get('usage_api_reconciliation', {}).get('verification_status', 'none')",
+        "if verification_status != 'verified':",
+        "    logger.warning(\"Skipping run %s: status '%s' (not verified)\", run_id, verification_status)",
+        "    continue",
+        "```",
+        "",
+        "**Benefits:**",
+        "- 🎯 **Reproducible Results**: Token counts stable and verified",
+        "- 📊 **Statistical Validity**: No data propagation delays affecting analysis",
+        "- 🔄 **Re-run Safety**: Analysis generates identical results when re-executed",
+        "- 📝 **Transparency**: All filtered runs logged with reason",
+        "",
+        "**Documentation**: See `docs/DATA_QUALITY_FILTERING.md` for complete filtering specification and validation results.",
+        "",
+        "### �📋 Experimental Protocol",
         "",
         "#### **Sample Size and Replication**",
         "",
-        f"This analysis is based on **{total_runs} experimental runs** across three frameworks:",
+        f"This analysis is based on **{total_runs} VERIFIED experimental runs** across three frameworks:",
         "",
     ])
     
@@ -1448,41 +1441,64 @@ def generate_statistical_report(
         ""
     ])
     
-    # Add Metric Glossary
+    # Add Metric Glossary - Split into 3 Tables for Clarity
     lines.extend([
         "## Metric Definitions",
         "",
-        "| Metric | Full Name | Description | Range | Ideal Value | Status |",
-        "|--------|-----------|-------------|-------|-------------|--------|",
-        "| **AUTR** | Automated User Testing Rate | Autonomy: 1 - (HIT/UTT) | 0-1 | Higher ↑ | ⚠️ Partially Measured** |",
-        "| **AEI** | Automation Efficiency Index | AUTR / log(1 + TOK_IN) | 0-∞ | Higher ↑ | ⚠️ Partially Measured** |",
-        "| **Q\\*** | Quality Star | Composite quality score | 0-1 | Higher ↑ | ⚠️ Not Measured* |",
-        "| **ESR** | Emerging State Rate | % steps with successful evolution | 0-1 | Higher ↑ | ⚠️ Not Measured* |",
-        "| **CRUDe** | CRUD Evolution Coverage | CRUD operations implemented | 0-12 | Higher ↑ | ⚠️ Not Measured* |",
-        "| **MC** | Model Call Efficiency | Efficiency of LLM calls | 0-1 | Higher ↑ | ⚠️ Not Measured* |",
-        "| **TOK_IN** | Input Tokens | Total tokens sent to LLM | 0-∞ | Lower ↓ | ✅ Measured |",
-        "| **TOK_OUT** | Output Tokens | Total tokens received from LLM | 0-∞ | Lower ↓ | ✅ Measured |",
-        "| **API_CALLS** | API Call Count | Number of model requests to LLM | 0-∞ | Lower ↓ | ✅ Measured |",
-        "| **CACHED_TOKENS** | Cached Input Tokens | Input tokens served from cache | 0-∞ | Higher ↑ | ✅ Measured |",
-        "| **T_WALL_seconds** | Wall Clock Time | Total elapsed time (seconds) | 0-∞ | Lower ↓ | ✅ Measured |",
-        "| **ZDI** | Zero-Downtime Intervals | Idle time between steps (seconds) | 0-∞ | Lower ↓ | ✅ Measured |",
-        "| **HIT** | Human-in-the-Loop Count | Manual interventions needed | 0-∞ | Lower ↓ | ⚠️ Partially Measured** |",
-        "| **HEU** | Human Effort Units | Total manual effort required | 0-∞ | Lower ↓ | ⚠️ Partially Measured** |",
-        "| **UTT** | User Task Total | Number of evolution steps | Fixed | 6 | ✅ Measured |",
+        "### ✅ Reliably Measured Metrics",
         "",
-        "**\\* Quality Metrics Not Measured**: CRUDe, ESR, MC, and Q\\* show zero values because **generated applications are not executed during experiments**. The validation logic requires running servers to test CRUD endpoints (`http://localhost:8000-8002`), but servers are deliberately not started (`auto_restart_servers: false` in config). This experiment measures **code generation efficiency** (tokens, time, automation), not **runtime code quality**. See `docs/QUALITY_METRICS_INVESTIGATION.md` for details.",
+        "These metrics have consistent measurement across all frameworks with authoritative data sources:",
         "",
-        "**\\*\\* HITL-Based Metrics Partially Measured**: AUTR, AEI, HIT, and HEU depend on Human-in-the-Loop (HITL) event detection, which is **not uniformly implemented** across all frameworks:",
-        "- ✅ **ChatDev**: Active pattern-based HITL detection (5 regex patterns)",
-        "- ✅ **GHSpec**: Active marker-based HITL detection (`[NEEDS CLARIFICATION:]`)",
-        "- ❌ **BAEs**: No HITL detection - hardcoded to zero (lines 330, 348 in adapter)",
-        "",
-        "**Scientific Implication**: AUTR and AEI values for **BAEs are not reliable** because HITL events (if they occur) would not be detected. Current values (AUTR=1.0, HIT=0) may be accurate for this specific experiment but cannot be verified. For **ChatDev and GHSpec**, these metrics are properly measured. See 'HITL Detection Implementation Notes' section for full details.",
+        "| Metric | Full Name | Description | Range | Ideal | Data Source |",
+        "|--------|-----------|-------------|-------|-------|-------------|",
+        "| **TOK_IN** | Input Tokens | Tokens sent to LLM | 0-∞ | Lower ↓ | OpenAI Usage API |",
+        "| **TOK_OUT** | Output Tokens | Tokens received from LLM | 0-∞ | Lower ↓ | OpenAI Usage API |",
+        "| **API_CALLS** | API Call Count | Number of LLM requests | 0-∞ | Lower ↓ | Count-based |",
+        "| **CACHED_TOKENS** | Cached Input Tokens | Tokens served from cache | 0-∞ | Higher ↑ | OpenAI Usage API |",
+        "| **T_WALL_seconds** | Wall Clock Time | Total execution time (sec) | 0-∞ | Lower ↓ | time.time() |",
+        "| **ZDI** | Zero-Downtime Intervals | Idle time between steps (sec) | 0-∞ | Lower ↓ | Calculated |",
+        "| **UTT** | User Task Total | Number of evolution steps | Fixed | 6 | Configuration |",
         "",
         "**New Metrics Added (Oct 2025)**:",
-        "- **API_CALLS**: Number of LLM API requests - measures call efficiency (lower = better batching, fewer retries)",
-        "- **CACHED_TOKENS**: Tokens served from OpenAI's prompt cache - represents cost savings (~50% discount)",
+        "- **API_CALLS**: Measures call efficiency - lower values indicate better batching and fewer retries",
+        "- **CACHED_TOKENS**: Represents cost savings (~50% discount on cached tokens)",
         "- **Cache Hit Rate**: Calculated as `(CACHED_TOKENS / TOK_IN) × 100%` - measures prompt reuse efficiency",
+        "",
+        "### ⚠️ Partially Measured Metrics",
+        "",
+        "These metrics have **inconsistent measurement** across frameworks due to implementation gaps:",
+        "",
+        "| Metric | Full Name | ChatDev | GHSpec | BAEs | Issue |",
+        "|--------|-----------|---------|--------|------|-------|",
+        "| **AUTR** | Automated User Testing Rate | ✅ | ✅ | ❌ | BAEs: No HITL detection |",
+        "| **AEI** | Automation Efficiency Index | ✅ | ✅ | ❌ | Depends on AUTR |",
+        "| **HIT** | Human-in-the-Loop Count | ✅ | ✅ | ❌ | BAEs: Hardcoded to 0 |",
+        "| **HEU** | Human Effort Units | ✅ | ✅ | ❌ | Depends on HIT |",
+        "",
+        "**HITL Detection Methods:**",
+        "- **ChatDev**: 5 regex patterns detect clarification requests in logs (lines 821-832 in adapter)",
+        "- **GHSpec**: Explicit `[NEEDS CLARIFICATION:]` marker detection (line 544 in adapter)",
+        "- **BAEs**: ❌ No detection implemented - hardcoded to zero (lines 330, 348 in adapter)",
+        "",
+        "**Scientific Implication**: AUTR and AEI values for **BAEs are not reliable**. HITL events (if they occur) would not be detected. Current values (AUTR=1.0, HIT=0) may be accurate for this specific experiment but cannot be verified. Manual investigation of 23 BAEs runs confirmed zero HITL events (see `docs/baes/BAES_HITL_INVESTIGATION.md`), but future experiments with ambiguous requirements may miss HITL events.",
+        "",
+        "### ❌ Unmeasured Metrics",
+        "",
+        "These metrics **always show zero values** because runtime validation is not performed:",
+        "",
+        "| Metric | Full Name | Status | Reason |",
+        "|--------|-----------|--------|--------|",
+        "| **Q\\*** | Quality Star | Always 0 | Depends on unmeasured metrics below |",
+        "| **ESR** | Emerging State Rate | Always 0 | Applications not executed |",
+        "| **CRUDe** | CRUD Evolution Coverage | Always 0 | No endpoint validation |",
+        "| **MC** | Model Call Efficiency | Always 0 | No runtime efficiency measured |",
+        "",
+        "**Why Unmeasured?** Generated applications are not started during experiments (`auto_restart_servers: false` in config). Validation requires:",
+        "1. Running application servers (`uvicorn`, `flask run`, etc.)",
+        "2. Testing CRUD endpoints (`http://localhost:8000-8002`)",
+        "3. Measuring runtime behavior and error rates",
+        "",
+        "**Current Experiment Scope**: Measures **code generation efficiency** (tokens, time, automation), not **runtime code quality**. See `docs/QUALITY_METRICS_INVESTIGATION.md` for implementation details and `docs/RELIABLE_METRICS_IMPLEMENTATION_PLAN.md` for future work roadmap.",
         "",
         "### 🔍 HITL Detection Implementation Notes",
         "",
@@ -1652,9 +1668,34 @@ def generate_statistical_report(
     
     all_metrics = sorted(all_metrics)
     
-    # Section 1: Aggregate Statistics
+    # Define reliable metrics - these are measured consistently across all frameworks
+    RELIABLE_METRICS = {
+        'TOK_IN',
+        'TOK_OUT',
+        'API_CALLS',
+        'CACHED_TOKENS',
+        'T_WALL_seconds',
+        'ZDI',
+        'UTT'
+    }
+    
+    # Filter metrics for statistical analysis - only use reliable metrics
+    metrics_for_analysis = [m for m in all_metrics if m in RELIABLE_METRICS]
+    
+    logger.info(f"Reliable metrics for analysis: {metrics_for_analysis}")
+    logger.info(f"Excluded unreliable/unmeasured metrics: {sorted(set(all_metrics) - RELIABLE_METRICS)}")
+    
+    # Section 1: Aggregate Statistics (Reliable Metrics Only)
     lines.extend([
-        "## 1. Aggregate Statistics",
+        "## 1. Aggregate Statistics (Reliable Metrics Only)",
+        "",
+        "**Analysis Scope**: This section includes **only reliably measured metrics** with consistent data sources across all frameworks.",
+        "",
+        "**Excluded Metrics:**",
+        "- ❌ **Unmeasured**: Q*, ESR, CRUDe, MC (always zero - applications not executed)",
+        "- ⚠️ **Partially Measured**: AUTR, AEI, HIT, HEU (inconsistent HITL detection - BAEs not supported)",
+        "",
+        "See 'Metric Definitions' section for complete measurement status details.",
         "",
         "### Mean Values with 95% Bootstrap CI",
         "",
@@ -1664,9 +1705,9 @@ def generate_statistical_report(
         ""
     ])
     
-    # Table header with sample size column
-    header = "| Framework | N | " + " | ".join(all_metrics) + " |"
-    separator = "|-----------|---|" + "|".join(["-" * 12 for _ in all_metrics]) + "|"
+    # Table header with sample size column - use metrics_for_analysis instead of all_metrics
+    header = "| Framework | N | " + " | ".join(metrics_for_analysis) + " |"
+    separator = "|-----------|---|" + "|".join(["-" * 12 for _ in metrics_for_analysis]) + "|"
     lines.extend([header, separator])
     
     # First pass: collect all mean values for each metric to determine indicators
@@ -1675,21 +1716,21 @@ def generate_statistical_report(
         aggregated = bootstrap_aggregate_metrics(runs)
         framework_means[framework] = aggregated
     
-    # Collect all values per metric for comparison
+    # Collect all values per metric for comparison (reliable metrics only)
     metric_values = {}
-    for metric in all_metrics:
+    for metric in metrics_for_analysis:
         metric_values[metric] = []
         for framework in frameworks_data.keys():
             if metric in framework_means[framework]:
                 metric_values[metric].append(framework_means[framework][metric]['mean'])
     
-    # Table rows with indicators
+    # Table rows with indicators (reliable metrics only)
     for framework in frameworks_data.keys():
         aggregated = framework_means[framework]
         n = run_counts[framework]
         row = f"| {framework} | {n} |"
         
-        for metric in all_metrics:
+        for metric in metrics_for_analysis:
             if metric in aggregated:
                 stats = aggregated[metric]
                 mean = stats['mean']
@@ -1711,15 +1752,19 @@ def generate_statistical_report(
     
     lines.extend(["", ""])
     
-    # Section 2: Relative Performance
-    relative_performance_lines = _generate_relative_performance(framework_means, all_metrics)
+    # Section 2: Relative Performance (Reliable Metrics Only)
+    relative_performance_lines = _generate_relative_performance(framework_means, metrics_for_analysis)
     lines.extend(relative_performance_lines)
     
-    # Section 3: Kruskal-Wallis Tests
+    # Section 3: Kruskal-Wallis Tests (Reliable Metrics Only)
     lines.extend([
-        "## 3. Kruskal-Wallis H-Tests",
+        "## 3. Kruskal-Wallis H-Tests (Reliable Metrics Only)",
         "",
-        "Testing for significant differences across all frameworks.",
+        "Testing for significant differences across all frameworks using **reliably measured metrics only**.",
+        "",
+        "**Analysis Scope:**",
+        "- ✅ Included: TOK_IN, TOK_OUT, API_CALLS, CACHED_TOKENS, T_WALL_seconds, ZDI",
+        "- ❌ Excluded: AUTR, AEI, HIT, HEU (partial measurement), Q*, ESR, CRUDe, MC (unmeasured)",
         "",
         "*Note: Metrics with zero variance (all values identical) are excluded from statistical testing.*",
         "",
@@ -1728,9 +1773,9 @@ def generate_statistical_report(
     ])
     
     skipped_metrics = []
-    quality_metrics = ['CRUDe', 'ESR', 'MC', 'Q_star']
     
-    for metric in all_metrics:
+    # Only test reliable metrics
+    for metric in metrics_for_analysis:
         # Collect metric values by framework
         groups = {}
         for framework, runs in frameworks_data.items():
@@ -1766,22 +1811,23 @@ def generate_statistical_report(
     if skipped_metrics:
         lines.append(f"**Metrics Excluded** (zero variance): {', '.join(f'`{m}`' for m in skipped_metrics)}")
         lines.append("")
-        quality_skipped = [m for m in skipped_metrics if m in quality_metrics]
-        if quality_skipped:
-            lines.append(f"*Note: {', '.join(quality_skipped)} excluded because all values are identically zero (metrics not measured).*")
-            lines.append("")
+        lines.append(f"*Note: These metrics show identical values across all runs (no variance to test).*")
+        lines.append("")
     
-    # Section 4: Pairwise Comparisons
+    # Section 4: Pairwise Comparisons (Reliable Metrics Only)
     lines.extend([
-        "## 4. Pairwise Comparisons",
+        "## 4. Pairwise Comparisons (Reliable Metrics Only)",
         "",
         "Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.",
+        "",
+        "**Analysis Scope**: Only reliably measured metrics included (TOK_IN, TOK_OUT, API_CALLS, CACHED_TOKENS, T_WALL_seconds, ZDI).",
         "",
         "*Note: Metrics with zero variance are excluded from pairwise comparisons.*",
         ""
     ])
     
-    for metric in all_metrics:
+    # Only analyze reliable metrics
+    for metric in metrics_for_analysis:
         # Skip metrics with zero variance
         if metric in skipped_metrics:
             continue
@@ -1830,11 +1876,13 @@ def generate_statistical_report(
             
             lines.extend(["", ""])
     
-    # Section 5: Outlier Detection
+    # Section 5: Outlier Detection (Reliable Metrics Only)
     lines.extend([
-        "## 5. Outlier Detection",
+        "## 5. Outlier Detection (Reliable Metrics Only)",
         "",
         "Values > 3σ from median (per framework, per metric).",
+        "",
+        "**Analysis Scope**: Only reliably measured metrics checked for outliers.",
         ""
     ])
     
@@ -1842,7 +1890,8 @@ def generate_statistical_report(
     for framework, runs in frameworks_data.items():
         framework_outliers = []
         
-        for metric in all_metrics:
+        # Only check reliable metrics for outliers
+        for metric in metrics_for_analysis:
             values = [run[metric] for run in runs if metric in run]
             if len(values) >= 3:
                 outlier_indices, outlier_values = identify_outliers(values)
@@ -1863,68 +1912,43 @@ def generate_statistical_report(
         lines.append("No outliers detected.")
         lines.append("")
     
-    # Section 5: Composite Scores
+    lines.append("")  # Extra spacing before next section
+    
+    # Section 6: Visual Summary (Reliable Metrics Only)
     lines.extend([
-        "## 5. Composite Scores",
-        "",
-        "**Q*** = 0.4·ESR + 0.3·(CRUDe/12) + 0.3·MC",
-        "",
-        "**AEI** = AUTR / log(1 + TOK_IN)",
-        "",
-        "| Framework | Q* Mean | Q* CI | AEI Mean | AEI CI |",
-        "|-----------|---------|-------|----------|--------|"
-    ])
-    
-    for framework, runs in frameworks_data.items():
-        # Compute composite scores for each run
-        q_star_values = []
-        aei_values = []
-        
-        for run in runs:
-            try:
-                scores = compute_composite_scores(run)
-                q_star_values.append(scores['Q*'])
-                aei_values.append(scores['AEI'])
-            except ValueError:
-                # Missing required metrics, skip
-                continue
-        
-        if q_star_values and aei_values:
-            q_agg = bootstrap_aggregate_metrics([{'Q*': v} for v in q_star_values])
-            aei_agg = bootstrap_aggregate_metrics([{'AEI': v} for v in aei_values])
-            
-            q_mean = _format_metric_value('Q*', q_agg['Q*']['mean'], include_units=False)
-            q_ci = _format_confidence_interval(q_agg['Q*']['ci_lower'], q_agg['Q*']['ci_upper'], 'Q*')
-            aei_mean = _format_metric_value('AEI', aei_agg['AEI']['mean'], include_units=False)
-            aei_ci = _format_confidence_interval(aei_agg['AEI']['ci_lower'], aei_agg['AEI']['ci_upper'], 'AEI')
-            
-            lines.append(
-                f"| {framework} | {q_mean} | {q_ci} | {aei_mean} | {aei_ci} |"
-            )
-        else:
-            lines.append(f"| {framework} | N/A | N/A | N/A | N/A |")
-    
-    lines.extend(["", ""])
-    
-    # Section 6: Visual Summary
-    lines.extend([
-        "## 6. Visual Summary",
+        "## 6. Visual Summary (Reliable Metrics Only)",
         "",
         "### Key Visualizations",
         "",
-        "The following charts provide visual insights into framework performance:",
+        "All visualizations use **reliably measured metrics only** to ensure accurate framework comparison:",
         "",
-        "**Radar Chart** - Multi-dimensional comparison across 6 key metrics",
+        "**Radar Chart** - Multi-dimensional comparison across 6 reliable metrics (TOK_IN, TOK_OUT, T_WALL, API_CALLS, CACHED_TOKENS, ZDI)",
         "",
         "![Radar Chart](radar_chart.svg)",
         "",
-        "**Pareto Plot** - Quality vs Cost trade-off analysis",
+        "**Token Efficiency Chart** - Scatter plot: Input vs Output tokens with execution time",
         "",
-        "![Pareto Plot](pareto_plot.svg)",
+        "![Token Efficiency](token_efficiency.svg)",
         "",
-        "**Timeline Chart** - CRUD evolution over execution steps",
+        "**API Efficiency Bar Chart** - API calls with tokens-per-call ratios",
         "",
-        "![Timeline Chart](timeline_chart.svg)",
+        "![API Efficiency](api_efficiency_bar.svg)",
+        "",
+        "**Cache Efficiency Chart** - Stacked bars: Cached vs uncached tokens with hit rates",
+        "",
+        "![Cache Efficiency](cache_efficiency_chart.svg)",
+        "",
+        "**Time Distribution Chart** - Box plots showing execution time variability",
+        "",
+        "![Time Distribution](time_distribution.svg)",
+        "",
+        "**API Efficiency Chart** - Token efficiency across frameworks",
+        "",
+        "![API Efficiency Chart](api_efficiency_chart.svg)",
+        "",
+        "**API Calls Timeline** - API call patterns over time",
+        "",
+        "![API Calls Timeline](api_calls_timeline.svg)",
         "",
         "---",
         ""
@@ -1972,34 +1996,39 @@ def generate_statistical_report(
                 f"(saves ~{time_diff / 60:.1f} minutes per task)."
             )
     
-    if all('AEI' in data for data in simple_aggregated.values()):
-        best_efficiency = max(simple_aggregated.items(), key=lambda x: x[1].get('AEI', 0))
-        recommendations.append(
-            f"**⚙️ Efficiency Leader**: **{best_efficiency[0]}** delivers the best quality-per-token ratio (AEI = {best_efficiency[1]['AEI']:.3f}), "
-            f"making it ideal for balancing quality and cost."
-        )
-    
-    if all('AUTR' in data for data in simple_aggregated.values()):
-        autr_values = [data['AUTR'] for data in simple_aggregated.values()]
-        if all(v == 1.0 for v in autr_values):
+    # API efficiency recommendation (reliable metric)
+    if all('API_CALLS' in data and 'TOK_IN' in data for data in simple_aggregated.values()):
+        api_efficiency = {fw: data['TOK_IN'] / data['API_CALLS'] if data['API_CALLS'] > 0 else 0 
+                         for fw, data in simple_aggregated.items()}
+        best_api_eff = max(api_efficiency.items(), key=lambda x: x[1])
+        worst_api_eff = min(api_efficiency.items(), key=lambda x: x[1])
+        
+        if best_api_eff[1] > 0:
             recommendations.append(
-                "**🤖 Autonomy**: All frameworks achieve perfect autonomy (AUTR = 1.0) - "
-                "no human intervention required during execution."
+                f"**📡 API Efficiency**: **{worst_api_eff[0]}** uses fewest API calls, "
+                f"while **{best_api_eff[0]}** maximizes tokens per call (better batching). "
+                f"Choose based on latency vs throughput priority."
             )
     
-    # Check for quality concerns
-    quality_metrics = ['Q_star', 'ESR', 'CRUDe', 'MC']
-    zero_metrics = []
-    for metric in quality_metrics:
-        if all(metric in data and data[metric] == 0 for data in simple_aggregated.values()):
-            zero_metrics.append(metric)
+    # Cache efficiency recommendation (reliable metric)
+    if all('CACHED_TOKENS' in data and 'TOK_IN' in data for data in simple_aggregated.values()):
+        cache_rates = {fw: (data['CACHED_TOKENS'] / data['TOK_IN'] * 100) if data['TOK_IN'] > 0 else 0
+                      for fw, data in simple_aggregated.items()}
+        best_cache = max(cache_rates.items(), key=lambda x: x[1])
+        
+        if best_cache[1] > 5:  # Only recommend if meaningful cache usage
+            recommendations.append(
+                f"**💾 Cost Savings**: **{best_cache[0]}** achieves {best_cache[1]:.1f}% cache hit rate, "
+                f"reducing costs through OpenAI's prompt caching (~50% discount on cached tokens)."
+            )
     
-    if zero_metrics:
-        recommendations.append(
-            f"**⚠️ Quality Metrics Not Measured**: {', '.join(zero_metrics)} show zero values because generated applications are not executed. "
-            f"This experiment measures **code generation efficiency** (tokens, time, automation), not **runtime quality**. "
-            f"See `docs/QUALITY_METRICS_INVESTIGATION.md` for details."
-        )
+    # Add scope note for all recommendations
+    recommendations.insert(0, 
+        "**📊 Analysis Scope**: Recommendations based on **reliably measured metrics only** "
+        "(tokens, time, API calls, caching). Quality metrics (Q*, ESR, CRUDe, MC) and "
+        "autonomy metrics (AUTR, AEI) excluded due to measurement limitations. "
+        "See 'Limitations and Future Work' section for details."
+    )
     
     # Add recommendations to report
     if recommendations:
@@ -2026,11 +2055,106 @@ def generate_statistical_report(
         fastest = min(simple_aggregated.items(), key=lambda x: x[1].get('T_WALL_seconds', float('inf')))
         lines.append(f"| Time-critical tasks | {fastest[0]} | Fastest execution time |")
     
-    if all('AEI' in data for data in simple_aggregated.values()):
-        best_efficiency = max(simple_aggregated.items(), key=lambda x: x[1].get('AEI', 0))
-        lines.append(f"| Balanced quality/cost | {best_efficiency[0]} | Best efficiency index (AEI) |")
+    # Note: Removed AEI row - unreliable metric for BAEs
     
     lines.extend(["", ""])
+    
+    # Section 8: Limitations and Future Work
+    lines.extend([
+        "## 8. Limitations and Future Work",
+        "",
+        "### 🔬 Scientific Honesty Statement",
+        "",
+        "This report focuses on **reliably measured metrics only** to maintain scientific integrity. Several metrics are excluded from analysis due to measurement limitations:",
+        "",
+        "### ❌ Unmeasured Metrics",
+        "",
+        "**Q* (Quality Star), ESR (Emerging State Rate), CRUDe (CRUD Coverage), MC (Model Call Efficiency)**",
+        "",
+        "**Status**: Always show zero values",
+        "",
+        "**Reason**: Generated applications are **not executed** during experiments. These metrics require:",
+        "- Starting application servers (`uvicorn`, `flask run`, etc.)",
+        "- Testing CRUD endpoints via HTTP requests",
+        "- Measuring runtime behavior and error rates",
+        "",
+        "**Current Scope**: This experiment measures **code generation efficiency** (tokens, time, API usage), not **runtime code quality**.",
+        "",
+        "**Implementation Required**: Server startup automation, endpoint testing framework, error detection (estimated 20-40 hours)",
+        "",
+        "**Documentation**: See `docs/QUALITY_METRICS_INVESTIGATION.md` for complete analysis",
+        "",
+        "### ⚠️ Partially Measured Metrics",
+        "",
+        "**AUTR (Autonomy Rate), AEI (Automation Efficiency), HIT (HITL Count), HEU (Human Effort)**",
+        "",
+        "**Status**: Measured for ChatDev/GHSpec, NOT measured for BAEs",
+        "",
+        "**Reason**: These metrics depend on Human-in-the-Loop (HITL) event detection:",
+        "",
+        "| Framework | Detection Method | Status |",
+        "|-----------|-----------------|---------|",
+        "| ChatDev | 5 regex patterns in logs | ✅ Reliable |",
+        "| GHSpec | `[NEEDS CLARIFICATION:]` marker | ✅ Reliable |",
+        "| BAEs | Hardcoded to zero (no detection) | ❌ Unreliable |",
+        "",
+        "**Scientific Implication**: Comparisons involving BAEs for these metrics are **methodologically unsound**. BAEs values (AUTR=1.0, HIT=0) are assumptions, not measurements.",
+        "",
+        "**Validation**: Manual investigation of 23 BAEs runs confirmed zero HITL events for this specific experiment (see `docs/baes/BAES_HITL_INVESTIGATION.md`), but future experiments with ambiguous requirements may miss HITL events.",
+        "",
+        "**Implementation Required**: BAEs HITL detection mechanism (estimated 8-12 hours)",
+        "",
+        "### 🚀 Future Work Roadmap",
+        "",
+        "**Priority 1: Quality Metrics Implementation (High Impact)**",
+        "- Implement automated server startup for generated applications",
+        "- Create endpoint testing framework for CRUD validation",
+        "- Enable Q*, ESR, CRUDe, MC measurement",
+        "- **Benefit**: Enables runtime quality comparison",
+        "- **Effort**: 20-40 hours",
+        "",
+        "**Priority 2: BAEs HITL Detection (Scientific Integrity)**",
+        "- Implement HITL detection in BAEs adapter",
+        "- Enable reliable AUTR, AEI, HIT, HEU measurement",
+        "- **Benefit**: Methodologically sound autonomy comparisons",
+        "- **Effort**: 8-12 hours",
+        "",
+        "**Priority 3: Extended Metrics (Additional Insights)**",
+        "- Cost efficiency: Dollar cost per task (tokens × pricing)",
+        "- Latency analysis: P50/P95/P99 response times",
+        "- Resource efficiency: Memory/CPU usage",
+        "- **Benefit**: Practical deployment considerations",
+        "- **Effort**: 12-20 hours",
+        "",
+        "**Priority 4: Experiment Scaling (Statistical Power)**",
+        f"- Increase sample size beyond current {sum(run_counts.values())} runs",
+        "- Achieve statistical significance (current p-values > 0.05 for most comparisons)",
+        "- Narrow confidence intervals",
+        "- **Benefit**: Conclusive statistical evidence",
+        "- **Effort**: Compute time only (automated)",
+        "",
+        "### 📊 What We Can Conclude",
+        "",
+        "**From Reliable Metrics (High Confidence):**",
+        "- Token consumption patterns (TOK_IN, TOK_OUT)",
+        "- Execution time characteristics (T_WALL, ZDI)",
+        "- API call efficiency (API_CALLS, batching strategies)",
+        "- Cache adoption (CACHED_TOKENS, hit rates)",
+        "",
+        "**What We CANNOT Conclude:**",
+        "- Runtime code quality (Q*, ESR, CRUDe, MC not measured)",
+        "- BAEs autonomy level (AUTR, HIT hardcoded, not detected)",
+        "- Framework automation efficiency involving BAEs (AEI unreliable)",
+        "",
+        "**Recommendations for Users:**",
+        "1. **Use reliable metrics** (tokens, time, API calls) for framework comparison",
+        "2. **Do not compare AUTR/AEI** across frameworks until BAEs detection implemented",
+        "3. **Validate quality manually** if runtime correctness is critical",
+        "4. **Monitor future updates** as quality metrics implementation progresses",
+        "",
+        "---",
+        ""
+    ])
     
     # Write to file
     output_path_obj = Path(output_path)

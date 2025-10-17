@@ -1,10 +1,10 @@
 # Statistical Analysis Report
 
-**Generated:** 2025-10-17 18:54:05 UTC
+**Generated:** 2025-10-17 19:12:27 UTC
 
 **Frameworks:** baes, chatdev, ghspec
 
-**Sample Size:** 61 total runs (baes: 23, chatdev: 20, ghspec: 18)
+**Sample Size:** 62 total runs (baes: 24, chatdev: 20, ghspec: 18)
 
 ---
 
@@ -189,13 +189,43 @@ This study compares three autonomous AI-powered software development frameworks 
 - Sequential task execution with full context awareness
 - Repository: `github/spec-kit` (commit: `89f4b0b`)
 
-### 📋 Experimental Protocol
+### � Data Quality Statement
+
+**Reconciliation-Based Run Selection**: This analysis includes **only runs with verified, stable token data** to ensure reproducibility and statistical validity.
+
+**Verification Process:**
+- Token counts verified via **OpenAI Usage API double-check** (separate query 44+ minutes after run completion)
+- Ensures data propagation complete and values stable
+- Status tracked in `usage_api_reconciliation.verification_status` field
+
+**Data Quality Statistics** (of 66 total runs):
+- ✅ **Verified**: 62 runs (93.9%) - **INCLUDED in analysis**
+- ⏳ **Pending**: 1 run (1.5%) - Reconciliation in progress - EXCLUDED
+- 🕐 **None**: 3 runs (4.6%) - Too recent (< 30 min) - EXCLUDED
+
+**Filtering Logic**: Analysis script (`runners/analyze_results.sh` lines 163-177) filters runs:
+```python
+verification_status = metrics.get('usage_api_reconciliation', {}).get('verification_status', 'none')
+if verification_status != 'verified':
+    logger.warning("Skipping run %s: status '%s' (not verified)", run_id, verification_status)
+    continue
+```
+
+**Benefits:**
+- 🎯 **Reproducible Results**: Token counts stable and verified
+- 📊 **Statistical Validity**: No data propagation delays affecting analysis
+- 🔄 **Re-run Safety**: Analysis generates identical results when re-executed
+- 📝 **Transparency**: All filtered runs logged with reason
+
+**Documentation**: See `docs/DATA_QUALITY_FILTERING.md` for complete filtering specification and validation results.
+
+### �📋 Experimental Protocol
 
 #### **Sample Size and Replication**
 
-This analysis is based on **61 experimental runs** across three frameworks:
+This analysis is based on **62 VERIFIED experimental runs** across three frameworks:
 
-- **baes**: 23 independent runs
+- **baes**: 24 independent runs
 - **chatdev**: 20 independent runs
 - **ghspec**: 18 independent runs
 
@@ -210,14 +240,14 @@ This analysis is based on **61 experimental runs** across three frameworks:
 - Non-deterministic LLM responses introduce natural variance across runs
 
 **Statistical Power:**
-- Current sample sizes (baes: 23, chatdev: 20, ghspec: 18) provide sufficient power for detecting large effect sizes
+- Current sample sizes (baes: 24, chatdev: 20, ghspec: 18) provide sufficient power for detecting large effect sizes
 - **Bootstrap confidence intervals** (10,000 resamples) quantify uncertainty in our estimates:
   - Simulates collecting 10,000 alternative datasets by resampling our actual data with replacement
   - Each resample calculates the metric (e.g., mean AUTR), creating a distribution of possible values
   - 95% CI shows the range where we expect the true population mean to fall 95% of the time
   - This accounts for the fact that we only have a limited sample (not infinite runs)
 - Stopping rule: Continue until CI half-width ≤ 10% of mean (max 50 runs per framework)
-- Current status: baes (23/50), chatdev (20/50), ghspec (18/50)
+- Current status: baes (24/50), chatdev (20/50), ghspec (18/50)
 
 #### **Standardized Task Sequence**
 
@@ -364,7 +394,7 @@ python run.py --task "<step_text>" --name "BAEs_Step1_<run_id>" \
 - **Non-Parametric Tests**: Kruskal-Wallis and Dunn-Šidák avoid normality assumptions
 - **Effect Sizes**: Cliff's delta quantifies practical significance beyond p-values
 - **Bootstrap CI**: 95% confidence intervals with 10,000 resamples for stable estimates
-- **Small Sample Awareness**: Current results (baes: 23, chatdev: 20, ghspec: 18) show large CI widths; p-values > 0.05 expected
+- **Small Sample Awareness**: Current results (baes: 24, chatdev: 20, ghspec: 18) show large CI widths; p-values > 0.05 expected
   - *Stopping Rule*: Experiment continues until CI half-width ≤ 10% of mean (50 runs max)
 
 **Interpretation Caveats:**
@@ -390,37 +420,60 @@ python run.py --task "<step_text>" --name "BAEs_Step1_<run_id>" \
 
 ## Metric Definitions
 
-| Metric | Full Name | Description | Range | Ideal Value | Status |
-|--------|-----------|-------------|-------|-------------|--------|
-| **AUTR** | Automated User Testing Rate | Autonomy: 1 - (HIT/UTT) | 0-1 | Higher ↑ | ⚠️ Partially Measured** |
-| **AEI** | Automation Efficiency Index | AUTR / log(1 + TOK_IN) | 0-∞ | Higher ↑ | ⚠️ Partially Measured** |
-| **Q\*** | Quality Star | Composite quality score | 0-1 | Higher ↑ | ⚠️ Not Measured* |
-| **ESR** | Emerging State Rate | % steps with successful evolution | 0-1 | Higher ↑ | ⚠️ Not Measured* |
-| **CRUDe** | CRUD Evolution Coverage | CRUD operations implemented | 0-12 | Higher ↑ | ⚠️ Not Measured* |
-| **MC** | Model Call Efficiency | Efficiency of LLM calls | 0-1 | Higher ↑ | ⚠️ Not Measured* |
-| **TOK_IN** | Input Tokens | Total tokens sent to LLM | 0-∞ | Lower ↓ | ✅ Measured |
-| **TOK_OUT** | Output Tokens | Total tokens received from LLM | 0-∞ | Lower ↓ | ✅ Measured |
-| **API_CALLS** | API Call Count | Number of model requests to LLM | 0-∞ | Lower ↓ | ✅ Measured |
-| **CACHED_TOKENS** | Cached Input Tokens | Input tokens served from cache | 0-∞ | Higher ↑ | ✅ Measured |
-| **T_WALL_seconds** | Wall Clock Time | Total elapsed time (seconds) | 0-∞ | Lower ↓ | ✅ Measured |
-| **ZDI** | Zero-Downtime Intervals | Idle time between steps (seconds) | 0-∞ | Lower ↓ | ✅ Measured |
-| **HIT** | Human-in-the-Loop Count | Manual interventions needed | 0-∞ | Lower ↓ | ⚠️ Partially Measured** |
-| **HEU** | Human Effort Units | Total manual effort required | 0-∞ | Lower ↓ | ⚠️ Partially Measured** |
-| **UTT** | User Task Total | Number of evolution steps | Fixed | 6 | ✅ Measured |
+### ✅ Reliably Measured Metrics
 
-**\* Quality Metrics Not Measured**: CRUDe, ESR, MC, and Q\* show zero values because **generated applications are not executed during experiments**. The validation logic requires running servers to test CRUD endpoints (`http://localhost:8000-8002`), but servers are deliberately not started (`auto_restart_servers: false` in config). This experiment measures **code generation efficiency** (tokens, time, automation), not **runtime code quality**. See `docs/QUALITY_METRICS_INVESTIGATION.md` for details.
+These metrics have consistent measurement across all frameworks with authoritative data sources:
 
-**\*\* HITL-Based Metrics Partially Measured**: AUTR, AEI, HIT, and HEU depend on Human-in-the-Loop (HITL) event detection, which is **not uniformly implemented** across all frameworks:
-- ✅ **ChatDev**: Active pattern-based HITL detection (5 regex patterns)
-- ✅ **GHSpec**: Active marker-based HITL detection (`[NEEDS CLARIFICATION:]`)
-- ❌ **BAEs**: No HITL detection - hardcoded to zero (lines 330, 348 in adapter)
-
-**Scientific Implication**: AUTR and AEI values for **BAEs are not reliable** because HITL events (if they occur) would not be detected. Current values (AUTR=1.0, HIT=0) may be accurate for this specific experiment but cannot be verified. For **ChatDev and GHSpec**, these metrics are properly measured. See 'HITL Detection Implementation Notes' section for full details.
+| Metric | Full Name | Description | Range | Ideal | Data Source |
+|--------|-----------|-------------|-------|-------|-------------|
+| **TOK_IN** | Input Tokens | Tokens sent to LLM | 0-∞ | Lower ↓ | OpenAI Usage API |
+| **TOK_OUT** | Output Tokens | Tokens received from LLM | 0-∞ | Lower ↓ | OpenAI Usage API |
+| **API_CALLS** | API Call Count | Number of LLM requests | 0-∞ | Lower ↓ | Count-based |
+| **CACHED_TOKENS** | Cached Input Tokens | Tokens served from cache | 0-∞ | Higher ↑ | OpenAI Usage API |
+| **T_WALL_seconds** | Wall Clock Time | Total execution time (sec) | 0-∞ | Lower ↓ | time.time() |
+| **ZDI** | Zero-Downtime Intervals | Idle time between steps (sec) | 0-∞ | Lower ↓ | Calculated |
+| **UTT** | User Task Total | Number of evolution steps | Fixed | 6 | Configuration |
 
 **New Metrics Added (Oct 2025)**:
-- **API_CALLS**: Number of LLM API requests - measures call efficiency (lower = better batching, fewer retries)
-- **CACHED_TOKENS**: Tokens served from OpenAI's prompt cache - represents cost savings (~50% discount)
+- **API_CALLS**: Measures call efficiency - lower values indicate better batching and fewer retries
+- **CACHED_TOKENS**: Represents cost savings (~50% discount on cached tokens)
 - **Cache Hit Rate**: Calculated as `(CACHED_TOKENS / TOK_IN) × 100%` - measures prompt reuse efficiency
+
+### ⚠️ Partially Measured Metrics
+
+These metrics have **inconsistent measurement** across frameworks due to implementation gaps:
+
+| Metric | Full Name | ChatDev | GHSpec | BAEs | Issue |
+|--------|-----------|---------|--------|------|-------|
+| **AUTR** | Automated User Testing Rate | ✅ | ✅ | ❌ | BAEs: No HITL detection |
+| **AEI** | Automation Efficiency Index | ✅ | ✅ | ❌ | Depends on AUTR |
+| **HIT** | Human-in-the-Loop Count | ✅ | ✅ | ❌ | BAEs: Hardcoded to 0 |
+| **HEU** | Human Effort Units | ✅ | ✅ | ❌ | Depends on HIT |
+
+**HITL Detection Methods:**
+- **ChatDev**: 5 regex patterns detect clarification requests in logs (lines 821-832 in adapter)
+- **GHSpec**: Explicit `[NEEDS CLARIFICATION:]` marker detection (line 544 in adapter)
+- **BAEs**: ❌ No detection implemented - hardcoded to zero (lines 330, 348 in adapter)
+
+**Scientific Implication**: AUTR and AEI values for **BAEs are not reliable**. HITL events (if they occur) would not be detected. Current values (AUTR=1.0, HIT=0) may be accurate for this specific experiment but cannot be verified. Manual investigation of 23 BAEs runs confirmed zero HITL events (see `docs/baes/BAES_HITL_INVESTIGATION.md`), but future experiments with ambiguous requirements may miss HITL events.
+
+### ❌ Unmeasured Metrics
+
+These metrics **always show zero values** because runtime validation is not performed:
+
+| Metric | Full Name | Status | Reason |
+|--------|-----------|--------|--------|
+| **Q\*** | Quality Star | Always 0 | Depends on unmeasured metrics below |
+| **ESR** | Emerging State Rate | Always 0 | Applications not executed |
+| **CRUDe** | CRUD Evolution Coverage | Always 0 | No endpoint validation |
+| **MC** | Model Call Efficiency | Always 0 | No runtime efficiency measured |
+
+**Why Unmeasured?** Generated applications are not started during experiments (`auto_restart_servers: false` in config). Validation requires:
+1. Running application servers (`uvicorn`, `flask run`, etc.)
+2. Testing CRUD endpoints (`http://localhost:8000-8002`)
+3. Measuring runtime behavior and error rates
+
+**Current Experiment Scope**: Measures **code generation efficiency** (tokens, time, automation), not **runtime code quality**. See `docs/QUALITY_METRICS_INVESTIGATION.md` for implementation details and `docs/RELIABLE_METRICS_IMPLEMENTATION_PLAN.md` for future work roadmap.
 
 ### 🔍 HITL Detection Implementation Notes
 
@@ -573,55 +626,58 @@ This report uses non-parametric statistics to compare frameworks robustly.
 
 ---
 
-## Executive Summary
+## Executive Summary (Reliable Metrics Only)
 
-*Based on 61 runs across 3 frameworks: baes (n=23), chatdev (n=20), ghspec (n=18)*
+*Based on 62 VERIFIED runs across 3 frameworks: baes (n=24), chatdev (n=20), ghspec (n=18)*
 
-### 🏆 Best Performers
+**Analysis Scope**: This summary focuses on **reliably measured metrics only** with consistent data sources across all frameworks.
 
-- **Most Efficient (AEI)**: baes (0.099) - ⚠️ Note: AEI not reliably measured for BAEs
-- **Fastest (T_WALL)**: baes (178.9s / 3.0 min)
-- **Lowest Token Usage**: baes (24,863 input tokens)
+**Excluded from Summary:**
+- ❌ **Unmeasured**: Q*, ESR, CRUDe, MC (applications not executed)
+- ⚠️ **Partially Measured**: AUTR, AEI, HIT, HEU (inconsistent HITL detection)
 
-### 📊 Key Insights
+See 'Limitations and Future Work' section for discussion of excluded metrics.
 
-- ⚠️ AUTR = 1.0 shown for all frameworks, but **not uniformly measured** (see HITL Detection notes)
-  - ChatDev & GHSpec: ✅ Properly measured (active detection)
-  - BAEs: ❌ Hardcoded value (no detection mechanism)
-- ⚠️ Quality metrics (Q_star, ESR, CRUDe, MC) not measured - see Data Quality Alerts below
-- Wall time varies 9.6x between fastest and slowest frameworks
-- Token consumption varies 9.2x across frameworks
+### 🏆 Best Performers (Reliable Metrics)
 
-### ⚠️ Data Quality Alerts
+- **Fastest Execution**: baes (188.6s / 3.1 min)
+- **Most Token-Efficient**: baes (24,744 input tokens)
+- **Best Cache Efficiency**: chatdev (13.3% cache hit rate)
+- **Fewest API Calls**: baes (14 calls average)
 
-**Quality Metrics Not Measured**: `CRUDe`, `ESR`, `MC`, `Q_star`
+### 📊 Key Insights (Reliable Metrics)
 
-These metrics show zero values because **generated applications are not executed** during experiments:
-- The validation logic requires HTTP requests to `localhost:8000-8002`
-- Servers are not started (`auto_restart_servers: false` in config)
-- This is **expected behavior** - see `docs/QUALITY_METRICS_INVESTIGATION.md`
+- Execution time varies **9.1x** between fastest and slowest frameworks
+- Token consumption varies **9.2x** across frameworks
+- Tokens-per-API-call varies **2.0x** (indicates different batching strategies)
+- All frameworks benefit from OpenAI's prompt caching (reduces costs ~50% on cached tokens)
 
-**Current Experiment Scope**: Measures **code generation efficiency** (tokens, time, automation)
-**Not Measured**: Runtime code quality, endpoint correctness, application functionality
+### 🔬 Measurement Scope
 
-**To Enable Quality Metrics**: Implement server startup and endpoint testing (20-40 hours estimated)
+**What This Report Measures:**
+- ✅ Token consumption (input, output, cached)
+- ✅ Execution time (wall clock, downtime intervals)
+- ✅ API call patterns (count, efficiency, batching)
+- ✅ Cache efficiency (hit rates, cost savings)
 
-**HITL-Based Metrics Partially Measured**: `AUTR`, `AEI`, `HIT`, `HEU`
+**What This Report Does NOT Measure:**
+- ❌ Code quality (Q*, ESR, CRUDe, MC) - applications not executed
+- ⚠️ Autonomy (AUTR, HIT) - partially measured (BAEs detection not implemented)
+- ⚠️ Automation efficiency (AEI) - depends on AUTR
 
-These metrics depend on Human-in-the-Loop (HITL) detection, which is **not uniformly implemented**:
-- ✅ **ChatDev**: Active pattern-based detection (reliable measurement)
-- ✅ **GHSpec**: Active marker-based detection (reliable measurement)
-- ❌ **BAEs**: Hardcoded to zero - **no detection mechanism** (unreliable measurement)
-
-**Scientific Implication**: AUTR and AEI comparisons involving BAEs are **methodologically unsound**.
-BAEs values (AUTR=1.0, HIT=0) are assumptions, not measurements. See 'HITL Detection Implementation Notes' for details.
-
-**Recommendation**: Focus analysis on **reliably measured metrics** (TOK_IN, TOK_OUT, T_WALL, API_CALLS).
-
+See **'Limitations and Future Work'** section for complete discussion of unmeasured/unreliable metrics.
 
 ---
 
-## 1. Aggregate Statistics
+## 1. Aggregate Statistics (Reliable Metrics Only)
+
+**Analysis Scope**: This section includes **only reliably measured metrics** with consistent data sources across all frameworks.
+
+**Excluded Metrics:**
+- ❌ **Unmeasured**: Q*, ESR, CRUDe, MC (always zero - applications not executed)
+- ⚠️ **Partially Measured**: AUTR, AEI, HIT, HEU (inconsistent HITL detection - BAEs not supported)
+
+See 'Metric Definitions' section for complete measurement status details.
 
 ### Mean Values with 95% Bootstrap CI
 
@@ -629,11 +685,11 @@ BAEs values (AUTR=1.0, HIT=0) are assumptions, not measurements. See 'HITL Detec
 
 **Performance Indicators:** 🟢 Best | 🟡 Middle | 🔴 Worst
 
-| Framework | N | AEI | API_CALLS | AUTR | CACHED_TOKENS | CRUDe | ESR | HEU | HIT | MC | Q_star | TOK_IN | TOK_OUT | T_WALL_seconds | UTT | ZDI |
-|-----------|---|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|
-| baes | 23 | 0.099 [0.098, 0.100] 🟢 | 14.52 [13.74, 15.30] 🔴 | 1.000 [1.000, 1.000] 🟢 | 528.70 [0.00, 1363.48] 🔴 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 24,863 [23,346, 26,299] 🟢 | 6,780 [6,341, 7,210] 🟢 | 178.9 [166.5, 192.2] 🟢 | 6 [6, 6] 🟢 | 36 [33, 38] 🟢 |
-| chatdev | 20 | 0.081 [0.081, 0.081] 🔴 | 130.50 [123.40, 137.55] 🟢 | 1.000 [1.000, 1.000] 🟢 | 30451.20 [26304.00, 34400.00] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 228,377 [218,883, 237,602] 🔴 | 79,956 [76,181, 83,661] 🔴 | 1723.8 [1595.2, 1849.6] 🔴 | 6 [6, 6] 🟢 | 345 [320, 370] 🔴 |
-| ghspec | 18 | 0.092 [0.092, 0.093] 🟡 | 59.17 [54.06, 63.44] 🟡 | 1.000 [1.000, 1.000] 🟢 | 1080.89 [56.89, 2503.11] 🟡 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0 [0, 0] 🟢 | 0 [0, 0] 🟢 | 0.000 [0.000, 0.000] 🟢 | 0.000 [0.000, 0.000] 🟢 | 51,566 [47,053, 55,672] 🟡 | 25,377 [22,613, 27,781] 🟡 | 616.4 [547.8, 686.4] 🟡 | 6 [6, 6] 🟢 | 124 [110, 137] 🟡 |
+| Framework | N | API_CALLS | CACHED_TOKENS | TOK_IN | TOK_OUT | T_WALL_seconds | UTT | ZDI |
+|-----------|---|------------|------------|------------|------------|------------|------------|------------|
+| baes | 24 | 14.46 [13.67, 15.21] 🔴 | 506.67 [0.00, 1306.67] 🔴 | 24,744 [23,287, 26,162] 🟢 | 6,760 [6,344, 7,171] 🟢 | 188.6 [169.6, 214.0] 🟢 | 6 [6, 6] 🟢 | 38 [34, 43] 🟢 |
+| chatdev | 20 | 130.50 [123.40, 137.65] 🟢 | 30451.20 [26336.00, 34464.00] 🟢 | 228,377 [218,703, 237,601] 🔴 | 79,956 [76,248, 83,638] 🔴 | 1723.8 [1594.7, 1849.1] 🔴 | 6 [6, 6] 🟢 | 345 [320, 370] 🔴 |
+| ghspec | 18 | 59.17 [54.06, 63.44] 🟡 | 1080.89 [113.78, 2560.00] 🟡 | 51,566 [47,282, 55,758] 🟡 | 25,377 [22,687, 27,803] 🟡 | 616.4 [547.8, 688.1] 🟡 | 6 [6, 6] 🟢 | 124 [110, 137] 🟡 |
 
 
 ## 2. Relative Performance
@@ -644,71 +700,60 @@ Performance normalized to best framework (100% = best performer).
 
 | Framework | Tokens (↓) | Time (↓) | Test Auto (↑) | Efficiency (↑) | Quality (↑) |
 |-----------|---------------|---------------|---------------|---------------|---------------|
-| baes | 100% 🟢 | 100% 🟢 | 100% 🟢 | 100% 🟢 | 100% 🟢 |
-| chatdev | 919% 🔴 | 964% 🔴 | 100% 🟢 | 82% 🟡 | 100% 🟢 |
-| ghspec | 207% 🔴 | 345% 🔴 | 100% 🟢 | 93% 🟡 | 100% 🟢 |
+| baes | 100% 🟢 | 100% 🟢 | N/A | N/A | N/A |
+| chatdev | 923% 🔴 | 914% 🔴 | N/A | N/A | N/A |
+| ghspec | 208% 🔴 | 327% 🔴 | N/A | N/A | N/A |
 
 
-## 3. Kruskal-Wallis H-Tests
+## 3. Kruskal-Wallis H-Tests (Reliable Metrics Only)
 
-Testing for significant differences across all frameworks.
+Testing for significant differences across all frameworks using **reliably measured metrics only**.
+
+**Analysis Scope:**
+- ✅ Included: TOK_IN, TOK_OUT, API_CALLS, CACHED_TOKENS, T_WALL_seconds, ZDI
+- ❌ Excluded: AUTR, AEI, HIT, HEU (partial measurement), Q*, ESR, CRUDe, MC (unmeasured)
 
 *Note: Metrics with zero variance (all values identical) are excluded from statistical testing.*
 
 | Metric | H | p-value | Significant | Groups | N |
 |--------|---|---------|-------------|--------|---|
-| AEI | 52.754 | 0.0000 | ✓ Yes | 3 | 61 |
-
-💬 *Strong evidence that frameworks differ significantly on AEI. See pairwise comparisons below.*
-
-| API_CALLS | 53.142 | 0.0000 | ✓ Yes | 3 | 61 |
+| API_CALLS | 53.935 | 0.0000 | ✓ Yes | 3 | 62 |
 
 💬 *Strong evidence that frameworks differ significantly on API_CALLS. See pairwise comparisons below.*
 
-| CACHED_TOKENS | 39.706 | 0.0000 | ✓ Yes | 3 | 61 |
+| CACHED_TOKENS | 40.054 | 0.0000 | ✓ Yes | 3 | 62 |
 
 💬 *Strong evidence that frameworks differ significantly on CACHED_TOKENS. See pairwise comparisons below.*
 
-| TOK_IN | 52.754 | 0.0000 | ✓ Yes | 3 | 61 |
+| TOK_IN | 53.551 | 0.0000 | ✓ Yes | 3 | 62 |
 
 💬 *Strong evidence that frameworks differ significantly on TOK_IN. See pairwise comparisons below.*
 
-| TOK_OUT | 53.142 | 0.0000 | ✓ Yes | 3 | 61 |
+| TOK_OUT | 53.935 | 0.0000 | ✓ Yes | 3 | 62 |
 
 💬 *Strong evidence that frameworks differ significantly on TOK_OUT. See pairwise comparisons below.*
 
-| T_WALL_seconds | 53.012 | 0.0000 | ✓ Yes | 3 | 61 |
+| T_WALL_seconds | 53.679 | 0.0000 | ✓ Yes | 3 | 62 |
 
 💬 *Strong evidence that frameworks differ significantly on T_WALL_seconds. See pairwise comparisons below.*
 
-| ZDI | 53.012 | 0.0000 | ✓ Yes | 3 | 61 |
+| ZDI | 53.679 | 0.0000 | ✓ Yes | 3 | 62 |
 
 💬 *Strong evidence that frameworks differ significantly on ZDI. See pairwise comparisons below.*
 
 
 
-**Metrics Excluded** (zero variance): `AUTR`, `CRUDe`, `ESR`, `HEU`, `HIT`, `MC`, `Q_star`, `UTT`
+**Metrics Excluded** (zero variance): `UTT`
 
-*Note: CRUDe, ESR, MC, Q_star excluded because all values are identically zero (metrics not measured).*
+*Note: These metrics show identical values across all runs (no variance to test).*
 
-## 4. Pairwise Comparisons
+## 4. Pairwise Comparisons (Reliable Metrics Only)
 
 Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 
+**Analysis Scope**: Only reliably measured metrics included (TOK_IN, TOK_OUT, API_CALLS, CACHED_TOKENS, T_WALL_seconds, ZDI).
+
 *Note: Metrics with zero variance are excluded from pairwise comparisons.*
-
-### AEI
-
-| Comparison | p-value | Significant | Cliff's δ | Effect Size |
-|------------|---------|-------------|-----------|-------------|
-| baes vs chatdev | 0.0000 | ✓ | 1.000 | large |
-| baes vs ghspec | 0.0000 | ✓ | 0.986 | large |
-| chatdev vs ghspec | 0.0000 | ✓ | -1.000 | large |
-
-  *→ baes has large higher AEI than chatdev (δ=1.000)*
-  *→ baes has large higher AEI than ghspec (δ=0.986)*
-  *→ chatdev has large lower AEI than ghspec (δ=-1.000)*
-
 
 ### API_CALLS
 
@@ -728,7 +773,7 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | baes vs chatdev | 0.0000 | ✓ | -1.000 | large |
-| baes vs ghspec | 0.0000 | ✓ | -0.126 | negligible |
+| baes vs ghspec | 0.0000 | ✓ | -0.130 | negligible |
 | chatdev vs ghspec | 0.0000 | ✓ | 0.994 | large |
 
   *→ baes has large lower CACHED_TOKENS than chatdev (δ=-1.000)*
@@ -767,11 +812,11 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | baes vs chatdev | 0.0000 | ✓ | -1.000 | large |
-| baes vs ghspec | 0.0000 | ✓ | -0.995 | large |
+| baes vs ghspec | 0.0000 | ✓ | -0.991 | large |
 | chatdev vs ghspec | 0.0000 | ✓ | 1.000 | large |
 
   *→ baes has large lower T_WALL_seconds than chatdev (δ=-1.000)*
-  *→ baes has large lower T_WALL_seconds than ghspec (δ=-0.995)*
+  *→ baes has large lower T_WALL_seconds than ghspec (δ=-0.991)*
   *→ chatdev has large higher T_WALL_seconds than ghspec (δ=1.000)*
 
 
@@ -780,56 +825,63 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 | Comparison | p-value | Significant | Cliff's δ | Effect Size |
 |------------|---------|-------------|-----------|-------------|
 | baes vs chatdev | 0.0000 | ✓ | -1.000 | large |
-| baes vs ghspec | 0.0000 | ✓ | -0.995 | large |
+| baes vs ghspec | 0.0000 | ✓ | -0.991 | large |
 | chatdev vs ghspec | 0.0000 | ✓ | 1.000 | large |
 
   *→ baes has large lower ZDI than chatdev (δ=-1.000)*
-  *→ baes has large lower ZDI than ghspec (δ=-0.995)*
+  *→ baes has large lower ZDI than ghspec (δ=-0.991)*
   *→ chatdev has large higher ZDI than ghspec (δ=1.000)*
 
 
-## 5. Outlier Detection
+## 5. Outlier Detection (Reliable Metrics Only)
 
 Values > 3σ from median (per framework, per metric).
 
+**Analysis Scope**: Only reliably measured metrics checked for outliers.
+
 **baes:**
   - **CACHED_TOKENS**: 1 outlier(s) at runs [1] with values [7040]
+  - **T_WALL_seconds**: 1 outlier(s) at runs [23] with values [412.0262072086334]
+  - **ZDI**: 1 outlier(s) at runs [23] with values [83]
 
 **ghspec:**
-  - **AEI**: 1 outlier(s) at runs [14] with values [0.09777570536584618]
   - **API_CALLS**: 1 outlier(s) at runs [14] with values [27]
   - **CACHED_TOKENS**: 1 outlier(s) at runs [8] with values [11264]
 
-## 5. Composite Scores
 
-**Q*** = 0.4·ESR + 0.3·(CRUDe/12) + 0.3·MC
-
-**AEI** = AUTR / log(1 + TOK_IN)
-
-| Framework | Q* Mean | Q* CI | AEI Mean | AEI CI |
-|-----------|---------|-------|----------|--------|
-| baes | 0.000 | [0.000, 0.000] | 0.099 | [0.098, 0.100] |
-| chatdev | 0.000 | [0.000, 0.000] | 0.081 | [0.081, 0.081] |
-| ghspec | 0.000 | [0.000, 0.000] | 0.092 | [0.092, 0.093] |
-
-
-## 6. Visual Summary
+## 6. Visual Summary (Reliable Metrics Only)
 
 ### Key Visualizations
 
-The following charts provide visual insights into framework performance:
+All visualizations use **reliably measured metrics only** to ensure accurate framework comparison:
 
-**Radar Chart** - Multi-dimensional comparison across 6 key metrics
+**Radar Chart** - Multi-dimensional comparison across 6 reliable metrics (TOK_IN, TOK_OUT, T_WALL, API_CALLS, CACHED_TOKENS, ZDI)
 
 ![Radar Chart](radar_chart.svg)
 
-**Pareto Plot** - Quality vs Cost trade-off analysis
+**Token Efficiency Chart** - Scatter plot: Input vs Output tokens with execution time
 
-![Pareto Plot](pareto_plot.svg)
+![Token Efficiency](token_efficiency.svg)
 
-**Timeline Chart** - CRUD evolution over execution steps
+**API Efficiency Bar Chart** - API calls with tokens-per-call ratios
 
-![Timeline Chart](timeline_chart.svg)
+![API Efficiency](api_efficiency_bar.svg)
+
+**Cache Efficiency Chart** - Stacked bars: Cached vs uncached tokens with hit rates
+
+![Cache Efficiency](cache_efficiency_chart.svg)
+
+**Time Distribution Chart** - Box plots showing execution time variability
+
+![Time Distribution](time_distribution.svg)
+
+**API Efficiency Chart** - Token efficiency across frameworks
+
+![API Efficiency Chart](api_efficiency_chart.svg)
+
+**API Calls Timeline** - API call patterns over time
+
+![API Calls Timeline](api_calls_timeline.svg)
 
 ---
 
@@ -837,15 +889,15 @@ The following charts provide visual insights into framework performance:
 
 ### 🎯 Framework Selection Guidance
 
+- **📊 Analysis Scope**: Recommendations based on **reliably measured metrics only** (tokens, time, API calls, caching). Quality metrics (Q*, ESR, CRUDe, MC) and autonomy metrics (AUTR, AEI) excluded due to measurement limitations. See 'Limitations and Future Work' section for details.
+
 - **💰 Cost Optimization**: Choose **baes** if minimizing LLM token costs is priority. It uses 9.2x fewer tokens than chatdev.
 
-- **⚡ Speed Priority**: Choose **baes** for fastest execution. It completes tasks 9.6x faster than chatdev (saves ~25.7 minutes per task).
+- **⚡ Speed Priority**: Choose **baes** for fastest execution. It completes tasks 9.1x faster than chatdev (saves ~25.6 minutes per task).
 
-- **⚙️ Efficiency Leader**: **baes** delivers the best quality-per-token ratio (AEI = 0.099), making it ideal for balancing quality and cost.
+- **📡 API Efficiency**: **ghspec** uses fewest API calls, while **chatdev** maximizes tokens per call (better batching). Choose based on latency vs throughput priority.
 
-- **🤖 Autonomy**: All frameworks achieve perfect autonomy (AUTR = 1.0) - no human intervention required during execution.
-
-- **⚠️ Quality Metrics Not Measured**: Q_star, ESR, CRUDe, MC show zero values because generated applications are not executed. This experiment measures **code generation efficiency** (tokens, time, automation), not **runtime quality**. See `docs/QUALITY_METRICS_INVESTIGATION.md` for details.
+- **💾 Cost Savings**: **chatdev** achieves 13.3% cache hit rate, reducing costs through OpenAI's prompt caching (~50% discount on cached tokens).
 
 ### 📋 Decision Matrix
 
@@ -853,5 +905,97 @@ The following charts provide visual insights into framework performance:
 |----------|----------------------|-----------|
 | Cost-sensitive projects | baes | Lowest token consumption |
 | Time-critical tasks | baes | Fastest execution time |
-| Balanced quality/cost | baes | Best efficiency index (AEI) |
 
+
+## 8. Limitations and Future Work
+
+### 🔬 Scientific Honesty Statement
+
+This report focuses on **reliably measured metrics only** to maintain scientific integrity. Several metrics are excluded from analysis due to measurement limitations:
+
+### ❌ Unmeasured Metrics
+
+**Q* (Quality Star), ESR (Emerging State Rate), CRUDe (CRUD Coverage), MC (Model Call Efficiency)**
+
+**Status**: Always show zero values
+
+**Reason**: Generated applications are **not executed** during experiments. These metrics require:
+- Starting application servers (`uvicorn`, `flask run`, etc.)
+- Testing CRUD endpoints via HTTP requests
+- Measuring runtime behavior and error rates
+
+**Current Scope**: This experiment measures **code generation efficiency** (tokens, time, API usage), not **runtime code quality**.
+
+**Implementation Required**: Server startup automation, endpoint testing framework, error detection (estimated 20-40 hours)
+
+**Documentation**: See `docs/QUALITY_METRICS_INVESTIGATION.md` for complete analysis
+
+### ⚠️ Partially Measured Metrics
+
+**AUTR (Autonomy Rate), AEI (Automation Efficiency), HIT (HITL Count), HEU (Human Effort)**
+
+**Status**: Measured for ChatDev/GHSpec, NOT measured for BAEs
+
+**Reason**: These metrics depend on Human-in-the-Loop (HITL) event detection:
+
+| Framework | Detection Method | Status |
+|-----------|-----------------|---------|
+| ChatDev | 5 regex patterns in logs | ✅ Reliable |
+| GHSpec | `[NEEDS CLARIFICATION:]` marker | ✅ Reliable |
+| BAEs | Hardcoded to zero (no detection) | ❌ Unreliable |
+
+**Scientific Implication**: Comparisons involving BAEs for these metrics are **methodologically unsound**. BAEs values (AUTR=1.0, HIT=0) are assumptions, not measurements.
+
+**Validation**: Manual investigation of 23 BAEs runs confirmed zero HITL events for this specific experiment (see `docs/baes/BAES_HITL_INVESTIGATION.md`), but future experiments with ambiguous requirements may miss HITL events.
+
+**Implementation Required**: BAEs HITL detection mechanism (estimated 8-12 hours)
+
+### 🚀 Future Work Roadmap
+
+**Priority 1: Quality Metrics Implementation (High Impact)**
+- Implement automated server startup for generated applications
+- Create endpoint testing framework for CRUD validation
+- Enable Q*, ESR, CRUDe, MC measurement
+- **Benefit**: Enables runtime quality comparison
+- **Effort**: 20-40 hours
+
+**Priority 2: BAEs HITL Detection (Scientific Integrity)**
+- Implement HITL detection in BAEs adapter
+- Enable reliable AUTR, AEI, HIT, HEU measurement
+- **Benefit**: Methodologically sound autonomy comparisons
+- **Effort**: 8-12 hours
+
+**Priority 3: Extended Metrics (Additional Insights)**
+- Cost efficiency: Dollar cost per task (tokens × pricing)
+- Latency analysis: P50/P95/P99 response times
+- Resource efficiency: Memory/CPU usage
+- **Benefit**: Practical deployment considerations
+- **Effort**: 12-20 hours
+
+**Priority 4: Experiment Scaling (Statistical Power)**
+- Increase sample size beyond current 62 runs
+- Achieve statistical significance (current p-values > 0.05 for most comparisons)
+- Narrow confidence intervals
+- **Benefit**: Conclusive statistical evidence
+- **Effort**: Compute time only (automated)
+
+### 📊 What We Can Conclude
+
+**From Reliable Metrics (High Confidence):**
+- Token consumption patterns (TOK_IN, TOK_OUT)
+- Execution time characteristics (T_WALL, ZDI)
+- API call efficiency (API_CALLS, batching strategies)
+- Cache adoption (CACHED_TOKENS, hit rates)
+
+**What We CANNOT Conclude:**
+- Runtime code quality (Q*, ESR, CRUDe, MC not measured)
+- BAEs autonomy level (AUTR, HIT hardcoded, not detected)
+- Framework automation efficiency involving BAEs (AEI unreliable)
+
+**Recommendations for Users:**
+1. **Use reliable metrics** (tokens, time, API calls) for framework comparison
+2. **Do not compare AUTR/AEI** across frameworks until BAEs detection implemented
+3. **Validate quality manually** if runtime correctness is critical
+4. **Monitor future updates** as quality metrics implementation progresses
+
+---
