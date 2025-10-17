@@ -129,10 +129,38 @@ def generate_statistical_report(
 
 **Note:** Framework descriptions use fallback defaults (not in config yet). Phase 9 will address this.
 
-### Phase 4: Dynamic Stopping Rule Parameters (HIGH PRIORITY)
-**Status:** Not Started  
+### ✅ Phase 4: Dynamic Stopping Rule Parameters (HIGH PRIORITY - COMPLETED)
+**Status:** ✅ Completed  
+**Date Completed:** October 17, 2025  
+**Commit:** 367979b  
 **Estimated Time:** 2 hours  
-**Target:** Replace 6+ hardcoded stopping rule values
+**Actual Time:** ~20 minutes
+
+**Changes Made:**
+- Extracted `stopping_rule` configuration from config
+- Added min_runs, max_runs, max_half_width_pct, confidence_level extraction
+- Converted confidence_level to percentage format (0.95 → 95%)
+- Replaced hardcoded values in Statistical Power and Conclusion Validity sections
+- Dynamic progress display now uses max_runs from config
+
+**Dynamic Values Extracted:**
+- `max_runs`: 100 (from stopping_rule.max_runs)
+- `max_half_width_pct`: 10 (from stopping_rule.max_half_width_pct)
+- `confidence_level`: 95% (converted from 0.95)
+- Progress format: `framework (X/{max_runs})`
+
+**Testing:**
+- ✅ Report generated successfully
+- ✅ Stopping rule: "CI half-width ≤ 10% of mean (max 100 runs per framework)"
+- ✅ Current status: "baes (17/100), chatdev (16/100), ghspec (15/100)"
+- ✅ Bootstrap CI: "95% confidence intervals with 10,000 resamples"
+
+**Hardcoded Values Eliminated:** 5/45+ (11% this phase)
+- 2× "100 runs" references
+- 2× "10%" CI threshold
+- 1× "95%" confidence level
+
+**Cumulative Progress:** 26/45+ (58%)
 
 ### Phase 5: Dynamic Experimental Protocol (MEDIUM PRIORITY)
 **Status:** Not Started  
@@ -208,17 +236,17 @@ code src/analysis/statistics.py
 ## Metrics
 
 ### Progress Summary
-- **Completed Phases:** 3/9 (33%)
+- **Completed Phases:** 4/9 (44%)
 - **Estimated Total Time:** 28 hours (including Phase 9)
-- **Time Spent:** ~1.9 hours
+- **Time Spent:** ~2.2 hours
 - **Time Remaining:** ~26 hours
-- **Efficiency:** Running 3-6x faster than estimates! 🚀
+- **Efficiency:** Running 4-8x faster than estimates! 🚀🚀
 - **⚠️ Critical Phase Added:** Phase 9 to eliminate dangerous fallbacks
 
 ### Code Changes
 - **Files Modified:** 1 (src/analysis/statistics.py)
-- **Hardcoded Values Eliminated:** 21/45+ (47%)
-- **Lines Changed:** ~90 lines (config + model + framework metadata)
+- **Hardcoded Values Eliminated:** 26/45+ (58%)
+- **Lines Changed:** ~100 lines (config + model + frameworks + stopping rule)
 
 ### Testing Coverage
 - ✅ Backward compatibility verified (Phase 1)
@@ -318,6 +346,28 @@ code src/analysis/statistics.py
    - Makes report readable even if config incomplete
    - **BUT:** Can mask missing config fields (Phase 9 will address)
 
+### Phase 4 Insights
+
+1. **Type Conversions Matter**
+   - Config has `confidence_level: 0.95` (float)
+   - Report needs "95%" (integer percentage)
+   - Simple conversion: `int(confidence_level * 100)`
+
+2. **Nested Config Structures**
+   - `stopping_rule` is a nested dictionary in config
+   - Pattern: `config.get('stopping_rule', {}).get('max_runs', 100)`
+   - Cleaner: extract dict first, then get individual values
+
+3. **Ultra Quick Win!**
+   - Phase 4 completed in ~20 minutes vs 2 hour estimate (6x faster!)
+   - Pattern well-established: extract → replace → test
+   - High momentum carrying through phases
+
+4. **Small Changes, Big Impact**
+   - Only 5 hardcoded values replaced
+   - But critical for experiment reproducibility
+   - Stopping criteria must match actual configuration
+
 ### Critical Realization: Fallbacks Are Dangerous
 
 **After Phase 2-3 implementation, identified critical issue:**
@@ -371,5 +421,5 @@ Fallback values (`config.get(key, default)`) create **"silent wrong behavior"**:
 
 ---
 
-**Last Updated:** October 17, 2025 08:20 UTC  
-**Status:** Phase 3 Complete ✅ | 33% Progress | Ready for Phase 4 (Stopping Rules)
+**Last Updated:** October 17, 2025 08:30 UTC  
+**Status:** Phase 4 Complete ✅ | 44% Progress | More than halfway through high-priority phases!
