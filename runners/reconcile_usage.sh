@@ -289,7 +289,7 @@ EOF
   *)
     # Parse options
     MIN_AGE=30
-    MAX_AGE=24
+    MAX_AGE=99999 # effectively no limit as default
     FORCE=false
     FRAMEWORK=""
     RUN_ID=""
