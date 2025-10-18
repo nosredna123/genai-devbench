@@ -10,8 +10,9 @@
 1. **Centralize configuration** for metrics, pricing, visualizations, and reporting in `config/experiment.yaml`.
 2. **Maintain and improve reliable metrics** (TOK_IN, TOK_OUT, API_CALLS, CACHED_TOKENS, T_WALL_seconds, ZDI, UTT).
 3. **Introduce COST_USD** metric using OpenAI pricing with cache discounts.
-4. **Ensure reports and charts** dynamically use the centralized configuration, referencing reliable metrics only.
-5. **Document unmeasured/partial metrics** as excluded, without attempting to implement them now.
+4. **Rename the reporting module** to a more descriptive name and cascade the change through all artifacts that generate or consume analysis outputs.
+5. **Ensure reports and charts** dynamically use the centralized configuration, referencing reliable metrics only.
+6. **Document unmeasured/partial metrics** as excluded, without attempting to implement them now.
 
 ---
 
@@ -60,13 +61,15 @@ This unification eliminates additional files (e.g., `metrics.yaml`, `pricing.yam
 - **Update** orchestrator runner to pass model information into the collector.
 - **Write unit tests** (`tests/unit/test_cost_calculator.py`) covering cache discounts and edge cases.
 
-### **Stage 3 – Data-Driven Report Generator (10-14h, critical)**
+### **Stage 3 – Data-Driven Report Generator & Module Rename (12-16h, critical)**
 
-- **Refactor** `src/analysis/statistics.py`:
+- **Rename** `src/analysis/statistics.py` to `src/analysis/report_generator.py` (or equivalently descriptive name) and update all imports, CLI entry points, scripts (e.g., `runners/analyze_results.sh`), and tests referencing the old module.
+- **Refactor** the renamed module to:
   - Drive section order and visibility with `report.sections` from the config.
   - Generate metric definition tables, aggregate statistics, and statistical tests using only metrics from the config.
   - Add a cost analysis section defined by the "cost" category.
   - Auto-generate the limitations section from `metrics.excluded_metrics`.
+- **Update associated artifacts** such as documentation references, module docstrings, and `__all__` exports to reflect the new name.
 - **Ensure** statistical tests run only on metrics flagging `statistical_test: true`.
 
 ### **Stage 4 – Visualization Factory (6-8h, medium)**
@@ -77,7 +80,7 @@ This unification eliminates additional files (e.g., `metrics.yaml`, `pricing.yam
   - Add cost-specific charts (cost breakdown, cost vs. speed, cache savings).
 - **Update** existing plots to remove hardcoded metric names and use short titles/units from config.
 
-**Estimated Total:** 34-46 hours (4-6 weeks part-time). Stage 1 & 2 deliver quick wins; Stage 3 & 4 add polish and depth.
+**Estimated Total:** 36-48 hours (4-6 weeks part-time). Stage 1 & 2 deliver quick wins; Stage 3 & 4 add polish and depth.
 
 ---
 
@@ -87,14 +90,14 @@ This unification eliminates additional files (e.g., `metrics.yaml`, `pricing.yam
 |-------|--------------------|
 | Stage 1 | `config/experiment.yaml` contains full metrics/pricing/report definitions; `MetricsConfig` loads successfully and tests pass. |
 | Stage 2 | `COST_USD` appears in metrics JSON; cost breakdown respects cache discounts; cost tests pass. |
-| Stage 3 | Report sections are generated from config; tables contain only configured metrics; limitations reference excluded metrics automatically. |
+| Stage 3 | Report module renamed and imports updated; report sections generated from config; tables contain only configured metrics; limitations reference excluded metrics automatically. |
 | Stage 4 | Visualizations read metric lists from config; new cost charts generated; no hardcoded metrics remain in plotting code. |
 
 ---
 
 ## 🧪 Testing & Validation
 
-- **Unit Tests:** `test_metrics_config.py`, `test_cost_calculator.py` verifying config parsing, formatting, and cost math.
+- **Unit Tests:** `test_metrics_config.py`, `test_cost_calculator.py`, `test_report_generator.py` (renamed) verifying config parsing, formatting, and cost math.
 - **Integration Tests:** Update end-to-end tests to validate presence of new metrics and cost breakdown.
 - **Regression Run:** Execute `runners/analyze_results.sh` and ensure identical outputs for existing reliable metrics plus new cost fields.
 
@@ -135,6 +138,6 @@ This unification eliminates additional files (e.g., `metrics.yaml`, `pricing.yam
 
 1. Implement Stage 1 and Stage 2 (2-week target) for immediate value.
 2. Run full analysis to confirm metrics and cost outputs.
-3. Continue with Stage 3 and Stage 4 for polished reporting.
+3. Continue with Stage 3 and Stage 4 for polished reporting under the new module name.
 
 We will adjust the plan further after your review and any additional observations.
