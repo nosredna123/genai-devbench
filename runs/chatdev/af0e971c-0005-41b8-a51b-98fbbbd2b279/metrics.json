@@ -10,10 +10,10 @@
       "success": true,
       "retry_count": 0,
       "hitl_count": 0,
-      "tokens_in": 10564,
-      "tokens_out": 6730,
-      "api_calls": 5,
-      "cached_tokens": 0,
+      "tokens_in": 42135,
+      "tokens_out": 13342,
+      "api_calls": 27,
+      "cached_tokens": 2560,
       "start_timestamp": 1760737586,
       "end_timestamp": 1760737841
     },
@@ -24,10 +24,10 @@
       "success": true,
       "retry_count": 0,
       "hitl_count": 0,
-      "tokens_in": 0,
-      "tokens_out": 0,
-      "api_calls": 0,
-      "cached_tokens": 0,
+      "tokens_in": 53151,
+      "tokens_out": 12619,
+      "api_calls": 49,
+      "cached_tokens": 3584,
       "start_timestamp": 1760737842,
       "end_timestamp": 1760738055
     },
@@ -38,10 +38,10 @@
       "success": true,
       "retry_count": 0,
       "hitl_count": 0,
-      "tokens_in": 0,
-      "tokens_out": 0,
-      "api_calls": 0,
-      "cached_tokens": 0,
+      "tokens_in": 27878,
+      "tokens_out": 9557,
+      "api_calls": 19,
+      "cached_tokens": 5888,
       "start_timestamp": 1760738055,
       "end_timestamp": 1760738242
     },
@@ -52,9 +52,9 @@
       "success": true,
       "retry_count": 0,
       "hitl_count": 0,
-      "tokens_in": 9928,
-      "tokens_out": 4689,
-      "api_calls": 4,
+      "tokens_in": 30085,
+      "tokens_out": 11693,
+      "api_calls": 15,
       "cached_tokens": 0,
       "start_timestamp": 1760738243,
       "end_timestamp": 1760738440
@@ -66,9 +66,9 @@
       "success": true,
       "retry_count": 0,
       "hitl_count": 0,
-      "tokens_in": 27706,
-      "tokens_out": 8120,
-      "api_calls": 11,
+      "tokens_in": 35371,
+      "tokens_out": 12409,
+      "api_calls": 18,
       "cached_tokens": 6656,
       "start_timestamp": 1760738441,
       "end_timestamp": 1760738667
@@ -80,10 +80,10 @@
       "success": true,
       "retry_count": 0,
       "hitl_count": 0,
-      "tokens_in": 23030,
-      "tokens_out": 9859,
-      "api_calls": 5,
-      "cached_tokens": 2944,
+      "tokens_in": 44719,
+      "tokens_out": 15498,
+      "api_calls": 9,
+      "cached_tokens": 4864,
       "start_timestamp": 1760738667,
       "end_timestamp": 1760738977
     }
@@ -93,17 +93,17 @@
     "HIT": 0,
     "AUTR": 1.0,
     "HEU": 0,
-    "TOK_IN": 71228,
-    "TOK_OUT": 29398,
-    "API_CALLS": 25,
-    "CACHED_TOKENS": 9600,
+    "TOK_IN": 233339,
+    "TOK_OUT": 75118,
+    "API_CALLS": 137,
+    "CACHED_TOKENS": 23552,
     "T_WALL_seconds": 1391.6881239414215,
     "CRUDe": 0,
     "ESR": 0.0,
     "MC": 0.0,
     "ZDI": 279,
     "Q_star": 0.0,
-    "AEI": 0.08949622764923743
+    "AEI": 0.08090450003636644
   },
   "usage_api_verification": {
     "verified": true,
@@ -116,5 +116,130 @@
     "discrepancy_pct_in": 0.0,
     "discrepancy_pct_out": 0.0,
     "error": null
+  },
+  "usage_api_reconciliation": {
+    "verification_status": "verified",
+    "attempts": [
+      {
+        "timestamp": "2025-10-17T22:41:22.501465+00:00",
+        "steps": [
+          {
+            "step": 1,
+            "status": "success",
+            "tokens_in": 42135,
+            "tokens_out": 13342,
+            "api_calls": 27,
+            "cached_tokens": 2560
+          },
+          {
+            "step": 2,
+            "status": "success",
+            "tokens_in": 53151,
+            "tokens_out": 12619,
+            "api_calls": 49,
+            "cached_tokens": 3584
+          },
+          {
+            "step": 3,
+            "status": "success",
+            "tokens_in": 27878,
+            "tokens_out": 9557,
+            "api_calls": 19,
+            "cached_tokens": 5888
+          },
+          {
+            "step": 4,
+            "status": "success",
+            "tokens_in": 30085,
+            "tokens_out": 11693,
+            "api_calls": 15,
+            "cached_tokens": 0
+          },
+          {
+            "step": 5,
+            "status": "success",
+            "tokens_in": 35371,
+            "tokens_out": 12409,
+            "api_calls": 18,
+            "cached_tokens": 6656
+          },
+          {
+            "step": 6,
+            "status": "success",
+            "tokens_in": 44719,
+            "tokens_out": 15498,
+            "api_calls": 9,
+            "cached_tokens": 4864
+          }
+        ],
+        "total_tokens_in": 233339,
+        "total_tokens_out": 75118,
+        "total_api_calls": 137,
+        "total_cached_tokens": 23552,
+        "steps_with_tokens": 6,
+        "total_steps": 6
+      },
+      {
+        "timestamp": "2025-10-18T00:43:08.909670+00:00",
+        "steps": [
+          {
+            "step": 1,
+            "status": "success",
+            "tokens_in": 42135,
+            "tokens_out": 13342,
+            "api_calls": 27,
+            "cached_tokens": 2560
+          },
+          {
+            "step": 2,
+            "status": "success",
+            "tokens_in": 53151,
+            "tokens_out": 12619,
+            "api_calls": 49,
+            "cached_tokens": 3584
+          },
+          {
+            "step": 3,
+            "status": "success",
+            "tokens_in": 27878,
+            "tokens_out": 9557,
+            "api_calls": 19,
+            "cached_tokens": 5888
+          },
+          {
+            "step": 4,
+            "status": "success",
+            "tokens_in": 30085,
+            "tokens_out": 11693,
+            "api_calls": 15,
+            "cached_tokens": 0
+          },
+          {
+            "step": 5,
+            "status": "success",
+            "tokens_in": 35371,
+            "tokens_out": 12409,
+            "api_calls": 18,
+            "cached_tokens": 6656
+          },
+          {
+            "step": 6,
+            "status": "success",
+            "tokens_in": 44719,
+            "tokens_out": 15498,
+            "api_calls": 9,
+            "cached_tokens": 4864
+          }
+        ],
+        "total_tokens_in": 233339,
+        "total_tokens_out": 75118,
+        "total_api_calls": 137,
+        "total_cached_tokens": 23552,
+        "steps_with_tokens": 6,
+        "total_steps": 6
+      }
+    ],
+    "verification_message": "\u2705 Data stable across 122 minute interval (233,339 in, 75,118 out)",
+    "verified_at": "2025-10-18T00:43:08.909670+00:00"
   }
 }
