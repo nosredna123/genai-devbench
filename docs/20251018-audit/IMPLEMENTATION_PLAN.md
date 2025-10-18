@@ -11,8 +11,9 @@
 2. **Maintain and improve reliable metrics** (TOK_IN, TOK_OUT, API_CALLS, CACHED_TOKENS, T_WALL_seconds, ZDI, UTT).
 3. **Introduce COST_USD** metric using OpenAI pricing with cache discounts.
 4. **Rename the reporting module** to a more descriptive name and cascade the change through all artifacts that generate or consume analysis outputs.
-5. **Ensure reports and charts** dynamically use the centralized configuration, referencing reliable metrics only.
-6. **Document unmeasured/partial metrics** as excluded, without attempting to implement them now.
+5. **Audit key metrics and visualizations** to verify correctness of central tendency calculations and anomaly handling (API calls timeline, ZDI, radar chart, token efficiency scatter, API calls evolution).
+6. **Ensure reports and charts** dynamically use the centralized configuration, referencing reliable metrics only.
+7. **Document unmeasured/partial metrics** as excluded, without attempting to implement them now.
 
 ---
 
@@ -80,7 +81,21 @@ This unification eliminates additional files (e.g., `metrics.yaml`, `pricing.yam
   - Add cost-specific charts (cost breakdown, cost vs. speed, cache savings).
 - **Update** existing plots to remove hardcoded metric names and use short titles/units from config.
 
-**Estimated Total:** 36-48 hours (4-6 weeks part-time). Stage 1 & 2 deliver quick wins; Stage 3 & 4 add polish and depth.
+### **Stage 5 – Metrics & Visualization Validation (8-12h, high)**
+
+- **Audit API Calls Timeline** computation ensuring step values use configured aggregation (mean/median) across verified runs instead of last-run sampling. Update metric aggregation rules in config if needed.
+- **Investigate ZDI metric capture** end-to-end (adapter outputs → metrics collector → report) to confirm correctness, add logging/tests, and document findings.
+- **Review Radar Chart** scaling and data sources:
+  - Confirm BAEs zero values and fix normalization/metric selection.
+  - Evaluate percent-based scale; adjust normalization or config to display user-friendly percentages.
+  - Validate axis scaling formulas against configuration.
+- **Analyze Token Efficiency Scatter**:
+  - Verify why all points sit above diagonal; confirm expected relationship or fix axis mapping.
+  - Resolve zero-value artifacts by filtering to verified runs and enforcing minimum thresholds.
+- **Inspect API Calls Evolution Across Steps** chart to understand ghspec step 6 zeros; fix data extraction if missing values, and ensure fallback/NA handling is explicit.
+- **Document resolutions** and update visualization config/tests accordingly.
+
+**Estimated Total:** 44-60 hours (5-7 weeks part-time). Stage 1 & 2 deliver quick wins; Stage 3 & 4 add polish and depth; Stage 5 ensures data integrity.
 
 ---
 
@@ -92,14 +107,16 @@ This unification eliminates additional files (e.g., `metrics.yaml`, `pricing.yam
 | Stage 2 | `COST_USD` appears in metrics JSON; cost breakdown respects cache discounts; cost tests pass. |
 | Stage 3 | Report module renamed and imports updated; report sections generated from config; tables contain only configured metrics; limitations reference excluded metrics automatically. |
 | Stage 4 | Visualizations read metric lists from config; new cost charts generated; no hardcoded metrics remain in plotting code. |
+| Stage 5 | Timeline, radar, scatter, and evolution charts validated; ZDI calculation verified; aggregation rules documented and updated where necessary. |
 
 ---
 
 ## 🧪 Testing & Validation
 
-- **Unit Tests:** `test_metrics_config.py`, `test_cost_calculator.py`, `test_report_generator.py` (renamed) verifying config parsing, formatting, and cost math.
+- **Unit Tests:** `test_metrics_config.py`, `test_cost_calculator.py`, `test_report_generator.py` (renamed) verifying config parsing, formatting, and cost math; add targeted tests for ZDI aggregation and chart data preparation functions.
 - **Integration Tests:** Update end-to-end tests to validate presence of new metrics and cost breakdown.
 - **Regression Run:** Execute `runners/analyze_results.sh` and ensure identical outputs for existing reliable metrics plus new cost fields.
+- **Visualization Validation:** Capture before/after snapshots for radar, token efficiency scatter, API calls timeline/evolution to confirm fixes and provide audit trail.
 
 ---
 
@@ -109,8 +126,9 @@ This unification eliminates additional files (e.g., `metrics.yaml`, `pricing.yam
 2. `docs/COST_CALCULATION_GUIDE.md` – explains pricing and formulas.
 3. `docs/ADDING_NEW_METRICS.md` – step-by-step instructions for future metrics.
 4. `docs/EXTENDING_VISUALIZATIONS.md` – how to add new charts via config.
-5. `docs/20251018-audit/IMPLEMENTATION_PROGRESS.md` – ongoing status.
-6. `docs/20251018-audit/IMPLEMENTATION_COMPLETE.md` – final summary.
+5. `docs/VISUALIZATION_VALIDATION_LOG.md` – captures findings/resolutions for radar, scatter, timeline, evolution, and ZDI investigations.
+6. `docs/20251018-audit/IMPLEMENTATION_PROGRESS.md` – ongoing status.
+7. `docs/20251018-audit/IMPLEMENTATION_COMPLETE.md` – final summary.
 
 ---
 
@@ -139,5 +157,6 @@ This unification eliminates additional files (e.g., `metrics.yaml`, `pricing.yam
 1. Implement Stage 1 and Stage 2 (2-week target) for immediate value.
 2. Run full analysis to confirm metrics and cost outputs.
 3. Continue with Stage 3 and Stage 4 for polished reporting under the new module name.
+4. Execute Stage 5 investigations, track findings in `docs/VISUALIZATION_VALIDATION_LOG.md`, and feed improvements back into config/tests.
 
 We will adjust the plan further after your review and any additional observations.
