@@ -118,7 +118,7 @@
     "error": null
   },
   "usage_api_reconciliation": {
-    "verification_status": "pending",
+    "verification_status": "verified",
     "attempts": [
       {
         "timestamp": "2025-10-18T08:24:53.825428+00:00",
@@ -178,8 +178,68 @@
         "total_cached_tokens": 0,
         "steps_with_tokens": 3,
         "total_steps": 6
+      },
+      {
+        "timestamp": "2025-10-18T09:04:56.592571+00:00",
+        "steps": [
+          {
+            "step": 1,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "api_calls": 0,
+            "cached_tokens": 0
+          },
+          {
+            "step": 2,
+            "status": "success",
+            "tokens_in": 7150,
+            "tokens_out": 3599,
+            "api_calls": 7,
+            "cached_tokens": 0
+          },
+          {
+            "step": 3,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "api_calls": 0,
+            "cached_tokens": 0
+          },
+          {
+            "step": 4,
+            "status": "success",
+            "tokens_in": 12573,
+            "tokens_out": 11271,
+            "api_calls": 17,
+            "cached_tokens": 0
+          },
+          {
+            "step": 5,
+            "status": "success",
+            "tokens_in": 19125,
+            "tokens_out": 13326,
+            "api_calls": 23,
+            "cached_tokens": 0
+          },
+          {
+            "step": 6,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "api_calls": 0,
+            "cached_tokens": 0
+          }
+        ],
+        "total_tokens_in": 38848,
+        "total_tokens_out": 28196,
+        "total_api_calls": 47,
+        "total_cached_tokens": 0,
+        "steps_with_tokens": 3,
+        "total_steps": 6
       }
     ],
-    "verification_message": "First reconciliation attempt successful, awaiting verification"
+    "verification_message": "\u2705 Data stable across 40 minute interval (38,848 in, 28,196 out)",
+    "verified_at": "2025-10-18T09:04:56.592571+00:00"
   }
 }

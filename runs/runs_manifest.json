@@ -1,11 +1,11 @@
 {
   "version": "1.0",
-  "last_updated": "2025-10-18T08:43:34.783416Z",
-  "total_runs": 136,
+  "last_updated": "2025-10-18T09:17:37.968284Z",
+  "total_runs": 139,
   "frameworks": {
-    "chatdev": 45,
-    "baes": 49,
-    "ghspec": 42
+    "chatdev": 46,
+    "baes": 50,
+    "ghspec": 43
   },
   "runs": [
     {
@@ -954,7 +954,7 @@
       "path": "chatdev/d2b5c3e4-c4f1-4d71-b470-10f916a58214",
       "start_time": "2025-10-18T01:23:29.369378Z",
       "end_time": "2025-10-18T01:43:26.322262Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 199320,
       "total_tokens_out": 75148
     },
@@ -964,7 +964,7 @@
       "path": "ghspec/c967d8cd-d775-4b8a-99b7-36ebe6689ff5",
       "start_time": "2025-10-18T01:44:08.647207Z",
       "end_time": "2025-10-18T01:52:42.715135Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 59544,
       "total_tokens_out": 29479
     },
@@ -974,7 +974,7 @@
       "path": "baes/4d23855e-0d92-4a8a-a456-2df81f091ff5",
       "start_time": "2025-10-18T01:53:06.972352Z",
       "end_time": "2025-10-18T01:55:20.510437Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 19066,
       "total_tokens_out": 5177
     },
@@ -984,7 +984,7 @@
       "path": "chatdev/497d0b9f-6b89-4081-a0e7-96c1ae0b0ae9",
       "start_time": "2025-10-18T01:56:48.708776Z",
       "end_time": "2025-10-18T02:16:17.714978Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 225161,
       "total_tokens_out": 71947
     },
@@ -994,7 +994,7 @@
       "path": "ghspec/fbc0eddc-3fd9-4b4a-a095-64ea45b7b6b0",
       "start_time": "2025-10-18T02:16:58.196007Z",
       "end_time": "2025-10-18T02:25:28.797194Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 56056,
       "total_tokens_out": 29738
     },
@@ -1004,7 +1004,7 @@
       "path": "baes/1bf859e8-9fa0-4707-9802-22c0faaf2cd6",
       "start_time": "2025-10-18T02:25:55.883548Z",
       "end_time": "2025-10-18T02:28:00.063516Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 27525,
       "total_tokens_out": 7831
     },
@@ -1014,7 +1014,7 @@
       "path": "chatdev/db9ae810-fe49-463d-a87f-fd54e9bcfd3c",
       "start_time": "2025-10-18T02:29:22.217695Z",
       "end_time": "2025-10-18T02:51:19.268810Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 229744,
       "total_tokens_out": 82250
     },
@@ -1024,7 +1024,7 @@
       "path": "ghspec/e44b176f-8487-4dce-9421-2633719d8ee7",
       "start_time": "2025-10-18T02:52:01.589000Z",
       "end_time": "2025-10-18T02:59:03.822320Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 43957,
       "total_tokens_out": 25558
     },
@@ -1034,7 +1034,7 @@
       "path": "baes/df871e03-71fa-45d3-a11d-7bb360cbcbe4",
       "start_time": "2025-10-18T02:59:29.074174Z",
       "end_time": "2025-10-18T03:01:42.326020Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 21919,
       "total_tokens_out": 6377
     },
@@ -1044,7 +1044,7 @@
       "path": "chatdev/cf8c5286-8ca1-4dfd-be6b-9cc0d9234f11",
       "start_time": "2025-10-18T03:03:06.259480Z",
       "end_time": "2025-10-18T03:22:14.485140Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 230870,
       "total_tokens_out": 70458
     },
@@ -1054,7 +1054,7 @@
       "path": "ghspec/af646b55-ef83-44fb-abbb-087735b80bf1",
       "start_time": "2025-10-18T03:22:55.789935Z",
       "end_time": "2025-10-18T03:29:36.008505Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 48217,
       "total_tokens_out": 24392
     },
@@ -1064,7 +1064,7 @@
       "path": "baes/8c5babbb-9eca-46da-8618-0e7e6d40e4e0",
       "start_time": "2025-10-18T03:30:04.038142Z",
       "end_time": "2025-10-18T03:32:17.549034Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 16462,
       "total_tokens_out": 5108
     },
@@ -1074,7 +1074,7 @@
       "path": "chatdev/730d09fa-812c-4eb7-82fb-1232ee4e474b",
       "start_time": "2025-10-18T03:33:51.999485Z",
       "end_time": "2025-10-18T03:52:23.815181Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 193749,
       "total_tokens_out": 69214
     },
@@ -1084,7 +1084,7 @@
       "path": "ghspec/00dc3a92-6a8e-4d50-9142-99a02c996cd6",
       "start_time": "2025-10-18T03:53:06.378961Z",
       "end_time": "2025-10-18T03:59:14.309911Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 48160,
       "total_tokens_out": 22476
     },
@@ -1094,7 +1094,7 @@
       "path": "baes/f81662e1-bd1b-4ae8-a3e8-9b8604fad5cd",
       "start_time": "2025-10-18T03:59:40.811243Z",
       "end_time": "2025-10-18T04:01:52.587116Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 25607,
       "total_tokens_out": 6655
     },
@@ -1104,7 +1104,7 @@
       "path": "chatdev/78150bf6-bc26-4a26-9d09-aa2827739410",
       "start_time": "2025-10-18T04:03:18.074137Z",
       "end_time": "2025-10-18T04:23:10.428265Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 211282,
       "total_tokens_out": 82252
     },
@@ -1114,7 +1114,7 @@
       "path": "ghspec/cf99d6e0-a90e-4322-907c-ec3adc6ce59d",
       "start_time": "2025-10-18T04:23:52.334924Z",
       "end_time": "2025-10-18T04:27:50.023287Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 27026,
       "total_tokens_out": 14937
     },
@@ -1124,9 +1124,9 @@
       "path": "baes/a7528f73-d107-4a8d-81f1-714c2b6f2170",
       "start_time": "2025-10-18T04:28:15.637058Z",
       "end_time": "2025-10-18T04:30:16.778836Z",
-      "verification_status": "pending",
-      "total_tokens_in": 19066,
-      "total_tokens_out": 5223
+      "verification_status": "warning",
+      "total_tokens_in": 3711,
+      "total_tokens_out": 522
     },
     {
       "run_id": "28e2baba-02b6-433b-b0c2-ef0cda4ec787",
@@ -1134,7 +1134,7 @@
       "path": "chatdev/28e2baba-02b6-433b-b0c2-ef0cda4ec787",
       "start_time": "2025-10-18T04:31:42.996238Z",
       "end_time": "2025-10-18T04:49:51.728956Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 206620,
       "total_tokens_out": 73333
     },
@@ -1144,7 +1144,7 @@
       "path": "ghspec/0dd454d0-8030-4a02-9b03-ebc760e08426",
       "start_time": "2025-10-18T04:50:32.310819Z",
       "end_time": "2025-10-18T04:59:32.702710Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 55507,
       "total_tokens_out": 30638
     },
@@ -1155,8 +1155,8 @@
       "start_time": "2025-10-18T05:00:02.099973Z",
       "end_time": "2025-10-18T05:02:32.620674Z",
       "verification_status": "pending",
-      "total_tokens_in": 13586,
-      "total_tokens_out": 3487
+      "total_tokens_in": 19066,
+      "total_tokens_out": 5134
     },
     {
       "run_id": "819c0f34-f14a-4b49-83aa-2dd1288c8d85",
@@ -1164,7 +1164,7 @@
       "path": "chatdev/819c0f34-f14a-4b49-83aa-2dd1288c8d85",
       "start_time": "2025-10-18T05:04:00.843249Z",
       "end_time": "2025-10-18T05:25:40.340205Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 256021,
       "total_tokens_out": 74419
     },
@@ -1174,7 +1174,7 @@
       "path": "ghspec/3b125f1c-61c0-4564-a3d8-e85134a9842f",
       "start_time": "2025-10-18T05:26:20.443317Z",
       "end_time": "2025-10-18T05:34:39.928659Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 55586,
       "total_tokens_out": 24471
     },
@@ -1184,7 +1184,7 @@
       "path": "baes/2b315098-5553-4e1e-ac00-2eb524b4b5c6",
       "start_time": "2025-10-18T05:35:05.254479Z",
       "end_time": "2025-10-18T05:37:16.001334Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 14616,
       "total_tokens_out": 3781
     },
@@ -1194,7 +1194,7 @@
       "path": "chatdev/229a1ea0-98e7-4e37-bc90-25905d0d3e71",
       "start_time": "2025-10-18T05:38:42.108394Z",
       "end_time": "2025-10-18T05:57:50.147616Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 231604,
       "total_tokens_out": 74548
     },
@@ -1204,7 +1204,7 @@
       "path": "ghspec/d2d2b181-5116-4d2c-a9b9-cd7d5bb6526c",
       "start_time": "2025-10-18T05:58:31.142123Z",
       "end_time": "2025-10-18T06:04:27.761271Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 51059,
       "total_tokens_out": 18594
     },
@@ -1214,7 +1214,7 @@
       "path": "baes/0e07d3cb-8659-4485-a381-06b0de8b0ce8",
       "start_time": "2025-10-18T06:04:55.409407Z",
       "end_time": "2025-10-18T06:07:08.956853Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 27525,
       "total_tokens_out": 7779
     },
@@ -1224,7 +1224,7 @@
       "path": "chatdev/abc270b5-d704-4dce-bc2d-4f0e25edcf37",
       "start_time": "2025-10-18T06:08:33.967088Z",
       "end_time": "2025-10-18T06:27:05.149804Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 225152,
       "total_tokens_out": 76574
     },
@@ -1234,7 +1234,7 @@
       "path": "ghspec/a930bff2-f7ab-46ca-b9c9-e7eeec524902",
       "start_time": "2025-10-18T06:27:48.337066Z",
       "end_time": "2025-10-18T06:32:10.930250Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 42718,
       "total_tokens_out": 16326
     },
@@ -1244,7 +1244,7 @@
       "path": "baes/1c79512a-9da4-4464-a707-c80fa375c14c",
       "start_time": "2025-10-18T06:32:38.738576Z",
       "end_time": "2025-10-18T06:34:41.047354Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 25607,
       "total_tokens_out": 6687
     },
@@ -1254,7 +1254,7 @@
       "path": "chatdev/6b2e09a7-bfe4-4b6a-b7db-799810e8672f",
       "start_time": "2025-10-18T06:36:05.317119Z",
       "end_time": "2025-10-18T06:53:09.418780Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 202983,
       "total_tokens_out": 69738
     },
@@ -1264,7 +1264,7 @@
       "path": "ghspec/8815dcbf-0b99-45ad-9ed1-214639bb6a43",
       "start_time": "2025-10-18T06:53:49.787760Z",
       "end_time": "2025-10-18T07:05:30.713856Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 62062,
       "total_tokens_out": 41034
     },
@@ -1274,7 +1274,7 @@
       "path": "baes/2b8a200f-aad0-4771-b65e-f9f52eed1ba1",
       "start_time": "2025-10-18T07:05:59.220927Z",
       "end_time": "2025-10-18T07:08:25.636394Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 33061,
       "total_tokens_out": 9233
     },
@@ -1284,7 +1284,7 @@
       "path": "chatdev/1616a6ef-01b5-499e-acbb-b524b91f715b",
       "start_time": "2025-10-18T07:09:52.303384Z",
       "end_time": "2025-10-18T07:28:54.150270Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 222596,
       "total_tokens_out": 76092
     },
@@ -1294,7 +1294,7 @@
       "path": "ghspec/22b58300-962a-4e00-a994-d1fb5d29edde",
       "start_time": "2025-10-18T07:29:36.762046Z",
       "end_time": "2025-10-18T07:37:23.299945Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 38848,
       "total_tokens_out": 28196
     },
@@ -1304,7 +1304,7 @@
       "path": "baes/f49c8399-c8f8-4c7a-aacc-4da3d1981420",
       "start_time": "2025-10-18T07:37:53.609619Z",
       "end_time": "2025-10-18T07:39:58.088436Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 27525,
       "total_tokens_out": 7752
     },
@@ -1314,7 +1314,7 @@
       "path": "chatdev/5e96b3e5-03c5-4771-b872-1d2e5b8b78da",
       "start_time": "2025-10-18T07:41:22.601191Z",
       "end_time": "2025-10-18T08:01:22.619041Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 212423,
       "total_tokens_out": 78695
     },
@@ -1324,7 +1324,7 @@
       "path": "ghspec/e500fbe9-04b1-4077-9e62-67336e53ba73",
       "start_time": "2025-10-18T08:02:01.870749Z",
       "end_time": "2025-10-18T08:10:28.397888Z",
-      "verification_status": "pending",
+      "verification_status": "verified",
       "total_tokens_in": 60330,
       "total_tokens_out": 25048
     },
@@ -1335,8 +1335,8 @@
       "start_time": "2025-10-18T08:10:58.957943Z",
       "end_time": "2025-10-18T08:13:24.562770Z",
       "verification_status": "pending",
-      "total_tokens_in": 0,
-      "total_tokens_out": 0
+      "total_tokens_in": 31977,
+      "total_tokens_out": 9121
     },
     {
       "run_id": "c0661ef5-d80d-463b-bf67-04a15c85d819",
@@ -1345,8 +1345,8 @@
       "start_time": "2025-10-18T08:14:50.915932Z",
       "end_time": "2025-10-18T08:32:26.203148Z",
       "verification_status": "pending",
-      "total_tokens_in": 0,
-      "total_tokens_out": 0
+      "total_tokens_in": 187538,
+      "total_tokens_out": 71962
     },
     {
       "run_id": "4ec07c17-6875-4991-825d-5376617c4a76",
@@ -1355,8 +1355,8 @@
       "start_time": "2025-10-18T08:33:05.228780Z",
       "end_time": "2025-10-18T08:41:07.730715Z",
       "verification_status": "pending",
-      "total_tokens_in": 0,
-      "total_tokens_out": 0
+      "total_tokens_in": 69216,
+      "total_tokens_out": 25962
     },
     {
       "run_id": "0b69205c-f15c-4dce-b407-a104a885bde3",
@@ -1364,6 +1364,36 @@
       "path": "baes/0b69205c-f15c-4dce-b407-a104a885bde3",
       "start_time": "2025-10-18T08:41:34.738234Z",
       "end_time": "2025-10-18T08:43:30.683236Z",
+      "verification_status": "pending",
+      "total_tokens_in": 21919,
+      "total_tokens_out": 6422
+    },
+    {
+      "run_id": "fca93ce0-244e-4a73-982e-5068c8ed3640",
+      "framework": "chatdev",
+      "path": "chatdev/fca93ce0-244e-4a73-982e-5068c8ed3640",
+      "start_time": "2025-10-18T08:44:57.313295Z",
+      "end_time": "2025-10-18T09:06:07.802314Z",
+      "verification_status": "pending",
+      "total_tokens_in": 0,
+      "total_tokens_out": 0
+    },
+    {
+      "run_id": "4d9a8db8-5c63-4956-b411-7bee8ef44bde",
+      "framework": "ghspec",
+      "path": "ghspec/4d9a8db8-5c63-4956-b411-7bee8ef44bde",
+      "start_time": "2025-10-18T09:06:51.698482Z",
+      "end_time": "2025-10-18T09:14:18.989805Z",
+      "verification_status": "pending",
+      "total_tokens_in": 0,
+      "total_tokens_out": 0
+    },
+    {
+      "run_id": "e3cf41ec-eaf8-4f97-b39a-90a8bee59093",
+      "framework": "baes",
+      "path": "baes/e3cf41ec-eaf8-4f97-b39a-90a8bee59093",
+      "start_time": "2025-10-18T09:15:07.918539Z",
+      "end_time": "2025-10-18T09:17:37.523353Z",
       "verification_status": "pending",
       "total_tokens_in": 0,
       "total_tokens_out": 0
