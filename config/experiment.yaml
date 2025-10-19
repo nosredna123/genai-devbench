@@ -430,6 +430,7 @@ report:
       title: "3. Kruskal-Wallis H-Tests (Reliable Metrics Only)"
       description: "Testing for significant differences across all frameworks"
       skip_zero_variance: true
+      significance_level: 0.05
       
     - name: pairwise_comparisons
       enabled: true
@@ -437,6 +438,8 @@ report:
       title: "4. Pairwise Comparisons (Reliable Metrics Only)"
       description: "Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes"
       skip_zero_variance: true
+      significance_level: 0.05
+      correction_method: "dunn_sidak"
       
     - name: outlier_detection
       enabled: true

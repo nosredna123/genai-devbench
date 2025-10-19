@@ -1795,163 +1795,221 @@ def generate_statistical_report(
     relative_performance_lines = _generate_relative_performance(framework_means, metrics_for_analysis)
     lines.extend(relative_performance_lines)
     
-    # Section 3: Kruskal-Wallis Tests (Reliable Metrics Only)
-    lines.extend([
-        "## 3. Kruskal-Wallis H-Tests (Reliable Metrics Only)",
-        "",
-        "Testing for significant differences across all frameworks using **reliably measured metrics only**.",
-        "",
-        "**Analysis Scope:**",
-        "- ✅ Included: TOK_IN, TOK_OUT, API_CALLS, CACHED_TOKENS, T_WALL_seconds, ZDI",
-        "- ❌ Excluded: AUTR, AEI, HIT, HEU (partial measurement), Q*, ESR, CRUDe, MC (unmeasured)",
-        "",
-        "*Note: Metrics with zero variance (all values identical) are excluded from statistical testing.*",
-        "",
-        "| Metric | H | p-value | Significant | Groups | N |",
-        "|--------|---|---------|-------------|--------|---|"
-    ])
-    
-    skipped_metrics = []
-    
-    # Only test reliable metrics
-    for metric in metrics_for_analysis:
-        # Collect metric values by framework
-        groups = {}
-        for framework, runs in frameworks_data.items():
-            groups[framework] = [run[metric] for run in runs if metric in run]
+    # Section 3: Kruskal-Wallis Tests (Config-driven)
+    kw_config = metrics_config.get_report_section('kruskal_wallis')
+    if not kw_config or not kw_config.get('enabled', True):
+        logger.info("Kruskal-Wallis section disabled by config")
+    else:
+        # Read configuration with fallbacks
+        kw_title = kw_config.get('title', '## 3. Kruskal-Wallis H-Tests (Reliable Metrics Only)')
+        kw_skip_zero_variance = kw_config.get('skip_zero_variance', True)
+        kw_significance = kw_config.get('significance_level', 0.05)
         
-        if all(len(vals) > 0 for vals in groups.values()):
-            # Check if all values are identical (zero variance)
-            all_values = [v for vals in groups.values() for v in vals]
-            if len(set(all_values)) == 1:
-                # Skip zero-variance metrics
-                skipped_metrics.append(metric)
-                continue
-            
-            result = kruskal_wallis_test(groups)
-            sig = "✓ Yes" if result['significant'] else "✗ No"
-            lines.append(
-                f"| {metric} | {result['H']:.3f} | {result['p_value']:.4f} | "
-                f"{sig} | {result['n_groups']} | {result['n_total']} |"
-            )
-            
-            # Add contextual interpretation
-            interpretation = _interpret_kruskal_wallis(result, metric)
-            if interpretation:
-                lines.append("")
-                lines.append(interpretation)
-                lines.append("")
-        else:
-            lines.append(f"| {metric} | N/A | N/A | N/A | N/A | N/A |")
-    
-    lines.extend(["", ""])
-    
-    # Add note about skipped metrics
-    if skipped_metrics:
-        lines.append(f"**Metrics Excluded** (zero variance): {', '.join(f'`{m}`' for m in skipped_metrics)}")
-        lines.append("")
-        lines.append(f"*Note: These metrics show identical values across all runs (no variance to test).*")
-        lines.append("")
-    
-    # Section 4: Pairwise Comparisons (Reliable Metrics Only)
-    lines.extend([
-        "## 4. Pairwise Comparisons (Reliable Metrics Only)",
-        "",
-        "Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.",
-        "",
-        "**Analysis Scope**: Only reliably measured metrics included (TOK_IN, TOK_OUT, API_CALLS, CACHED_TOKENS, T_WALL_seconds, ZDI).",
-        "",
-        "*Note: Metrics with zero variance are excluded from pairwise comparisons.*",
-        ""
-    ])
-    
-    # Only analyze reliable metrics
-    for metric in metrics_for_analysis:
-        # Skip metrics with zero variance
-        if metric in skipped_metrics:
-            continue
-            
-        # Collect metric values by framework
-        groups = {}
-        for framework, runs in frameworks_data.items():
-            groups[framework] = [run[metric] for run in runs if metric in run]
+        logger.info(
+            f"Generating Kruskal-Wallis section: "
+            f"skip_zero_variance={kw_skip_zero_variance}, "
+            f"significance={kw_significance}"
+        )
         
-        if all(len(vals) > 0 for vals in groups.values()) and len(groups) >= 2:
-            # Double-check variance (shouldn't be needed, but defensive)
-            all_values = [v for vals in groups.values() for v in vals]
-            if len(set(all_values)) == 1:
-                continue
-            
-            lines.append(f"### {metric}")
+        lines.extend([
+            kw_title,
+            "",
+            "Testing for significant differences across all frameworks using **reliably measured metrics only**.",
+            "",
+            "**Analysis Scope:**",
+            "- ✅ Included: TOK_IN, TOK_OUT, API_CALLS, CACHED_TOKENS, T_WALL_seconds, ZDI",
+            "- ❌ Excluded: AUTR, AEI, HIT, HEU (partial measurement), Q*, ESR, CRUDe, MC (unmeasured)",
+            "",
+        ])
+        
+        if kw_skip_zero_variance:
+            lines.append("*Note: Metrics with zero variance (all values identical) are excluded from statistical testing.*")
             lines.append("")
-            lines.append("| Comparison | p-value | Significant | Cliff's δ | Effect Size |")
-            lines.append("|------------|---------|-------------|-----------|-------------|")
-            
-            comparisons = pairwise_comparisons(groups)
-            
-            # Collect interpretations
-            interpretations = []
-            
-            for comp in comparisons:
-                pair = f"{comp['group1']} vs {comp['group2']}"
-                sig = "✓" if comp['significant'] else "✗"
-                delta = comp['cliff_delta']
-                effect = comp['effect_size']
-                
-                lines.append(
-                    f"| {pair} | {comp['p_value']:.4f} | {sig} | "
-                    f"{delta:.3f} | {effect} |"
-                )
-                
-                # Collect interpretation
-                interp = _interpret_pairwise_comparison(comp, metric)
-                if interp:
-                    interpretations.append(interp)
-            
-            # Add interpretations after the table
-            if interpretations:
-                lines.append("")
-                lines.extend(interpretations)
-            
-            lines.extend(["", ""])
-    
-    # Section 5: Outlier Detection (Reliable Metrics Only)
-    lines.extend([
-        "## 5. Outlier Detection (Reliable Metrics Only)",
-        "",
-        "Values > 3σ from median (per framework, per metric).",
-        "",
-        "**Analysis Scope**: Only reliably measured metrics checked for outliers.",
-        ""
-    ])
-    
-    outliers_found = False
-    for framework, runs in frameworks_data.items():
-        framework_outliers = []
         
-        # Only check reliable metrics for outliers
+        lines.extend([
+            "| Metric | H | p-value | Significant | Groups | N |",
+            "|--------|---|---------|-------------|--------|---|"
+        ])
+    
+        skipped_metrics = []
+    
+        # Only test reliable metrics
         for metric in metrics_for_analysis:
-            values = [run[metric] for run in runs if metric in run]
-            if len(values) >= 3:
-                outlier_indices, outlier_values = identify_outliers(values)
-                
-                if outlier_indices:
-                    framework_outliers.append(
-                        f"  - **{metric}**: {len(outlier_indices)} outlier(s) "
-                        f"at runs {outlier_indices} with values {outlier_values}"
-                    )
+            # Collect metric values by framework
+            groups = {}
+            for framework, runs in frameworks_data.items():
+                groups[framework] = [run[metric] for run in runs if metric in run]
         
-        if framework_outliers:
-            outliers_found = True
-            lines.append(f"**{framework}:**")
-            lines.extend(framework_outliers)
+            if all(len(vals) > 0 for vals in groups.values()):
+                # Check if all values are identical (zero variance)
+                all_values = [v for vals in groups.values() for v in vals]
+                if len(set(all_values)) == 1:
+                    # Skip zero-variance metrics if configured
+                    if kw_skip_zero_variance:
+                        skipped_metrics.append(metric)
+                        continue
+            
+                result = kruskal_wallis_test(groups)
+                # Use configured significance level
+                is_significant = result['p_value'] < kw_significance
+                sig = "✓ Yes" if is_significant else "✗ No"
+                lines.append(
+                    f"| {metric} | {result['H']:.3f} | {result['p_value']:.4f} | "
+                    f"{sig} | {result['n_groups']} | {result['n_total']} |"
+                )
+            
+                # Add contextual interpretation
+                interpretation = _interpret_kruskal_wallis(result, metric)
+                if interpretation:
+                    lines.append("")
+                    lines.append(interpretation)
+                    lines.append("")
+            else:
+                lines.append(f"| {metric} | N/A | N/A | N/A | N/A | N/A |")
+    
+        lines.extend(["", ""])
+    
+        # Add note about skipped metrics
+        if kw_skip_zero_variance and skipped_metrics:
+            lines.append(f"**Metrics Excluded** (zero variance): {', '.join(f'`{m}`' for m in skipped_metrics)}")
+            lines.append("")
+            lines.append(f"*Note: These metrics show identical values across all runs (no variance to test).*")
             lines.append("")
     
-    if not outliers_found:
-        lines.append("No outliers detected.")
-        lines.append("")
+    # Section 4: Pairwise Comparisons (Config-driven)
+    pw_config = metrics_config.get_report_section('pairwise_comparisons')
+    if not pw_config or not pw_config.get('enabled', True):
+        logger.info("Pairwise comparisons section disabled by config")
+    else:
+        # Read configuration with fallbacks
+        pw_title = pw_config.get('title', '## 4. Pairwise Comparisons (Reliable Metrics Only)')
+        pw_skip_zero_variance = pw_config.get('skip_zero_variance', True)
+        pw_significance = pw_config.get('significance_level', 0.05)
+        pw_correction = pw_config.get('correction_method', 'dunn_sidak')
+        
+        logger.info(
+            f"Generating pairwise comparisons section: "
+            f"skip_zero_variance={pw_skip_zero_variance}, "
+            f"significance={pw_significance}, "
+            f"correction={pw_correction}"
+        )
+        
+        lines.extend([
+            pw_title,
+            "",
+            f"Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.",
+            "",
+            "**Analysis Scope**: Only reliably measured metrics included (TOK_IN, TOK_OUT, API_CALLS, CACHED_TOKENS, T_WALL_seconds, ZDI).",
+            "",
+        ])
+        
+        if pw_skip_zero_variance:
+            lines.append("*Note: Metrics with zero variance are excluded from pairwise comparisons.*")
+            lines.append("")
     
-    lines.append("")  # Extra spacing before next section
+        # Only analyze reliable metrics
+        for metric in metrics_for_analysis:
+            # Skip metrics with zero variance (if configured and they were already identified)
+            if pw_skip_zero_variance and 'skipped_metrics' in locals() and metric in skipped_metrics:
+                continue
+            
+            # Collect metric values by framework
+            groups = {}
+            for framework, runs in frameworks_data.items():
+                groups[framework] = [run[metric] for run in runs if metric in run]
+        
+            if all(len(vals) > 0 for vals in groups.values()) and len(groups) >= 2:
+                # Double-check variance (shouldn't be needed, but defensive)
+                all_values = [v for vals in groups.values() for v in vals]
+                if len(set(all_values)) == 1:
+                    if pw_skip_zero_variance:
+                        continue
+            
+                lines.append(f"### {metric}")
+                lines.append("")
+                lines.append("| Comparison | p-value | Significant | Cliff's δ | Effect Size |")
+                lines.append("|------------|---------|-------------|-----------|-------------|")
+            
+                # Pass configured significance level to pairwise_comparisons
+                comparisons = pairwise_comparisons(groups, alpha=pw_significance)
+            
+                # Collect interpretations
+                interpretations = []
+            
+                for comp in comparisons:
+                    pair = f"{comp['group1']} vs {comp['group2']}"
+                    sig = "✓" if comp['significant'] else "✗"
+                    delta = comp['cliff_delta']
+                    effect = comp['effect_size']
+                
+                    lines.append(
+                        f"| {pair} | {comp['p_value']:.4f} | {sig} | "
+                        f"{delta:.3f} | {effect} |"
+                    )
+                
+                    # Collect interpretation
+                    interp = _interpret_pairwise_comparison(comp, metric)
+                    if interp:
+                        interpretations.append(interp)
+            
+                # Add interpretations after the table
+                if interpretations:
+                    lines.append("")
+                    lines.extend(interpretations)
+            
+                lines.extend(["", ""])
+    
+    # Section 5: Outlier Detection (Config-driven)
+    od_config = metrics_config.get_report_section('outlier_detection')
+    if not od_config or not od_config.get('enabled', True):
+        logger.info("Outlier detection section disabled by config")
+    else:
+        # Read configuration with fallbacks
+        od_title = od_config.get('title', '## 5. Outlier Detection (Reliable Metrics Only)')
+        od_threshold = od_config.get('threshold_std', 3.0)
+        
+        logger.info(
+            f"Generating outlier detection section: "
+            f"threshold={od_threshold}σ"
+        )
+        
+        lines.extend([
+            od_title,
+            "",
+            f"Values > {od_threshold}σ from median (per framework, per metric).",
+            "",
+            "**Analysis Scope**: Only reliably measured metrics checked for outliers.",
+            ""
+        ])
+    
+        outliers_found = False
+        for framework, runs in frameworks_data.items():
+            framework_outliers = []
+        
+            # Only check reliable metrics for outliers
+            for metric in metrics_for_analysis:
+                values = [run[metric] for run in runs if metric in run]
+                if len(values) >= 3:
+                    # Use configured threshold
+                    outlier_indices, outlier_values = identify_outliers(values, threshold_std=od_threshold)
+                
+                    if outlier_indices:
+                        framework_outliers.append(
+                            f"  - **{metric}**: {len(outlier_indices)} outlier(s) "
+                            f"at runs {outlier_indices} with values {outlier_values}"
+                        )
+        
+            if framework_outliers:
+                outliers_found = True
+                lines.append(f"**{framework}:**")
+                lines.extend(framework_outliers)
+                lines.append("")
+    
+        if not outliers_found:
+            lines.append("No outliers detected.")
+            lines.append("")
+    
+        lines.append("")  # Extra spacing before next section
     
     # Section 6: Visual Summary (Reliable Metrics Only)
     lines.extend([
