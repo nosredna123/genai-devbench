@@ -331,21 +331,37 @@ class VisualizationFactory:
         frameworks_data: Optional[Dict[str, List[Dict[str, Any]]]],
         kwargs: Dict[str, Any]
     ) -> tuple[Optional[Dict], Dict[str, Any]]:
-        """Prepare data for box plot (uses run-level data for distribution)."""
+        """Prepare data for box plot (uses run-level data for distribution).
+        
+        Raises:
+            ValueError: If any framework is missing the required metric
+        """
         if frameworks_data is None:
             return None, kwargs
         
         # Box plots use raw run data to show distributions
         metric = chart_config.get('metric', 'COST_USD')
         
-        # Validate that frameworks have the required metric
+        # Validate that ALL frameworks have the required metric
+        missing_metric_frameworks = []
         valid_data = {}
+        
         for fw, runs in frameworks_data.items():
-            if any(metric in run for run in runs):
+            has_metric = any(metric in run for run in runs)
+            if has_metric:
                 valid_data[fw] = runs
+            else:
+                missing_metric_frameworks.append(fw)
+        
+        # Fail explicitly if any framework is missing the metric
+        if missing_metric_frameworks:
+            raise ValueError(
+                f"Boxplot requires metric '{metric}' but missing in frameworks: "
+                f"{missing_metric_frameworks}. Cannot generate partial chart."
+            )
         
         if not valid_data:
-            return None, kwargs
+            raise ValueError(f"No frameworks have data for metric '{metric}'")
         
         return valid_data, kwargs
     

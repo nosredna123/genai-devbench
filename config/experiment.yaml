@@ -342,9 +342,9 @@ visualizations:
     
   cost_boxplot:
     enabled: true
-    title: "Cost Distribution by Framework"
-    metric: COST_USD
-    filename: "boxplot_cost_distribution.png"
+    title: "Execution Time Distribution by Framework"
+    metric: T_WALL_seconds  # Changed from COST_USD (not available for all frameworks)
+    filename: "boxplot_execution_time.png"
     
   api_calls_evolution:
     enabled: true

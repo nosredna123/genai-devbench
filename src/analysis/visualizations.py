@@ -773,9 +773,14 @@ def api_calls_timeline(
         ax.plot(steps, api_calls, marker=marker, linewidth=2.5, markersize=10,
                label=framework, color=color, alpha=0.8)
         
-        # Add value labels at each point
+        # Add value labels at each point (formatted to 2 decimal places)
         for step, calls in zip(steps, api_calls):
-            ax.annotate(f'{calls}', xy=(step, calls), xytext=(0, 8),
+            # Format: show 2 decimals if < 10, otherwise integer
+            if calls < 10:
+                label_text = f'{calls:.2f}'
+            else:
+                label_text = f'{int(round(calls))}'
+            ax.annotate(label_text, xy=(step, calls), xytext=(0, 8),
                        textcoords='offset points', ha='center',
                        fontsize=9, alpha=0.7, fontweight='bold')
     
