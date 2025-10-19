@@ -1,11 +1,11 @@
 {
   "version": "1.0",
-  "last_updated": "2025-10-19T10:09:24.108418Z",
-  "total_runs": 180,
+  "last_updated": "2025-10-19T14:30:54.906793Z",
+  "total_runs": 201,
   "frameworks": {
     "chatdev": 60,
-    "baes": 63,
-    "ghspec": 57
+    "baes": 75,
+    "ghspec": 66
   },
   "runs": [
     {
@@ -1794,9 +1794,9 @@
       "path": "chatdev/7c997ab4-d1a7-4eee-b07f-a7c3cc0fc8c7",
       "start_time": "2025-10-18T15:43:10.694677Z",
       "end_time": "2025-10-18T16:03:09.444842Z",
-      "verification_status": "warning",
-      "total_tokens_in": 190252,
-      "total_tokens_out": 62787
+      "verification_status": "verified",
+      "total_tokens_in": 238085,
+      "total_tokens_out": 82557
     },
     {
       "run_id": "e099f4b8-9a42-477b-8566-d3774f0d35c8",
@@ -1807,6 +1807,216 @@
       "verification_status": "verified",
       "total_tokens_in": 3233,
       "total_tokens_out": 2796
+    },
+    {
+      "run_id": "fe97e620-8d7a-4100-9b48-f34ee2209466",
+      "framework": "baes",
+      "path": "baes/fe97e620-8d7a-4100-9b48-f34ee2209466",
+      "start_time": "2025-10-19T10:28:54.475134Z",
+      "end_time": "2025-10-19T10:30:51.255982Z",
+      "verification_status": "verified",
+      "total_tokens_in": 27525,
+      "total_tokens_out": 7886
+    },
+    {
+      "run_id": "1097368f-eccc-477e-88d6-d04aac9022be",
+      "framework": "baes",
+      "path": "baes/1097368f-eccc-477e-88d6-d04aac9022be",
+      "start_time": "2025-10-19T10:32:18.748934Z",
+      "end_time": "2025-10-19T10:34:40.232493Z",
+      "verification_status": "verified",
+      "total_tokens_in": 23767,
+      "total_tokens_out": 7470
+    },
+    {
+      "run_id": "4277f1bb-fca5-491b-8da3-9bc256f5eec4",
+      "framework": "baes",
+      "path": "baes/4277f1bb-fca5-491b-8da3-9bc256f5eec4",
+      "start_time": "2025-10-19T10:36:09.741033Z",
+      "end_time": "2025-10-19T10:38:04.388471Z",
+      "verification_status": "verified",
+      "total_tokens_in": 14616,
+      "total_tokens_out": 3829
+    },
+    {
+      "run_id": "6f0b2490-1548-4b4f-a943-a688ec972355",
+      "framework": "baes",
+      "path": "baes/6f0b2490-1548-4b4f-a943-a688ec972355",
+      "start_time": "2025-10-19T10:39:29.723556Z",
+      "end_time": "2025-10-19T10:41:18.574869Z",
+      "verification_status": "verified",
+      "total_tokens_in": 20150,
+      "total_tokens_out": 5335
+    },
+    {
+      "run_id": "b1703a7a-7d52-4f18-a685-3a8d4e22b074",
+      "framework": "baes",
+      "path": "baes/b1703a7a-7d52-4f18-a685-3a8d4e22b074",
+      "start_time": "2025-10-19T10:42:45.144746Z",
+      "end_time": "2025-10-19T10:44:39.101078Z",
+      "verification_status": "verified",
+      "total_tokens_in": 25607,
+      "total_tokens_out": 6568
+    },
+    {
+      "run_id": "cab19a6d-b408-445f-86c1-46cded53eae9",
+      "framework": "baes",
+      "path": "baes/cab19a6d-b408-445f-86c1-46cded53eae9",
+      "start_time": "2025-10-19T10:46:08.184453Z",
+      "end_time": "2025-10-19T10:48:05.294196Z",
+      "verification_status": "verified",
+      "total_tokens_in": 23654,
+      "total_tokens_out": 8326
+    },
+    {
+      "run_id": "d574aef0-0b26-4ad6-a740-222d95a3d54c",
+      "framework": "baes",
+      "path": "baes/d574aef0-0b26-4ad6-a740-222d95a3d54c",
+      "start_time": "2025-10-19T10:49:36.343979Z",
+      "end_time": "2025-10-19T10:51:44.731972Z",
+      "verification_status": "verified",
+      "total_tokens_in": 26371,
+      "total_tokens_out": 7635
+    },
+    {
+      "run_id": "93cbfc00-3ba8-4bed-a925-41d072c1cabd",
+      "framework": "baes",
+      "path": "baes/93cbfc00-3ba8-4bed-a925-41d072c1cabd",
+      "start_time": "2025-10-19T10:53:11.884286Z",
+      "end_time": "2025-10-19T10:55:15.759503Z",
+      "verification_status": "verified",
+      "total_tokens_in": 14616,
+      "total_tokens_out": 3804
+    },
+    {
+      "run_id": "b533a7bc-dd3b-4ef2-86c6-4e71289c4236",
+      "framework": "baes",
+      "path": "baes/b533a7bc-dd3b-4ef2-86c6-4e71289c4236",
+      "start_time": "2025-10-19T10:56:45.456747Z",
+      "end_time": "2025-10-19T10:58:42.909971Z",
+      "verification_status": "verified",
+      "total_tokens_in": 25607,
+      "total_tokens_out": 6687
+    },
+    {
+      "run_id": "9fc7f9f8-17cd-4f38-9c3e-5975eec0c93b",
+      "framework": "baes",
+      "path": "baes/9fc7f9f8-17cd-4f38-9c3e-5975eec0c93b",
+      "start_time": "2025-10-19T11:00:08.612491Z",
+      "end_time": "2025-10-19T11:02:11.515096Z",
+      "verification_status": "verified",
+      "total_tokens_in": 14616,
+      "total_tokens_out": 3857
+    },
+    {
+      "run_id": "9cc678f3-f210-4b74-8e40-69ebc0844e2a",
+      "framework": "baes",
+      "path": "baes/9cc678f3-f210-4b74-8e40-69ebc0844e2a",
+      "start_time": "2025-10-19T11:03:48.612899Z",
+      "end_time": "2025-10-19T11:05:50.503009Z",
+      "verification_status": "verified",
+      "total_tokens_in": 25607,
+      "total_tokens_out": 6668
+    },
+    {
+      "run_id": "f8c9ae14-5bfe-43e7-b469-22cfcfbce312",
+      "framework": "baes",
+      "path": "baes/f8c9ae14-5bfe-43e7-b469-22cfcfbce312",
+      "start_time": "2025-10-19T11:07:18.432222Z",
+      "end_time": "2025-10-19T11:09:15.521077Z",
+      "verification_status": "verified",
+      "total_tokens_in": 19066,
+      "total_tokens_out": 5092
+    },
+    {
+      "run_id": "7c22b5fe-0a3e-4f49-a835-e4d3997941e4",
+      "framework": "ghspec",
+      "path": "ghspec/7c22b5fe-0a3e-4f49-a835-e4d3997941e4",
+      "start_time": "2025-10-19T13:44:15.115256Z",
+      "end_time": "2025-10-19T13:52:39.425234Z",
+      "verification_status": "pending",
+      "total_tokens_in": 60218,
+      "total_tokens_out": 31537
+    },
+    {
+      "run_id": "cb6660e5-8b36-49cc-8cdb-dc73ed57785d",
+      "framework": "ghspec",
+      "path": "ghspec/cb6660e5-8b36-49cc-8cdb-dc73ed57785d",
+      "start_time": "2025-10-19T13:52:42.117414Z",
+      "end_time": "2025-10-19T14:00:04.436999Z",
+      "verification_status": "pending",
+      "total_tokens_in": 0,
+      "total_tokens_out": 0
+    },
+    {
+      "run_id": "c2beffed-55cd-4d5e-945d-9e9fb7628ffa",
+      "framework": "ghspec",
+      "path": "ghspec/c2beffed-55cd-4d5e-945d-9e9fb7628ffa",
+      "start_time": "2025-10-19T14:00:10.165029Z",
+      "end_time": "2025-10-19T14:01:02.344047Z",
+      "verification_status": "pending",
+      "total_tokens_in": 0,
+      "total_tokens_out": 0
+    },
+    {
+      "run_id": "749205ec-43f8-4088-acca-048c60dedf79",
+      "framework": "ghspec",
+      "path": "ghspec/749205ec-43f8-4088-acca-048c60dedf79",
+      "start_time": "2025-10-19T14:01:07.217449Z",
+      "end_time": "2025-10-19T14:04:07.507873Z",
+      "verification_status": "pending",
+      "total_tokens_in": 0,
+      "total_tokens_out": 0
+    },
+    {
+      "run_id": "990fcd32-02ec-4aeb-b1f4-8a7be092391f",
+      "framework": "ghspec",
+      "path": "ghspec/990fcd32-02ec-4aeb-b1f4-8a7be092391f",
+      "start_time": "2025-10-19T14:04:31.350670Z",
+      "end_time": "2025-10-19T14:05:18.242721Z",
+      "verification_status": "pending",
+      "total_tokens_in": 0,
+      "total_tokens_out": 0
+    },
+    {
+      "run_id": "b3d20aa1-cb85-4ce4-8661-1ed96baf28fe",
+      "framework": "ghspec",
+      "path": "ghspec/b3d20aa1-cb85-4ce4-8661-1ed96baf28fe",
+      "start_time": "2025-10-19T14:05:23.261672Z",
+      "end_time": "2025-10-19T14:11:05.075763Z",
+      "verification_status": "pending",
+      "total_tokens_in": 0,
+      "total_tokens_out": 0
+    },
+    {
+      "run_id": "1e5e932e-5df3-476c-a3e4-c1a89063ce1b",
+      "framework": "ghspec",
+      "path": "ghspec/1e5e932e-5df3-476c-a3e4-c1a89063ce1b",
+      "start_time": "2025-10-19T14:11:10.328051Z",
+      "end_time": "2025-10-19T14:17:27.415204Z",
+      "verification_status": "pending",
+      "total_tokens_in": 0,
+      "total_tokens_out": 0
+    },
+    {
+      "run_id": "3d6c2d9f-8872-49a5-954f-3f3959e9c30c",
+      "framework": "ghspec",
+      "path": "ghspec/3d6c2d9f-8872-49a5-954f-3f3959e9c30c",
+      "start_time": "2025-10-19T14:17:32.210627Z",
+      "end_time": "2025-10-19T14:20:59.226589Z",
+      "verification_status": "pending",
+      "total_tokens_in": 0,
+      "total_tokens_out": 0
+    },
+    {
+      "run_id": "c420e4fe-354d-4db2-a374-5a381c96e08b",
+      "framework": "ghspec",
+      "path": "ghspec/c420e4fe-354d-4db2-a374-5a381c96e08b",
+      "start_time": "2025-10-19T14:21:09.733966Z",
+      "end_time": "2025-10-19T14:30:54.198050Z",
+      "verification_status": "pending",
+      "total_tokens_in": 0,
+      "total_tokens_out": 0
     }
   ]
 }
