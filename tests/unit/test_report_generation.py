@@ -10,13 +10,13 @@ Tests cover:
 
 Run with:
     pytest tests/unit/test_report_generation.py -v
-    pytest tests/unit/test_report_generation.py --cov=src.analysis.statistics
+    pytest tests/unit/test_report_generation.py --cov=src.analysis.report_generator
 """
 
 import pytest
 import tempfile
 from pathlib import Path
-from src.analysis.statistics import generate_statistical_report
+from src.analysis.report_generator import generate_statistical_report
 
 
 # =============================================================================

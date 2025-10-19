@@ -96,7 +96,7 @@ from collections import defaultdict
 project_root = Path(os.environ['PROJECT_ROOT'])
 sys.path.insert(0, str(project_root))
 
-from src.analysis.statistics import (
+from src.analysis.report_generator import (
     bootstrap_aggregate_metrics,
     kruskal_wallis_test,
     pairwise_comparisons,

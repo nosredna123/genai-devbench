@@ -1425,7 +1425,7 @@ def generate_statistical_report(
         "- Prompts: `config/prompts/step_1.txt` through `step_6.txt` (version-controlled)",
         "- Source Code: Adapter implementations in `src/adapters/` (BaseAdapter, ChatDevAdapter, GHSpecAdapter, BAeSAdapter)",
         "- Results Archive: Each run saved as `<run_id>.tar.gz` with metrics.json, step_metrics.json, logs, workspace",
-        "- Analysis Scripts: `src/analysis/statistics.py` (this report generator), `src/analysis/visualizations.py`",
+        "- Analysis Scripts: `src/analysis/report_generator.py` (this report generator), `src/analysis/visualizations.py`",
         "",
         "**Commit Hashes**:",
     ])

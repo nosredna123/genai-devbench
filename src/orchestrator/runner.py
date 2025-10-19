@@ -562,7 +562,7 @@ class OrchestratorRunner:
                         break
             
             # Compute aggregate statistics for this framework
-            from src.analysis.statistics import bootstrap_aggregate_metrics
+            from src.analysis.report_generator import bootstrap_aggregate_metrics
             aggregate_stats = bootstrap_aggregate_metrics(framework_metrics)
             
             all_results[framework] = {
