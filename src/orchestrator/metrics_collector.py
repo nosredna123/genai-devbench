@@ -1,29 +1,37 @@
 """
 Metrics collection for BAEs experiment framework.
 
-Collects interaction, efficiency, and quality metrics for each run.
+Collects interaction, efficiency, quality, and cost metrics for each run.
 """
 
 import time
 from datetime import datetime
 from typing import Any, Dict, Optional
 import math
+from src.utils.cost_calculator import CostCalculator
+from src.utils.metrics_config import get_metrics_config
 
 
 class MetricsCollector:
     """Collects and computes experiment metrics."""
     
-    def __init__(self, run_id: str):
+    def __init__(self, run_id: str, model: str = 'gpt-4o-mini'):
         """
         Initialize metrics collector for a run.
         
         Args:
             run_id: Unique run identifier
+            model: OpenAI model name for cost calculation (default: 'gpt-4o-mini')
         """
         self.run_id = run_id
+        self.model = model
         self.start_time: Optional[float] = None
         self.end_time: Optional[float] = None
         self.steps_data: Dict[int, Dict[str, Any]] = {}
+        
+        # Initialize cost calculator
+        self.cost_calculator = CostCalculator(model)
+        self.metrics_config = get_metrics_config()
         
     def start_run(self) -> None:
         """Record run start time."""
@@ -182,6 +190,37 @@ class MetricsCollector:
             'Q_star': q_star,
             'AEI': aei
         }
+    
+    def compute_cost_metrics(self) -> Dict[str, Any]:
+        """
+        Compute cost metrics: COST_USD and breakdown.
+        
+        Returns:
+            Dictionary with cost metrics and breakdown
+        """
+        # Get token totals from efficiency metrics
+        efficiency = self.compute_efficiency_metrics()
+        tok_in = efficiency['TOK_IN']
+        tok_out = efficiency['TOK_OUT']
+        cached_tokens = efficiency['CACHED_TOKENS']
+        
+        # Calculate cost using CostCalculator
+        cost_breakdown = self.cost_calculator.calculate_cost(
+            tokens_in=tok_in,
+            tokens_out=tok_out,
+            cached_tokens=cached_tokens
+        )
+        
+        return {
+            'COST_USD': cost_breakdown['total_cost'],
+            'COST_BREAKDOWN': {
+                'uncached_input_cost': cost_breakdown['uncached_input_cost'],
+                'cached_input_cost': cost_breakdown['cached_input_cost'],
+                'output_cost': cost_breakdown['output_cost'],
+                'cache_savings': cost_breakdown['cache_savings'],
+                'model': cost_breakdown['model']
+            }
+        }
         
     def get_aggregate_metrics(
         self,
@@ -205,9 +244,11 @@ class MetricsCollector:
         interaction = self.compute_interaction_metrics()
         efficiency = self.compute_efficiency_metrics()
         quality = self.compute_quality_metrics(crude_score, esr, mc, zdi)
+        cost = self.compute_cost_metrics()
         
         return {
             'run_id': self.run_id,
+            'model': self.model,
             'start_timestamp': efficiency['start_timestamp'],
             'end_timestamp': efficiency['end_timestamp'],
             'steps': list(self.steps_data.values()),
@@ -218,6 +259,8 @@ class MetricsCollector:
                 'API_CALLS': efficiency['API_CALLS'],
                 'CACHED_TOKENS': efficiency['CACHED_TOKENS'],
                 'T_WALL_seconds': efficiency['T_WALL_seconds'],
-                **quality
-            }
+                **quality,
+                'COST_USD': cost['COST_USD']
+            },
+            'cost_breakdown': cost['COST_BREAKDOWN']
         }

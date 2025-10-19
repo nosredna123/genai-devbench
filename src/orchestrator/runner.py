@@ -245,7 +245,7 @@ class OrchestratorRunner:
                              'event': 'run_start'})
             
             # Initialize components
-            self.metrics_collector = MetricsCollector(self.run_id)
+            self.metrics_collector = MetricsCollector(self.run_id, model=self.config['model'])
             self.validator = Validator(
                 api_base_url=f"http://localhost:{framework_config['api_port']}",
                 ui_base_url=f"http://localhost:{framework_config['ui_port']}",

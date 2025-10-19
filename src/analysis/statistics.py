@@ -1199,7 +1199,7 @@ def generate_statistical_report(
         lines.append("")
     
     lines.extend([
-        "### � Data Quality Statement",
+        "### 📊 Data Quality Statement",
         "",
         "**Reconciliation-Based Run Selection**: This analysis includes **only runs with verified, stable token data** to ensure reproducibility and statistical validity.",
         "",
@@ -1229,7 +1229,7 @@ def generate_statistical_report(
         "",
         "**Documentation**: See `docs/DATA_QUALITY_FILTERING.md` for complete filtering specification and validation results.",
         "",
-        "### �📋 Experimental Protocol",
+        "### 📋 Experimental Protocol",
         "",
         "#### **Sample Size and Replication**",
         "",
