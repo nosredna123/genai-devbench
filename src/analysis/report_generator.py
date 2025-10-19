@@ -714,6 +714,235 @@ def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]
     return lines
 
 
+def _generate_cost_analysis(
+    frameworks_data: Dict[str, List[Dict[str, float]]],
+    config: Dict[str, Any]
+) -> List[str]:
+    """
+    Generate cost analysis section with USD breakdown and cache savings.
+    
+    Args:
+        frameworks_data: Dict mapping framework names to lists of run metrics
+        config: Section configuration from experiment.yaml
+        
+    Returns:
+        List of markdown lines for cost analysis section
+    """
+    lines = []
+    
+    # Read configuration
+    title = config.get('title', 'Cost Analysis')
+    show_breakdown = config.get('show_breakdown', True)
+    show_per_run = config.get('show_per_run', True)
+    show_cache_efficiency = config.get('show_cache_efficiency', True)
+    
+    lines.extend([
+        f"## {title}",
+        "",
+        "Detailed cost analysis based on OpenAI API pricing with cache discounts.",
+        ""
+    ])
+    
+    # Check if COST_USD is available
+    has_cost_data = all(
+        any('COST_USD' in run for run in runs)
+        for runs in frameworks_data.values()
+    )
+    
+    if not has_cost_data:
+        lines.extend([
+            "⚠️ **Cost data not available**",
+            "",
+            "Cost metrics (COST_USD) were not calculated for this experiment.",
+            "This may occur if:",
+            "- Runs were executed before cost tracking was implemented",
+            "- Cost calculation failed during metrics collection",
+            "- Model pricing information was unavailable",
+            "",
+            "To enable cost tracking, ensure:",
+            "1. Model pricing is defined in `config/experiment.yaml` under `pricing.models`",
+            "2. Metrics collector has access to token counts (TOK_IN, TOK_OUT, CACHED_TOKENS)",
+            "3. Cost calculator is properly initialized in the adapter",
+            ""
+        ])
+        return lines
+    
+    # Calculate aggregate cost statistics
+    framework_costs = {}
+    for framework, runs in frameworks_data.items():
+        costs = [run['COST_USD'] for run in runs if 'COST_USD' in run]
+        if costs:
+            framework_costs[framework] = {
+                'total': sum(costs),
+                'mean': sum(costs) / len(costs),
+                'min': min(costs),
+                'max': max(costs),
+                'n_runs': len(costs)
+            }
+    
+    # Total Cost Comparison
+    lines.extend([
+        "### 💰 Total Cost Comparison",
+        "",
+        "| Framework | Total Cost | Mean/Run | Min | Max | Runs |",
+        "|-----------|------------|----------|-----|-----|------|"
+    ])
+    
+    for framework in sorted(framework_costs.keys()):
+        stats = framework_costs[framework]
+        lines.append(
+            f"| {framework} | ${stats['total']:.4f} | ${stats['mean']:.4f} | "
+            f"${stats['min']:.4f} | ${stats['max']:.4f} | {stats['n_runs']} |"
+        )
+    
+    lines.extend(["", ""])
+    
+    # Cost breakdown (if enabled)
+    if show_breakdown:
+        lines.extend([
+            "### 📊 Cost Breakdown by Component",
+            "",
+            "Breaking down costs into input (uncached), cached input, and output tokens.",
+            ""
+        ])
+        
+        # We need to recalculate from token data since cost breakdown isn't stored
+        from src.utils.cost_calculator import CostCalculator
+        from src.utils.metrics_config import get_metrics_config
+        
+        # Get model from config
+        model = config.get('model', 'gpt-4o-mini')
+        try:
+            calc = CostCalculator(model)
+            
+            lines.extend([
+                "| Framework | Input (Uncached) | Input (Cached) | Output | Total |",
+                "|-----------|------------------|----------------|--------|-------|"
+            ])
+            
+            for framework, runs in sorted(frameworks_data.items()):
+                total_uncached = 0.0
+                total_cached = 0.0
+                total_output = 0.0
+                
+                for run in runs:
+                    if all(k in run for k in ['TOK_IN', 'TOK_OUT', 'CACHED_TOKENS']):
+                        breakdown = calc.calculate_cost(
+                            int(run['TOK_IN']),
+                            int(run['TOK_OUT']),
+                            int(run.get('CACHED_TOKENS', 0))
+                        )
+                        total_uncached += breakdown['uncached_input_cost']
+                        total_cached += breakdown['cached_input_cost']
+                        total_output += breakdown['output_cost']
+                
+                total = total_uncached + total_cached + total_output
+                lines.append(
+                    f"| {framework} | ${total_uncached:.4f} | ${total_cached:.4f} | "
+                    f"${total_output:.4f} | ${total:.4f} |"
+                )
+            
+            lines.extend(["", ""])
+            
+        except Exception as e:
+            logger.warning(f"Could not generate cost breakdown: {e}")
+            lines.extend([
+                "⚠️ Cost breakdown unavailable (pricing data or token counts missing)",
+                ""
+            ])
+    
+    # Cache efficiency (if enabled)
+    if show_cache_efficiency:
+        lines.extend([
+            "### 🎯 Cache Efficiency",
+            "",
+            "Savings from OpenAI's prompt caching (50% discount on cached tokens).",
+            ""
+        ])
+        
+        has_cache_data = all(
+            any('CACHED_TOKENS' in run for run in runs)
+            for runs in frameworks_data.values()
+        )
+        
+        if has_cache_data:
+            try:
+                calc = CostCalculator(model)
+                
+                lines.extend([
+                    "| Framework | Cache Hit Rate | Tokens Cached | Savings | Effective Discount |",
+                    "|-----------|----------------|---------------|---------|-------------------|"
+                ])
+                
+                for framework, runs in sorted(frameworks_data.items()):
+                    total_cached = 0
+                    total_input = 0
+                    total_savings = 0.0
+                    total_cost = 0.0
+                    
+                    for run in runs:
+                        if all(k in run for k in ['TOK_IN', 'CACHED_TOKENS']):
+                            cached = int(run.get('CACHED_TOKENS', 0))
+                            tok_in = int(run['TOK_IN'])
+                            
+                            total_cached += cached
+                            total_input += tok_in
+                            
+                            if 'TOK_OUT' in run:
+                                breakdown = calc.calculate_cost(
+                                    tok_in,
+                                    int(run['TOK_OUT']),
+                                    cached
+                                )
+                                total_savings += breakdown['cache_savings']
+                                total_cost += breakdown['total_cost']
+                    
+                    hit_rate = (total_cached / total_input * 100) if total_input > 0 else 0.0
+                    
+                    # Effective discount = savings / (cost + savings)
+                    effective_discount = (total_savings / (total_cost + total_savings) * 100) if (total_cost + total_savings) > 0 else 0.0
+                    
+                    lines.append(
+                        f"| {framework} | {hit_rate:.1f}% | {total_cached:,} | "
+                        f"${total_savings:.4f} | {effective_discount:.1f}% |"
+                    )
+                
+                lines.extend(["", ""])
+                
+            except Exception as e:
+                logger.warning(f"Could not generate cache efficiency analysis: {e}")
+                lines.extend([
+                    "⚠️ Cache efficiency analysis unavailable",
+                    ""
+                ])
+        else:
+            lines.extend([
+                "No cache data available for this experiment.",
+                ""
+            ])
+    
+    # Per-run costs (if enabled)
+    if show_per_run:
+        lines.extend([
+            "### 📈 Cost Distribution by Run",
+            "",
+            "Individual run costs show variability and help identify outliers.",
+            ""
+        ])
+        
+        for framework, runs in sorted(frameworks_data.items()):
+            costs = [run['COST_USD'] for run in runs if 'COST_USD' in run]
+            if costs:
+                lines.append(f"**{framework}:** ", )
+                cost_str = ", ".join(f"${c:.4f}" for c in costs)
+                lines.append(f"  {cost_str}")
+                lines.append("")
+    
+    lines.extend(["", "---", ""])
+    
+    return lines
+
+
 def _is_section_enabled(section_name: str, report_sections: List[Dict[str, Any]]) -> bool:
     """
     Check if a report section is enabled in configuration.
@@ -1794,6 +2023,17 @@ def generate_statistical_report(
     # Section 2: Relative Performance (Reliable Metrics Only)
     relative_performance_lines = _generate_relative_performance(framework_means, metrics_for_analysis)
     lines.extend(relative_performance_lines)
+    
+    # Cost Analysis Section (Config-driven, optional)
+    cost_config = metrics_config.get_report_section('cost_analysis')
+    if cost_config and cost_config.get('enabled', False):
+        logger.info("Generating cost analysis section")
+        # Pass the full config dict to access model pricing
+        cost_config_with_model = {**cost_config, 'model': config.get('model', 'gpt-4o-mini')}
+        cost_lines = _generate_cost_analysis(frameworks_data, cost_config_with_model)
+        lines.extend(cost_lines)
+    else:
+        logger.info("Cost analysis section disabled by config")
     
     # Section 3: Kruskal-Wallis Tests (Config-driven)
     kw_config = metrics_config.get_report_section('kruskal_wallis')
