@@ -16,6 +16,33 @@ import matplotlib.patches as patches
 import numpy as np
 
 
+def _infer_format_from_path(output_path: str) -> str:
+    """Infer image format from file extension.
+    
+    Args:
+        output_path: Path to output file
+        
+    Returns:
+        Format string for matplotlib savefig (e.g., 'png', 'svg', 'pdf')
+        
+    Example:
+        >>> _infer_format_from_path('chart.png')
+        'png'
+        >>> _infer_format_from_path('chart.svg')
+        'svg'
+    """
+    extension = Path(output_path).suffix.lower().lstrip('.')
+    # Map common extensions to matplotlib format names
+    format_map = {
+        'png': 'png',
+        'svg': 'svg',
+        'pdf': 'pdf',
+        'jpg': 'jpeg',
+        'jpeg': 'jpeg',
+    }
+    return format_map.get(extension, 'png')  # Default to PNG if unknown
+
+
 # Friendly metric labels for visualizations
 METRIC_LABELS = {
     'AUTR': 'Test Automation\nRate',
@@ -142,11 +169,11 @@ def radar_chart(
     ax.set_title(title, size=16, pad=20)
     ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), fontsize=12)
     
-    # Save as SVG
+    # Save with format inferred from filename extension
     output_path_obj = Path(output_path)
     output_path_obj.parent.mkdir(parents=True, exist_ok=True)
     plt.tight_layout()
-    plt.savefig(output_path, format='svg', bbox_inches='tight', dpi=300)
+    plt.savefig(output_path, format=_infer_format_from_path(output_path), bbox_inches='tight', dpi=300)
     plt.close()
     
     print(f"Radar chart saved to {output_path}")
@@ -274,7 +301,7 @@ def pareto_plot(
     output_path_obj = Path(output_path)
     output_path_obj.parent.mkdir(parents=True, exist_ok=True)
     plt.tight_layout()
-    plt.savefig(output_path, format='svg', bbox_inches='tight', dpi=300)
+    plt.savefig(output_path, format=_infer_format_from_path(output_path), bbox_inches='tight', dpi=300)
     plt.close()
     
     print(f"Pareto plot saved to {output_path}")
@@ -434,7 +461,7 @@ def timeline_chart(
     output_path_obj = Path(output_path)
     output_path_obj.parent.mkdir(parents=True, exist_ok=True)
     plt.tight_layout()
-    plt.savefig(output_path, format='svg', bbox_inches='tight', dpi=300)
+    plt.savefig(output_path, format=_infer_format_from_path(output_path), bbox_inches='tight', dpi=300)
     plt.close()
     
     print(f"Timeline chart saved to {output_path}")
@@ -590,7 +617,7 @@ def api_efficiency_chart(
            bbox=dict(boxstyle='round,pad=0.5', facecolor='wheat', alpha=0.3))
     
     plt.tight_layout()
-    plt.savefig(output_path, format='svg', dpi=300, bbox_inches='tight')
+    plt.savefig(output_path, format=_infer_format_from_path(output_path), dpi=300, bbox_inches='tight')
     plt.close()
 
 
@@ -689,7 +716,7 @@ def cache_efficiency_chart(
     
     plt.suptitle(title, fontsize=15, fontweight='bold', y=0.98)
     plt.tight_layout(rect=[0, 0.05, 1, 0.96])
-    plt.savefig(output_path, format='svg', dpi=300, bbox_inches='tight')
+    plt.savefig(output_path, format=_infer_format_from_path(output_path), dpi=300, bbox_inches='tight')
     plt.close()
 
 
@@ -789,7 +816,7 @@ def api_calls_timeline(
            bbox=dict(boxstyle='round,pad=0.5', facecolor='lightyellow', alpha=0.3))
     
     plt.tight_layout()
-    plt.savefig(output_path, format='svg', dpi=300, bbox_inches='tight')
+    plt.savefig(output_path, format=_infer_format_from_path(output_path), dpi=300, bbox_inches='tight')
     plt.close()
 
 
@@ -898,7 +925,7 @@ def token_efficiency_chart(
     output_path_obj = Path(output_path)
     output_path_obj.parent.mkdir(parents=True, exist_ok=True)
     plt.tight_layout()
-    plt.savefig(output_path, format='svg', bbox_inches='tight', dpi=300)
+    plt.savefig(output_path, format=_infer_format_from_path(output_path), bbox_inches='tight', dpi=300)
     plt.close()
     
     print(f"Token efficiency chart saved to {output_path}")
@@ -988,7 +1015,7 @@ def api_efficiency_bar_chart(
     output_path_obj = Path(output_path)
     output_path_obj.parent.mkdir(parents=True, exist_ok=True)
     plt.tight_layout()
-    plt.savefig(output_path, format='svg', bbox_inches='tight', dpi=300)
+    plt.savefig(output_path, format=_infer_format_from_path(output_path), bbox_inches='tight', dpi=300)
     plt.close()
     
     print(f"API efficiency bar chart saved to {output_path}")
@@ -1089,7 +1116,7 @@ def cache_efficiency_chart(
     output_path_obj = Path(output_path)
     output_path_obj.parent.mkdir(parents=True, exist_ok=True)
     plt.tight_layout()
-    plt.savefig(output_path, format='svg', bbox_inches='tight', dpi=300)
+    plt.savefig(output_path, format=_infer_format_from_path(output_path), bbox_inches='tight', dpi=300)
     plt.close()
     
     print(f"Cache efficiency chart saved to {output_path}")
@@ -1203,7 +1230,7 @@ def time_distribution_chart(
     output_path_obj = Path(output_path)
     output_path_obj.parent.mkdir(parents=True, exist_ok=True)
     plt.tight_layout()
-    plt.savefig(output_path, format='svg', bbox_inches='tight', dpi=300)
+    plt.savefig(output_path, format=_infer_format_from_path(output_path), bbox_inches='tight', dpi=300)
     plt.close()
     
     print(f"Time distribution chart saved to {output_path}")

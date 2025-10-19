@@ -111,11 +111,18 @@ def load_run_data(runs_dir: Path) -> tuple[dict, dict]:
                 for step in metrics['steps']:
                     step_num = step.get('step_number')
                     if step_num is not None:
+                        # Map lowercase step fields to uppercase metric names
+                        metric_mapping = {
+                            'api_calls': 'API_CALLS',
+                            'tokens_in': 'TOK_IN',
+                            'tokens_out': 'TOK_OUT',
+                            'duration_seconds': 'duration_seconds'
+                        }
                         # Collect all step-level metrics across runs
-                        for metric in ['API_CALLS', 'TOK_IN', 'TOK_OUT', 'duration_seconds']:
-                            if metric in step:
+                        for step_field, metric_name in metric_mapping.items():
+                            if step_field in step:
                                 # Append value to list for aggregation
-                                timeline_data[framework_name][step_num][metric].append(step[metric])
+                                timeline_data[framework_name][step_num][metric_name].append(step[step_field])
         
         except json.JSONDecodeError as e:
             logger.error("Failed to parse %s: %s", metrics_file, e)
