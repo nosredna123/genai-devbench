@@ -1195,16 +1195,38 @@ def time_distribution_chart(
         x = np.random.normal(i + 1, 0.04, size=len(times))
         ax.scatter(x, times, alpha=0.4, s=50, color=color, edgecolors='black', linewidth=0.5)
     
-    # Add median value labels
+    # Add median and mean value labels with smart positioning to avoid overlap
     for i, times in enumerate(time_data):
         median = np.median(times)
         mean = np.mean(times)
-        ax.text(i + 1, median, f'  Med: {median:.1f}s',
-               va='center', ha='left', fontsize=10, fontweight='bold',
-               bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
-        ax.text(i + 1, mean, f'  Avg: {mean:.1f}s',
-               va='center', ha='left', fontsize=9, alpha=0.7,
-               bbox=dict(boxstyle='round,pad=0.3', facecolor='lightyellow', alpha=0.8))
+        
+        # Calculate vertical separation needed
+        y_range = ax.get_ylim()[1] - ax.get_ylim()[0]
+        min_separation = y_range * 0.05  # 5% of chart height
+        
+        # If mean and median are too close, offset them vertically
+        if abs(mean - median) < min_separation:
+            # Place median at its actual position
+            ax.text(i + 1, median, f'  Med: {median:.1f}s',
+                   va='center', ha='left', fontsize=10, fontweight='bold',
+                   bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
+                           alpha=0.8, edgecolor='black', linewidth=1))
+            # Offset mean label above median
+            offset = min_separation if mean >= median else -min_separation
+            ax.text(i + 1, median + offset, f'  Avg: {mean:.1f}s',
+                   va='center', ha='left', fontsize=9, alpha=0.9,
+                   bbox=dict(boxstyle='round,pad=0.3', facecolor='lightyellow', 
+                           alpha=0.8, edgecolor='orange', linewidth=0.5))
+        else:
+            # They're far apart, place each at its actual value
+            ax.text(i + 1, median, f'  Med: {median:.1f}s',
+                   va='center', ha='left', fontsize=10, fontweight='bold',
+                   bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
+                           alpha=0.8, edgecolor='black', linewidth=1))
+            ax.text(i + 1, mean, f'  Avg: {mean:.1f}s',
+                   va='center', ha='left', fontsize=9, alpha=0.9,
+                   bbox=dict(boxstyle='round,pad=0.3', facecolor='lightyellow', 
+                           alpha=0.8, edgecolor='orange', linewidth=0.5))
     
     # Labels and formatting
     ax.set_xlabel('Framework', fontsize=14, fontweight='bold')

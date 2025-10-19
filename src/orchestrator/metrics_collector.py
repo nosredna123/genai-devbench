@@ -72,7 +72,22 @@ class MetricsCollector:
             cached_tokens: Number of cached input tokens
             start_timestamp: Unix timestamp when step started (for Usage API reconciliation)
             end_timestamp: Unix timestamp when step ended (for Usage API reconciliation)
+        
+        Raises:
+            ValueError: If API calls < 1 (indicates adapter bug or silent failure)
         """
+        # VALIDATION: Fail-fast on impossible metric values
+        # API calls should be >= 1 for every step (at least one LLM call required)
+        # Exception: HITL might bypass LLM, but this should be explicit
+        if api_calls < 1 and success:
+            raise ValueError(
+                f"Invalid metrics for step {step_num}: api_calls={api_calls} < 1 but success=True. "
+                f"This indicates a silent failure in the adapter (likely a command mapping issue). "
+                f"Every successful step must make at least 1 API call. "
+                f"Step details: command='{command[:100]}...', duration={duration_seconds:.2f}s, "
+                f"tokens_in={tokens_in}, tokens_out={tokens_out}, hitl_count={hitl_count}"
+            )
+        
         self.steps_data[step_num] = {
             'step_number': step_num,
             'command': command,

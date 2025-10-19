@@ -29,18 +29,18 @@ class BAeSAdapter(BaseAdapter):
     """Adapter for Business Autonomous Entities (BAEs) framework."""
     
     COMMAND_MAPPING = {
-        "Create a Student/Course/Teacher CRUD application":
+        "Create a Student/Course/Teacher CRUD application with Python, FastAPI, and SQLite.":
             ["add student entity", "add course entity", "add teacher entity"],
-        "Add enrollment relationship between Student and Course":
+        "Add enrollment relationship between Student and Course entities.":
             ["add course to student entity"],
-        "Add teacher assignment relationship to Course":
+        "Add teacher assignment relationship to Course entity.":
             ["add teacher to course entity"],
-        "Implement comprehensive data validation":
+        "Implement comprehensive data validation and error handling.":
             ["add validation to all entities"],
-        "Enhance UI with filtering and sorting":
-            ["enhance ui with filtering and sorting"],
-        "Add automated testing":
-            ["add automated tests"]
+        "Add pagination and filtering to all list endpoints.":
+            ["add pagination and filtering to all list endpoints"],
+        "Add comprehensive user interface for all CRUD operations.":
+            ["add comprehensive user interface"]
     }
     
     def __init__(self, config: Dict[str, Any], run_id: str, workspace_path: str):
@@ -284,9 +284,13 @@ class BAeSAdapter(BaseAdapter):
             requests_list = self._translate_command_to_requests(command_text)
             
             if not requests_list:
-                logger.warning(f"No BAEs requests mapped for command: {command_text}",
-                             extra={'run_id': self.run_id, 'step': step_num})
-                requests_list = [command_text]
+                error_msg = (
+                    f"Command not found in COMMAND_MAPPING: '{command_text[:100]}...' "
+                    f"This indicates a configuration error. "
+                    f"Available commands: {list(self.COMMAND_MAPPING.keys())}"
+                )
+                logger.error(error_msg, extra={'run_id': self.run_id, 'step': step_num})
+                raise ValueError(error_msg)
             
             all_success = True
             for idx, request in enumerate(requests_list):
