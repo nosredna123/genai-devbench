@@ -39,9 +39,9 @@
       "success": true,
       "retry_count": 0,
       "hitl_count": 0,
-      "tokens_in": 0,
-      "tokens_out": 0,
-      "api_calls": 0,
+      "tokens_in": 4402,
+      "tokens_out": 3503,
+      "api_calls": 4,
       "cached_tokens": 0,
       "start_timestamp": 1760882448,
       "end_timestamp": 1760882461
@@ -94,9 +94,9 @@
     "HIT": 0,
     "AUTR": 1.0,
     "HEU": 0,
-    "TOK_IN": 0,
-    "TOK_OUT": 0,
-    "API_CALLS": 0,
+    "TOK_IN": 4402,
+    "TOK_OUT": 3503,
+    "API_CALLS": 4,
     "CACHED_TOKENS": 0,
     "T_WALL_seconds": 52.179017782211304,
     "CRUDe": 0,
@@ -104,7 +104,7 @@
     "MC": 0.0,
     "ZDI": 11,
     "Q_star": 0.0,
-    "AEI": 0.0,
+    "AEI": 0.1191889231099596,
     "COST_USD": 0.0
   },
   "cost_breakdown": {
@@ -125,5 +125,130 @@
     "discrepancy_pct_in": 0,
     "discrepancy_pct_out": 0,
     "error": null
+  },
+  "usage_api_reconciliation": {
+    "verification_status": "verified",
+    "attempts": [
+      {
+        "timestamp": "2025-10-19T14:37:17.456621+00:00",
+        "steps": [
+          {
+            "step": 1,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "api_calls": 0,
+            "cached_tokens": 0
+          },
+          {
+            "step": 2,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "api_calls": 0,
+            "cached_tokens": 0
+          },
+          {
+            "step": 3,
+            "status": "success",
+            "tokens_in": 4402,
+            "tokens_out": 3503,
+            "api_calls": 4,
+            "cached_tokens": 0
+          },
+          {
+            "step": 4,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "api_calls": 0,
+            "cached_tokens": 0
+          },
+          {
+            "step": 5,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "api_calls": 0,
+            "cached_tokens": 0
+          },
+          {
+            "step": 6,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "api_calls": 0,
+            "cached_tokens": 0
+          }
+        ],
+        "total_tokens_in": 4402,
+        "total_tokens_out": 3503,
+        "total_api_calls": 4,
+        "total_cached_tokens": 0,
+        "steps_with_tokens": 1,
+        "total_steps": 6
+      },
+      {
+        "timestamp": "2025-10-19T18:47:38.652827+00:00",
+        "steps": [
+          {
+            "step": 1,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "api_calls": 0,
+            "cached_tokens": 0
+          },
+          {
+            "step": 2,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "api_calls": 0,
+            "cached_tokens": 0
+          },
+          {
+            "step": 3,
+            "status": "success",
+            "tokens_in": 4402,
+            "tokens_out": 3503,
+            "api_calls": 4,
+            "cached_tokens": 0
+          },
+          {
+            "step": 4,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "api_calls": 0,
+            "cached_tokens": 0
+          },
+          {
+            "step": 5,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "api_calls": 0,
+            "cached_tokens": 0
+          },
+          {
+            "step": 6,
+            "status": "success",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "api_calls": 0,
+            "cached_tokens": 0
+          }
+        ],
+        "total_tokens_in": 4402,
+        "total_tokens_out": 3503,
+        "total_api_calls": 4,
+        "total_cached_tokens": 0,
+        "steps_with_tokens": 1,
+        "total_steps": 6
+      }
+    ],
+    "verification_message": "\u2705 Data stable across 250 minute interval (4,402 in, 3,503 out)",
+    "verified_at": "2025-10-19T18:47:38.652827+00:00"
   }
 }

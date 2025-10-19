@@ -87,7 +87,7 @@ class BaseAdapter(ABC):
                 "start_time": str(int(start_timestamp)),  # Convert to string
                 "end_time": str(int(end_timestamp)),      # Convert to string
                 "bucket_width": "1d",  # Use daily bucket
-                "limit": 31  # Get last month of data
+                "limit": "31"  # Convert to string - requests library expects strings
             }
             
             # Add model filter if specified
