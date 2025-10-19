@@ -1697,22 +1697,27 @@ def generate_statistical_report(
     
     all_metrics = sorted(all_metrics)
     
-    # Define reliable metrics - these are measured consistently across all frameworks
-    RELIABLE_METRICS = {
-        'TOK_IN',
-        'TOK_OUT',
-        'API_CALLS',
-        'CACHED_TOKENS',
-        'T_WALL_seconds',
-        'ZDI',
-        'UTT'
-    }
+    # Get metrics for analysis from config
+    # Read from aggregate_statistics section config, fallback to reliable metrics from MetricsConfig
+    aggregate_stats_section = metrics_config.get_report_section('aggregate_statistics')
+    if aggregate_stats_section and 'metrics' in aggregate_stats_section:
+        # Use metrics list from aggregate_statistics section
+        metrics_for_analysis = aggregate_stats_section['metrics']
+        logger.info(f"Using metrics from aggregate_statistics config: {metrics_for_analysis}")
+    else:
+        # Fallback: use all reliable metrics from MetricsConfig
+        reliable_metrics = metrics_config.get_reliable_metrics()
+        metrics_for_analysis = sorted(reliable_metrics.keys())
+        logger.warning(
+            f"No metrics list in aggregate_statistics config, "
+            f"using all reliable metrics: {metrics_for_analysis}"
+        )
     
-    # Filter metrics for statistical analysis - only use reliable metrics
-    metrics_for_analysis = [m for m in all_metrics if m in RELIABLE_METRICS]
+    # Filter to only include metrics that exist in the data
+    metrics_for_analysis = [m for m in metrics_for_analysis if m in all_metrics]
     
-    logger.info(f"Reliable metrics for analysis: {metrics_for_analysis}")
-    logger.info(f"Excluded unreliable/unmeasured metrics: {sorted(set(all_metrics) - RELIABLE_METRICS)}")
+    logger.info(f"Metrics for analysis (filtered by availability): {metrics_for_analysis}")
+    logger.info(f"Excluded metrics (not in analysis list): {sorted(set(all_metrics) - set(metrics_for_analysis))}")
     
     # Section 1: Aggregate Statistics (Reliable Metrics Only)
     lines.extend([
@@ -1753,6 +1758,9 @@ def generate_statistical_report(
             if metric in framework_means[framework]:
                 metric_values[metric].append(framework_means[framework][metric]['mean'])
     
+    # Check if performance indicators should be shown
+    show_indicators = aggregate_stats_section.get('show_performance_indicators', True) if aggregate_stats_section else True
+    
     # Table rows with indicators (reliable metrics only)
     for framework in frameworks_data.keys():
         aggregated = framework_means[framework]
@@ -1770,8 +1778,10 @@ def generate_statistical_report(
                 formatted_mean = _format_metric_value(metric, mean, include_units=False)
                 formatted_ci = _format_confidence_interval(ci_lower, ci_upper, metric)
                 
-                # Add performance indicator
-                indicator = _get_performance_indicator(metric, mean, metric_values[metric])
+                # Add performance indicator if enabled
+                indicator = ""
+                if show_indicators:
+                    indicator = _get_performance_indicator(metric, mean, metric_values[metric])
                 
                 row += f" {formatted_mean} {formatted_ci}{indicator} |"
             else:
