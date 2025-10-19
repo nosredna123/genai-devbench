@@ -45,10 +45,10 @@ def load_run_data(runs_dir: Path) -> tuple[dict, dict]:
     Returns:
         Tuple of (frameworks_data, timeline_data) where:
             - frameworks_data: {framework: [run1_metrics, run2_metrics, ...]}
-            - timeline_data: {framework: {step_num: {metric: value, ...}}}
+            - timeline_data: {framework: {step_num: {metric: [val1, val2, ...]}}}
     """
     frameworks_data = defaultdict(list)
-    timeline_data = defaultdict(dict)
+    timeline_data = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
     
     # Get manifest
     try:
@@ -106,17 +106,16 @@ def load_run_data(runs_dir: Path) -> tuple[dict, dict]:
                 logger.warning("No aggregate_metrics found in run %s", run_id)
             
             # Load step-by-step data for timeline charts
+            # Collect values from ALL runs for later aggregation
             if 'steps' in metrics and isinstance(metrics['steps'], list):
                 for step in metrics['steps']:
                     step_num = step.get('step_number')
                     if step_num is not None:
-                        if step_num not in timeline_data[framework_name]:
-                            timeline_data[framework_name][step_num] = {}
-                        
-                        # Collect all step-level metrics
+                        # Collect all step-level metrics across runs
                         for metric in ['API_CALLS', 'TOK_IN', 'TOK_OUT', 'duration_seconds']:
                             if metric in step:
-                                timeline_data[framework_name][step_num][metric] = step[metric]
+                                # Append value to list for aggregation
+                                timeline_data[framework_name][step_num][metric].append(step[metric])
         
         except json.JSONDecodeError as e:
             logger.error("Failed to parse %s: %s", metrics_file, e)
@@ -137,6 +136,53 @@ def load_run_data(runs_dir: Path) -> tuple[dict, dict]:
         logger.info("  %s: %d verified runs", fw, len(runs))
     
     return dict(frameworks_data), dict(timeline_data)
+
+
+def aggregate_timeline_data(
+    timeline_data: dict,
+    aggregation: str = 'mean'
+) -> dict:
+    """Aggregate timeline data across multiple runs.
+    
+    Args:
+        timeline_data: Raw timeline data with lists of values
+            {framework: {step_num: {metric: [val1, val2, ...]}}}
+        aggregation: Aggregation method - 'mean', 'median', or 'last'
+        
+    Returns:
+        Aggregated timeline data
+        {framework: {step_num: {metric: aggregated_value}}}
+    """
+    aggregated = {}
+    
+    for framework, steps in timeline_data.items():
+        aggregated[framework] = {}
+        for step_num, metrics in steps.items():
+            aggregated[framework][step_num] = {}
+            for metric, values in metrics.items():
+                if not values:
+                    aggregated[framework][step_num][metric] = 0
+                    continue
+                
+                # Apply aggregation method
+                if aggregation == 'mean':
+                    aggregated[framework][step_num][metric] = sum(values) / len(values)
+                elif aggregation == 'median':
+                    sorted_values = sorted(values)
+                    n = len(sorted_values)
+                    if n % 2 == 0:
+                        aggregated[framework][step_num][metric] = (
+                            sorted_values[n//2 - 1] + sorted_values[n//2]
+                        ) / 2
+                    else:
+                        aggregated[framework][step_num][metric] = sorted_values[n//2]
+                elif aggregation == 'last':
+                    aggregated[framework][step_num][metric] = values[-1]
+                else:
+                    # Default to mean
+                    aggregated[framework][step_num][metric] = sum(values) / len(values)
+    
+    return aggregated
 
 
 def compute_aggregates(frameworks_data: dict) -> dict:
@@ -210,6 +256,18 @@ def main():
     # Step 2: Compute aggregate metrics
     aggregated_data = compute_aggregates(frameworks_data)
     
+    # Step 2.5: Aggregate timeline data for charts
+    # Get aggregation method from config (default to 'mean')
+    timeline_aggregation = 'mean'
+    if 'visualizations' in config:
+        for _chart_name, chart_config in config['visualizations'].items():
+            if 'aggregation' in chart_config:
+                timeline_aggregation = chart_config['aggregation']
+                break
+    
+    logger.info("Aggregating timeline data using method: %s", timeline_aggregation)
+    aggregated_timeline_data = aggregate_timeline_data(timeline_data, timeline_aggregation)
+    
     # Step 3: Generate visualizations using factory
     logger.info("Generating visualizations...")
     try:
@@ -226,7 +284,7 @@ def main():
         results = factory.generate_all(
             frameworks_data=frameworks_data,
             aggregated_data=aggregated_data,
-            timeline_data=timeline_data,
+            timeline_data=aggregated_timeline_data,  # Use aggregated timeline
             output_dir=str(output_dir)
         )
         
