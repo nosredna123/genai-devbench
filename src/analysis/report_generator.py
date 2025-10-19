@@ -1480,16 +1480,13 @@ def generate_statistical_report(
         "### ✅ Reliably Measured Metrics",
         "",
         "These metrics have consistent measurement across all frameworks with authoritative data sources:",
-        "",
-        "| Metric | Full Name | Description | Range | Ideal | Data Source |",
-        "|--------|-----------|-------------|-------|-------|-------------|",
-        "| **TOK_IN** | Input Tokens | Tokens sent to LLM | 0-∞ | Lower ↓ | OpenAI Usage API |",
-        "| **TOK_OUT** | Output Tokens | Tokens received from LLM | 0-∞ | Lower ↓ | OpenAI Usage API |",
-        "| **API_CALLS** | API Call Count | Number of LLM requests | 0-∞ | Lower ↓ | Count-based |",
-        "| **CACHED_TOKENS** | Cached Input Tokens | Tokens served from cache | 0-∞ | Higher ↑ | OpenAI Usage API |",
-        "| **T_WALL_seconds** | Wall Clock Time | Total execution time (sec) | 0-∞ | Lower ↓ | time.time() |",
-        "| **ZDI** | Zero-Downtime Intervals | Idle time between steps (sec) | 0-∞ | Lower ↓ | Calculated |",
-        "| **UTT** | User Task Total | Number of evolution steps | Fixed | 6 | Configuration |",
+        ""
+    ])
+    
+    # Generate reliable metrics table from config
+    lines.extend(_generate_metric_table_from_config(metrics_config, 'reliable'))
+    
+    lines.extend([
         "",
         "**New Metrics Added (Oct 2025)**:",
         "- **API_CALLS**: Measures call efficiency - lower values indicate better batching and fewer retries",
@@ -1517,13 +1514,13 @@ def generate_statistical_report(
         "### ❌ Unmeasured Metrics",
         "",
         "These metrics **always show zero values** because runtime validation is not performed:",
-        "",
-        "| Metric | Full Name | Status | Reason |",
-        "|--------|-----------|--------|--------|",
-        "| **Q\\*** | Quality Star | Always 0 | Depends on unmeasured metrics below |",
-        "| **ESR** | Emerging State Rate | Always 0 | Applications not executed |",
-        "| **CRUDe** | CRUD Evolution Coverage | Always 0 | No endpoint validation |",
-        "| **MC** | Model Call Efficiency | Always 0 | No runtime efficiency measured |",
+        ""
+    ])
+    
+    # Generate unmeasured metrics table from config
+    lines.extend(_generate_metric_table_from_config(metrics_config, 'excluded'))
+    
+    lines.extend([
         "",
         "**Why Unmeasured?** Generated applications are not started during experiments (`auto_restart_servers: false` in config). Validation requires:",
         "1. Running application servers (`uvicorn`, `flask run`, etc.)",
@@ -2312,6 +2309,73 @@ def _mann_whitney_u_test(group1: List[float], group2: List[float]) -> float:
     p_value = 2 * (1 - 0.5 * (1 + math.erf(abs(z) / math.sqrt(2))))
     
     return p_value
+
+
+def _generate_metric_table_from_config(metrics_config, category: str = 'reliable') -> List[str]:
+    """
+    Generate metric definition table from MetricsConfig.
+    
+    Args:
+        metrics_config: MetricsConfig instance
+        category: 'reliable', 'derived', or 'excluded'
+        
+    Returns:
+        List of markdown lines for the metric table
+    """
+    lines = []
+    
+    if category == 'reliable':
+        metrics = metrics_config.get_reliable_metrics()
+        lines.extend([
+            "| Metric | Full Name | Description | Range | Ideal | Data Source |",
+            "|--------|-----------|-------------|-------|-------|-------------|"
+        ])
+        
+        for key, metric in sorted(metrics.items()):
+            # Determine ideal direction symbol
+            ideal_symbol = "Lower ↓" if metric.ideal_direction == 'minimize' else "Higher ↑"
+            
+            # Determine range based on unit
+            range_str = "0-∞" if metric.unit in ['tokens', 'seconds', 'count', 'USD'] else "0-1"
+            if key == 'UTT':
+                range_str = "Fixed"
+            
+            lines.append(
+                f"| **{key}** | {metric.name} | {metric.description} | "
+                f"{range_str} | {ideal_symbol} | {metric.data_source} |"
+            )
+    
+    elif category == 'excluded':
+        excluded = metrics_config.get_excluded_metrics()
+        lines.extend([
+            "| Metric | Full Name | Status | Reason |",
+            "|--------|-----------|--------|--------|"
+        ])
+        
+        for key, info in sorted(excluded.items()):
+            lines.append(
+                f"| **{key}** | {info.get('name', key)} | "
+                f"{info.get('status', 'Excluded')} | {info.get('reason', 'Not measured')} |"
+            )
+    
+    elif category == 'derived':
+        metrics = metrics_config.get_derived_metrics()
+        lines.extend([
+            "| Metric | Full Name | Description | Calculation | Unit |",
+            "|--------|-----------|-------------|-------------|------|"
+        ])
+        
+        for key, metric in sorted(metrics.items()):
+            calc_formula = ""
+            if metric.calculation:
+                calc_formula = metric.calculation.get('formula', 'See description')
+            
+            lines.append(
+                f"| **{key}** | {metric.name} | {metric.description} | "
+                f"{calc_formula} | {metric.unit} |"
+            )
+    
+    return lines
 
 
 def _get_timestamp() -> str:
