@@ -189,13 +189,15 @@ class BaseAdapter(ABC):
             return total_input_tokens, total_output_tokens, total_api_calls, total_cached_tokens
             
         except Exception as e:
+            import traceback
             logger.error(
                 f"Failed to fetch usage from OpenAI API: {e}",
                 extra={
                     'run_id': self.run_id,
                     'metadata': {
                         'error': str(e),
-                        'error_type': type(e).__name__
+                        'error_type': type(e).__name__,
+                        'traceback': traceback.format_exc()
                     }
                 }
             )

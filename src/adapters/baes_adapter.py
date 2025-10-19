@@ -320,7 +320,10 @@ class BAeSAdapter(BaseAdapter):
             
             # Fetch usage from OpenAI Usage API
             tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
-                start_timestamp, end_timestamp
+                api_key_env_var='OPEN_AI_KEY_ADM',  # Admin key with usage.read scope
+                start_timestamp=start_timestamp,
+                end_timestamp=end_timestamp,
+                model=None  # Don't filter by model - time window is sufficient
             )
             
             logger.info("BAEs step completed",
