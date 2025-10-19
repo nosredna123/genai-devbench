@@ -258,6 +258,25 @@ class MetricsConfig:
         """
         return self._config.get('visualizations', {})
     
+    def get_excluded_metrics(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get all excluded metrics (unmeasured or partially measured).
+        
+        Returns:
+            Dictionary mapping metric keys to their metadata:
+            {
+                'AUTR': {
+                    'name': 'Autonomy Rate',
+                    'reason': 'Hardcoded HITL detection...',
+                    'status': 'partial_measurement',
+                    'original_formula': '1 - (HIT / 6)'
+                },
+                ...
+            }
+        """
+        metrics_section = self._config.get('metrics', {})
+        return metrics_section.get('excluded_metrics', {})
+    
     def get_excluded_metrics(self) -> Dict[str, Dict[str, str]]:
         """
         Get all excluded metrics with their exclusion reasons.

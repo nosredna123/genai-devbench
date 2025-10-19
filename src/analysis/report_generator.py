@@ -943,6 +943,216 @@ def _generate_cost_analysis(
     return lines
 
 
+def _generate_limitations_section(
+    config: Dict[str, Any],
+    run_counts: Dict[str, int],
+    metrics_config
+) -> List[str]:
+    """
+    Generate limitations section with auto-generated metric lists.
+    
+    Reads excluded_metrics from metrics config to auto-generate
+    lists of unmeasured and partially measured metrics.
+    
+    Args:
+        config: Section configuration from experiment.yaml
+        run_counts: Dictionary of run counts per framework
+        metrics_config: MetricsConfig instance
+        
+    Returns:
+        List of markdown lines for limitations section
+    """
+    lines = []
+    
+    # Read configuration
+    title = config.get('title', '## 8. Limitations and Future Work')
+    subsections = config.get('subsections', [])
+    
+    lines.extend([
+        title,
+        "",
+        "### 🔬 Scientific Honesty Statement",
+        "",
+        "This report focuses on **reliably measured metrics only** to maintain scientific integrity. Several metrics are excluded from analysis due to measurement limitations:",
+        ""
+    ])
+    
+    # Get excluded metrics from config
+    excluded_metrics = metrics_config.get_excluded_metrics()
+    
+    # Separate by status
+    unmeasured = {k: v for k, v in excluded_metrics.items() if v.get('status') == 'not_measured'}
+    partial = {k: v for k, v in excluded_metrics.items() if v.get('status') == 'partial_measurement'}
+    
+    # Generate subsections based on config
+    for subsection in subsections:
+        subsection_name = subsection.get('name', '')
+        subsection_title = subsection.get('title', '')
+        
+        if subsection_name == 'unmeasured_metrics' and unmeasured:
+            lines.extend([
+                f"### {subsection_title}",
+                ""
+            ])
+            
+            # List metric names
+            metric_names = [f"**{v.get('name', k)}** ({k})" for k, v in unmeasured.items()]
+            lines.append(", ".join(metric_names))
+            lines.extend(["", "**Status**: Always show zero values", ""])
+            
+            # Group by common reason if possible
+            quality_metrics = {k: v for k, v in unmeasured.items() 
+                              if 'quality' in v.get('reason', '').lower() or 
+                              'server' in v.get('reason', '').lower()}
+            
+            if quality_metrics:
+                lines.extend([
+                    "**Reason**: Generated applications are **not executed** during experiments. These metrics require:",
+                    "- Starting application servers (`uvicorn`, `flask run`, etc.)",
+                    "- Testing CRUD endpoints via HTTP requests",
+                    "- Measuring runtime behavior and error rates",
+                    "",
+                    "**Current Scope**: This experiment measures **code generation efficiency** (tokens, time, API usage), not **runtime code quality**.",
+                    "",
+                    "**Implementation Required**: Server startup automation, endpoint testing framework, error detection (estimated 20-40 hours)",
+                    "",
+                    "**Documentation**: See `docs/QUALITY_METRICS_INVESTIGATION.md` for complete analysis",
+                    ""
+                ])
+            else:
+                # Generic explanation for other unmeasured metrics
+                lines.extend([
+                    "**Reason**: Measurement infrastructure not yet implemented.",
+                    ""
+                ])
+                for k, v in unmeasured.items():
+                    lines.append(f"- **{k}**: {v.get('reason', 'Not measured')}")
+                lines.append("")
+        
+        elif subsection_name == 'partially_measured' and partial:
+            lines.extend([
+                f"### {subsection_title}",
+                ""
+            ])
+            
+            # List metric names
+            metric_names = [f"**{v.get('name', k)}** ({k})" for k, v in partial.items()]
+            lines.append(", ".join(metric_names))
+            lines.extend(["", "**Status**: Measured for ChatDev/GHSpec, NOT measured for BAEs", ""])
+            
+            lines.extend([
+                "**Reason**: These metrics depend on Human-in-the-Loop (HITL) event detection:",
+                "",
+                "| Framework | Detection Method | Status |",
+                "|-----------|-----------------|---------|",
+                "| ChatDev | 5 regex patterns in logs | ✅ Reliable |",
+                "| GHSpec | `[NEEDS CLARIFICATION:]` marker | ✅ Reliable |",
+                "| BAEs | Hardcoded to zero (no detection) | ❌ Unreliable |",
+                "",
+                "**Scientific Implication**: Comparisons involving BAEs for these metrics are **methodologically unsound**. BAEs values (AUTR=1.0, HIT=0) are assumptions, not measurements.",
+                "",
+                "**Validation**: Manual investigation of 23 BAEs runs confirmed zero HITL events for this specific experiment (see `docs/baes/BAES_HITL_INVESTIGATION.md`), but future experiments with ambiguous requirements may miss HITL events.",
+                "",
+                "**Implementation Required**: BAEs HITL detection mechanism (estimated 8-12 hours)",
+                ""
+            ])
+        
+        elif subsection_name == 'future_work':
+            lines.extend([
+                f"### {subsection_title}",
+                ""
+            ])
+            
+            # Priority 1: Quality metrics (if unmeasured)
+            if unmeasured:
+                lines.extend([
+                    "**Priority 1: Quality Metrics Implementation (High Impact)**",
+                    "- Implement automated server startup for generated applications",
+                    "- Create endpoint testing framework for CRUD validation",
+                ])
+                unmeasured_names = [k for k in unmeasured.keys()]
+                lines.append(f"- Enable {', '.join(unmeasured_names)} measurement")
+                lines.extend([
+                    "- **Benefit**: Enables runtime quality comparison",
+                    "- **Effort**: 20-40 hours",
+                    ""
+                ])
+            
+            # Priority 2: HITL detection (if partial)
+            if partial:
+                lines.extend([
+                    "**Priority 2: BAEs HITL Detection (Scientific Integrity)**",
+                    "- Implement HITL detection in BAEs adapter",
+                ])
+                partial_names = [k for k in partial.keys()]
+                lines.append(f"- Enable reliable {', '.join(partial_names)} measurement")
+                lines.extend([
+                    "- **Benefit**: Methodologically sound autonomy comparisons",
+                    "- **Effort**: 8-12 hours",
+                    ""
+                ])
+            
+            # Priority 3 & 4: Generic
+            lines.extend([
+                "**Priority 3: Extended Metrics (Additional Insights)**",
+                "- Cost efficiency: Dollar cost per task (tokens × pricing)",
+                "- Latency analysis: P50/P95/P99 response times",
+                "- Resource efficiency: Memory/CPU usage",
+                "- **Benefit**: Practical deployment considerations",
+                "- **Effort**: 12-20 hours",
+                "",
+                "**Priority 4: Experiment Scaling (Statistical Power)**",
+                f"- Increase sample size beyond current {sum(run_counts.values())} runs",
+                "- Achieve statistical significance (current p-values > 0.05 for most comparisons)",
+                "- Narrow confidence intervals",
+                "- **Benefit**: Conclusive statistical evidence",
+                "- **Effort**: Compute time only (automated)",
+                ""
+            ])
+        
+        elif subsection_name == 'conclusions':
+            lines.extend([
+                f"### {subsection_title}",
+                "",
+                "**From Reliable Metrics (High Confidence):**",
+                "- Token consumption patterns (TOK_IN, TOK_OUT)",
+                "- Execution time characteristics (T_WALL, ZDI)",
+                "- API call efficiency (API_CALLS, batching strategies)",
+                "- Cache adoption (CACHED_TOKENS, hit rates)",
+                "",
+                "**What We CANNOT Conclude:**",
+            ])
+            
+            if unmeasured:
+                unmeasured_names = [k for k in unmeasured.keys()]
+                lines.append(f"- Runtime code quality ({', '.join(unmeasured_names)} not measured)")
+            
+            if partial:
+                lines.append("- BAEs autonomy level (AUTR, HIT hardcoded, not detected)")
+                lines.append("- Framework automation efficiency involving BAEs (AEI unreliable)")
+            
+            lines.extend([
+                "",
+                "**Recommendations for Users:**",
+                "1. **Use reliable metrics** (tokens, time, API calls) for framework comparison",
+            ])
+            
+            if partial:
+                lines.append("2. **Do not compare AUTR/AEI** across frameworks until BAEs detection implemented")
+            
+            if unmeasured:
+                lines.append("3. **Validate quality manually** if runtime correctness is critical")
+            
+            lines.extend([
+                "4. **Monitor future updates** as quality metrics implementation progresses",
+                ""
+            ])
+    
+    lines.extend(["---", ""])
+    
+    return lines
+
+
 def _is_section_enabled(section_name: str, report_sections: List[Dict[str, Any]]) -> bool:
     """
     Check if a report section is enabled in configuration.
@@ -2396,102 +2606,14 @@ def generate_statistical_report(
     
     lines.extend(["", ""])
     
-    # Section 8: Limitations and Future Work
-    lines.extend([
-        "## 8. Limitations and Future Work",
-        "",
-        "### 🔬 Scientific Honesty Statement",
-        "",
-        "This report focuses on **reliably measured metrics only** to maintain scientific integrity. Several metrics are excluded from analysis due to measurement limitations:",
-        "",
-        "### ❌ Unmeasured Metrics",
-        "",
-        "**Q* (Quality Star), ESR (Emerging State Rate), CRUDe (CRUD Coverage), MC (Model Call Efficiency)**",
-        "",
-        "**Status**: Always show zero values",
-        "",
-        "**Reason**: Generated applications are **not executed** during experiments. These metrics require:",
-        "- Starting application servers (`uvicorn`, `flask run`, etc.)",
-        "- Testing CRUD endpoints via HTTP requests",
-        "- Measuring runtime behavior and error rates",
-        "",
-        "**Current Scope**: This experiment measures **code generation efficiency** (tokens, time, API usage), not **runtime code quality**.",
-        "",
-        "**Implementation Required**: Server startup automation, endpoint testing framework, error detection (estimated 20-40 hours)",
-        "",
-        "**Documentation**: See `docs/QUALITY_METRICS_INVESTIGATION.md` for complete analysis",
-        "",
-        "### ⚠️ Partially Measured Metrics",
-        "",
-        "**AUTR (Autonomy Rate), AEI (Automation Efficiency), HIT (HITL Count), HEU (Human Effort)**",
-        "",
-        "**Status**: Measured for ChatDev/GHSpec, NOT measured for BAEs",
-        "",
-        "**Reason**: These metrics depend on Human-in-the-Loop (HITL) event detection:",
-        "",
-        "| Framework | Detection Method | Status |",
-        "|-----------|-----------------|---------|",
-        "| ChatDev | 5 regex patterns in logs | ✅ Reliable |",
-        "| GHSpec | `[NEEDS CLARIFICATION:]` marker | ✅ Reliable |",
-        "| BAEs | Hardcoded to zero (no detection) | ❌ Unreliable |",
-        "",
-        "**Scientific Implication**: Comparisons involving BAEs for these metrics are **methodologically unsound**. BAEs values (AUTR=1.0, HIT=0) are assumptions, not measurements.",
-        "",
-        "**Validation**: Manual investigation of 23 BAEs runs confirmed zero HITL events for this specific experiment (see `docs/baes/BAES_HITL_INVESTIGATION.md`), but future experiments with ambiguous requirements may miss HITL events.",
-        "",
-        "**Implementation Required**: BAEs HITL detection mechanism (estimated 8-12 hours)",
-        "",
-        "### 🚀 Future Work Roadmap",
-        "",
-        "**Priority 1: Quality Metrics Implementation (High Impact)**",
-        "- Implement automated server startup for generated applications",
-        "- Create endpoint testing framework for CRUD validation",
-        "- Enable Q*, ESR, CRUDe, MC measurement",
-        "- **Benefit**: Enables runtime quality comparison",
-        "- **Effort**: 20-40 hours",
-        "",
-        "**Priority 2: BAEs HITL Detection (Scientific Integrity)**",
-        "- Implement HITL detection in BAEs adapter",
-        "- Enable reliable AUTR, AEI, HIT, HEU measurement",
-        "- **Benefit**: Methodologically sound autonomy comparisons",
-        "- **Effort**: 8-12 hours",
-        "",
-        "**Priority 3: Extended Metrics (Additional Insights)**",
-        "- Cost efficiency: Dollar cost per task (tokens × pricing)",
-        "- Latency analysis: P50/P95/P99 response times",
-        "- Resource efficiency: Memory/CPU usage",
-        "- **Benefit**: Practical deployment considerations",
-        "- **Effort**: 12-20 hours",
-        "",
-        "**Priority 4: Experiment Scaling (Statistical Power)**",
-        f"- Increase sample size beyond current {sum(run_counts.values())} runs",
-        "- Achieve statistical significance (current p-values > 0.05 for most comparisons)",
-        "- Narrow confidence intervals",
-        "- **Benefit**: Conclusive statistical evidence",
-        "- **Effort**: Compute time only (automated)",
-        "",
-        "### 📊 What We Can Conclude",
-        "",
-        "**From Reliable Metrics (High Confidence):**",
-        "- Token consumption patterns (TOK_IN, TOK_OUT)",
-        "- Execution time characteristics (T_WALL, ZDI)",
-        "- API call efficiency (API_CALLS, batching strategies)",
-        "- Cache adoption (CACHED_TOKENS, hit rates)",
-        "",
-        "**What We CANNOT Conclude:**",
-        "- Runtime code quality (Q*, ESR, CRUDe, MC not measured)",
-        "- BAEs autonomy level (AUTR, HIT hardcoded, not detected)",
-        "- Framework automation efficiency involving BAEs (AEI unreliable)",
-        "",
-        "**Recommendations for Users:**",
-        "1. **Use reliable metrics** (tokens, time, API calls) for framework comparison",
-        "2. **Do not compare AUTR/AEI** across frameworks until BAEs detection implemented",
-        "3. **Validate quality manually** if runtime correctness is critical",
-        "4. **Monitor future updates** as quality metrics implementation progresses",
-        "",
-        "---",
-        ""
-    ])
+    # Section 8: Limitations and Future Work (Config-driven)
+    lim_config = metrics_config.get_report_section('limitations')
+    if not lim_config or not lim_config.get('enabled', True):
+        logger.info("Limitations section disabled by config")
+    else:
+        logger.info("Generating limitations section from config")
+        limitations_lines = _generate_limitations_section(lim_config, run_counts, metrics_config)
+        lines.extend(limitations_lines)
     
     # Write to file
     output_path_obj = Path(output_path)
