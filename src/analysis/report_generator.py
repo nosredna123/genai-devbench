@@ -714,6 +714,30 @@ def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]
     return lines
 
 
+def _is_section_enabled(section_name: str, report_sections: List[Dict[str, Any]]) -> bool:
+    """
+    Check if a report section is enabled in configuration.
+    
+    Args:
+        section_name: Name of the section to check
+        report_sections: List of section configs from report configuration
+        
+    Returns:
+        True if section is enabled or if report_sections is empty (default to enabled)
+    """
+    # If no sections configured, default to enabling all
+    if not report_sections:
+        return True
+    
+    # Check if section exists and is enabled
+    for section in report_sections:
+        if section.get('name') == section_name:
+            return section.get('enabled', True)
+    
+    # Section not found in config - default to disabled for safety
+    return False
+
+
 def generate_statistical_report(
     frameworks_data: Dict[str, List[Dict[str, float]]],
     output_path: str,
@@ -722,11 +746,9 @@ def generate_statistical_report(
     """
     Generate comprehensive statistical report in Markdown format.
     
-    Creates a report with:
-    - Aggregate statistics table (mean, median, CI for each metric)
-    - Kruskal-Wallis test results for each metric
-    - Pairwise comparisons with Cliff's delta effect sizes
-    - Outlier detection results
+    Creates a config-driven report with sections controlled by experiment.yaml.
+    Section ordering, inclusion, and metrics are read from config/experiment.yaml
+    under the 'report' key.
     
     Args:
         frameworks_data: Dict mapping framework names to lists of run metrics.
@@ -758,6 +780,16 @@ def generate_statistical_report(
             config = {}
     
     from pathlib import Path
+    from src.utils.metrics_config import get_metrics_config
+    
+    # Load metrics config for section ordering
+    try:
+        metrics_config = get_metrics_config()
+        report_sections = metrics_config.get_report_sections()
+        logger.info(f"Loaded {len(report_sections)} enabled report sections from config")
+    except Exception as e:
+        logger.warning(f"Failed to load report sections from config: {e}. Using default ordering.")
+        report_sections = []  # Will generate all sections in default order
     
     # ============================================================================
     # PHASE 9: Strict Configuration Validation Helpers

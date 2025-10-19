@@ -301,6 +301,38 @@ class MetricsConfig:
         """
         return self._config.get('report', {})
     
+    def get_report_sections(self) -> List[Dict[str, Any]]:
+        """
+        Get all enabled report sections sorted by order.
+        
+        Returns:
+            List of section dictionaries sorted by 'order' field
+        """
+        report = self._config.get('report', {})
+        sections = report.get('sections', [])
+        
+        # Filter enabled sections and sort by order
+        enabled_sections = [s for s in sections if s.get('enabled', True)]
+        return sorted(enabled_sections, key=lambda s: s.get('order', 999))
+    
+    def get_report_section(self, name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a specific report section by name.
+        
+        Args:
+            name: Section name (e.g., 'aggregate_statistics')
+            
+        Returns:
+            Section configuration dictionary or None if not found
+        """
+        report = self._config.get('report', {})
+        sections = report.get('sections', [])
+        
+        for section in sections:
+            if section.get('name') == name:
+                return section
+        return None
+    
     def format_value(self, metric_key: str, value: Any) -> str:
         """
         Format a value according to its metric's display format.
