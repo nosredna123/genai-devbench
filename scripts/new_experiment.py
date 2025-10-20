@@ -653,7 +653,7 @@ def create_experiment(
             print()
             
             while True:
-                choice = input("Select option [1-3] (default: 3): ").strip() or '3'
+                choice = input("Select option [1-3] (default: 1): ").strip() or '1'
                 if choice in ['1', '2', '3']:
                     break
                 print("❌ Invalid choice. Enter 1, 2, or 3.")
