@@ -721,6 +721,7 @@ HELP_EOF
 import sys
 import json
 from pathlib import Path
+from datetime import datetime
 sys.path.insert(0, str(Path.cwd()))
 
 from src.orchestrator.usage_reconciler import UsageReconciler
@@ -764,7 +765,6 @@ for run_entry in all_runs:
         no_data_runs.append((framework, run_id))
         continue
     
-    import json
     with open(metrics_file) as f:
         metrics = json.load(f)
     
@@ -775,16 +775,21 @@ for run_entry in all_runs:
     if status == 'verified':
         verified_runs.append((framework, run_id, metrics, reconciliation))
     else:
-        # Check age
-        created_at = run_entry.get('created_at')
-        if created_at:
-            run_age = current_time - created_at
+        # Check age - parse ISO timestamp from manifest
+        start_time_str = run_entry.get('start_time')
+        if start_time_str:
+            # Parse ISO format: "2025-10-20T21:45:07.765641Z"
+            start_time_dt = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+            start_timestamp = start_time_dt.timestamp()
+            run_age = current_time - start_timestamp
+            
             if run_age < min_age_seconds:
                 wait_minutes = (min_age_seconds - run_age) / 60
                 too_recent_runs.append((framework, run_id, wait_minutes, metrics))
             else:
                 pending_runs.append((framework, run_id, run_age / 3600, metrics, reconciliation))
         else:
+            # No timestamp - add to pending with 0 age
             pending_runs.append((framework, run_id, 0, metrics, reconciliation))
 
 verbose = "$VERBOSE" == "--verbose"
