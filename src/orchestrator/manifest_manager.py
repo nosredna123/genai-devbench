@@ -10,11 +10,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from src.utils.logger import get_logger
+from src.utils.experiment_paths import ExperimentPaths
 
 logger = get_logger(__name__, component="orchestrator")
 
 MANIFEST_VERSION = "1.0"
-MANIFEST_PATH = Path("runs/runs_manifest.json")
 
 
 def _get_empty_manifest() -> Dict[str, Any]:
@@ -32,19 +32,30 @@ def _get_empty_manifest() -> Dict[str, Any]:
     }
 
 
-def get_manifest() -> Dict[str, Any]:
+def get_manifest(experiment_name: Optional[str] = None) -> Dict[str, Any]:
     """
     Load the current runs manifest.
+    
+    Args:
+        experiment_name: Name of experiment (optional, for backward compatibility)
     
     Returns:
         Dictionary with manifest data, or empty manifest if not found
     """
-    if not MANIFEST_PATH.exists():
+    # Get manifest path
+    if experiment_name:
+        exp_paths = ExperimentPaths(experiment_name)
+        manifest_path = exp_paths.manifest_path
+    else:
+        # Backward compatibility: use old path
+        manifest_path = Path("runs/runs_manifest.json")
+    
+    if not manifest_path.exists():
         logger.info("No manifest found, creating empty one")
         return _get_empty_manifest()
     
     try:
-        with open(MANIFEST_PATH, 'r', encoding='utf-8') as f:
+        with open(manifest_path, 'r', encoding='utf-8') as f:
             manifest = json.load(f)
             logger.debug(f"Loaded manifest with {manifest['total_runs']} runs")
             return manifest
@@ -54,7 +65,7 @@ def get_manifest() -> Dict[str, Any]:
         return _get_empty_manifest()
 
 
-def update_manifest(run_data: Dict[str, Any]) -> None:
+def update_manifest(run_data: Dict[str, Any], experiment_name: Optional[str] = None) -> None:
     """
     Update the manifest with new run information.
     
@@ -67,11 +78,20 @@ def update_manifest(run_data: Dict[str, Any]) -> None:
             - verification_status: Reconciliation status (optional)
             - total_tokens_in: Input tokens (optional)
             - total_tokens_out: Output tokens (optional)
+        experiment_name: Name of experiment (optional, for backward compatibility)
     """
-    manifest = get_manifest()
+    manifest = get_manifest(experiment_name)
     
-    # Ensure runs/ directory exists
-    MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    # Get manifest path
+    if experiment_name:
+        exp_paths = ExperimentPaths(experiment_name)
+        manifest_path = exp_paths.manifest_path
+    else:
+        # Backward compatibility: use old path
+        manifest_path = Path("runs/runs_manifest.json")
+    
+    # Ensure directory exists
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
     
     # Extract key fields
     run_id = run_data.get("run_id")
@@ -116,9 +136,9 @@ def update_manifest(run_data: Dict[str, Any]) -> None:
     
     # Save manifest
     try:
-        with open(MANIFEST_PATH, 'w', encoding='utf-8') as f:
+        with open(manifest_path, 'w', encoding='utf-8') as f:
             json.dump(manifest, f, indent=2)
-        logger.debug(f"Manifest saved to {MANIFEST_PATH}")
+        logger.debug(f"Manifest saved to {manifest_path}")
     except (OSError, IOError) as e:
         logger.error(f"Error saving manifest: {e}")
 
@@ -126,7 +146,8 @@ def update_manifest(run_data: Dict[str, Any]) -> None:
 def find_runs(
     framework: Optional[str] = None,
     verification_status: Optional[str] = None,
-    min_tokens: Optional[int] = None
+    min_tokens: Optional[int] = None,
+    experiment_name: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     Query runs from the manifest with optional filters.
@@ -135,11 +156,12 @@ def find_runs(
         framework: Filter by framework name
         verification_status: Filter by verification status
         min_tokens: Filter by minimum total tokens (in + out)
+        experiment_name: Name of experiment (optional, for backward compatibility)
     
     Returns:
         List of matching run entries
     """
-    manifest = get_manifest()
+    manifest = get_manifest(experiment_name)
     runs = manifest["runs"]
     
     # Apply filters
@@ -159,16 +181,28 @@ def find_runs(
     return runs
 
 
-def rebuild_manifest() -> None:
+def rebuild_manifest(experiment_name: Optional[str] = None) -> None:
     """
     Rebuild the manifest by scanning the runs/ directory.
     
     This is useful if the manifest gets out of sync with actual files.
+    
+    Args:
+        experiment_name: Name of experiment (optional, for backward compatibility)
     """
     logger.info("Rebuilding manifest from runs/ directory")
     
     manifest = _get_empty_manifest()
-    runs_dir = Path("runs")
+    
+    # Get runs directory
+    if experiment_name:
+        exp_paths = ExperimentPaths(experiment_name)
+        runs_dir = exp_paths.runs_dir
+        manifest_path = exp_paths.manifest_path
+    else:
+        # Backward compatibility: use old path
+        runs_dir = Path("runs")
+        manifest_path = Path("runs/runs_manifest.json")
     
     if not runs_dir.exists():
         logger.warning("runs/ directory does not exist")
@@ -221,22 +255,31 @@ def rebuild_manifest() -> None:
     manifest["last_updated"] = datetime.utcnow().isoformat() + "Z"
     
     try:
-        MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(MANIFEST_PATH, 'w', encoding='utf-8') as f:
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(manifest_path, 'w', encoding='utf-8') as f:
             json.dump(manifest, f, indent=2)
         logger.info(f"Rebuilt manifest with {manifest['total_runs']} runs")
     except (OSError, IOError) as e:
         logger.error(f"Error saving rebuilt manifest: {e}")
 
 
-def remove_run(run_id: str) -> None:
+def remove_run(run_id: str, experiment_name: Optional[str] = None) -> None:
     """
     Remove a run from the manifest.
     
     Args:
         run_id: The run ID to remove
+        experiment_name: Name of experiment (optional, for backward compatibility)
     """
-    manifest = get_manifest()
+    manifest = get_manifest(experiment_name)
+    
+    # Get manifest path
+    if experiment_name:
+        exp_paths = ExperimentPaths(experiment_name)
+        manifest_path = exp_paths.manifest_path
+    else:
+        # Backward compatibility: use old path
+        manifest_path = Path("runs/runs_manifest.json")
     
     # Find and remove the run
     for idx, run in enumerate(manifest["runs"]):
@@ -248,7 +291,7 @@ def remove_run(run_id: str) -> None:
             manifest["last_updated"] = datetime.utcnow().isoformat() + "Z"
             
             # Save
-            with open(MANIFEST_PATH, 'w', encoding='utf-8') as f:
+            with open(manifest_path, 'w', encoding='utf-8') as f:
                 json.dump(manifest, f, indent=2)
             
             logger.info(f"Removed run {run_id} from manifest")

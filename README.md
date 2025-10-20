@@ -46,49 +46,110 @@ cp .env.example .env
 #   GHSPEC_API_KEY=ghp_your-github-token
 ```
 
-### Running Experiments
+### Your First Experiment (5 Minutes)
+
+The framework supports multiple independent experiments with organized, isolated outputs:
 
 ```bash
-# Execute single framework run (15-30 minutes)
+# 1. Create an experiment
+python scripts/new_experiment.py \
+    --name my_first_experiment \
+    --model gpt-4o \
+    --frameworks baes \
+    --runs 10
+
+# 2. Run the experiment
+python scripts/run_experiment.py my_first_experiment
+
+# 3. Analyze results
+./runners/analyze_results.sh my_first_experiment
+
+# 4. View report
+cat experiments/my_first_experiment/analysis/report.md
+```
+
+**What happened:**
+- ✅ Created isolated experiment directory
+- ✅ Ran 10 independent BAEs executions
+- ✅ Generated statistical analysis with confidence intervals
+- ✅ Produced comprehensive report with recommendations
+
+**See [Quick Start Guide](docs/QUICKSTART.md) for detailed walkthrough.**
+
+### Compare Multiple Experiments
+
+```bash
+# Create baseline
+python scripts/new_experiment.py \
+    --name baseline_gpt4o \
+    --model gpt-4o \
+    --frameworks baes \
+    --runs 10
+
+# Create variant
+python scripts/new_experiment.py \
+    --name variant_gpt4omini \
+    --model gpt-4o-mini \
+    --frameworks baes \
+    --runs 10
+
+# Run both
+python scripts/run_experiment.py baseline_gpt4o
+python scripts/run_experiment.py variant_gpt4omini
+
+# Analyze both
+./runners/analyze_results.sh baseline_gpt4o
+./runners/analyze_results.sh variant_gpt4omini
+
+# Compare
+diff experiments/baseline_gpt4o/analysis/report.md \
+     experiments/variant_gpt4omini/analysis/report.md
+```
+
+**See [Comparison Guide](docs/COMPARISON_GUIDE.md) for statistical comparison techniques.**
+
+### Legacy Single-Run Mode
+
+The framework still supports legacy single-run mode (deprecated):
+
+```bash
+# Legacy: Execute single framework run (15-30 minutes)
+# DEPRECATED: Use new_experiment.py instead
 ./runners/run_experiment.sh baes
 
-# Execute multi-framework comparison until convergence (1-3 hours)
-./runners/run_experiment.sh --multi baes chatdev ghspec
+# Legacy: View metrics from a run
+cat runs/baes/<run-id>/metrics.json
 
-# Analyze results and generate visualizations
+# Legacy: Analyze legacy runs
 ./runners/analyze_results.sh ./analysis_output
 ```
 
-### Viewing Results
-
-```bash
-# View metrics from a run
-cat runs/baes/<run-id>/metrics.json
-
-# View statistical report
-cat analysis_output/report.md
-
-# Open visualizations in browser
-firefox analysis_output/radar_chart.svg
-firefox analysis_output/pareto_plot.svg
-firefox analysis_output/timeline_chart.svg
-```
+**Note:** Legacy mode is maintained for backward compatibility but new workflows should use the multi-experiment system.
 
 ## Documentation
 
 ### Getting Started
-- **[Quickstart Guide](docs/quickstart.md)** - Get up and running in minutes
-- **[Architecture Guide](docs/architecture.md)** - System design and components
-- **[Metrics Guide](docs/metrics.md)** - Complete reference for all 16 metrics
+- **[Quick Start Guide](docs/QUICKSTART.md)** ⭐ **Start here!** - Create your first experiment in 5 minutes
+- **[Workflows Guide](docs/WORKFLOWS.md)** - Common usage patterns and real-world scenarios
+- **[Comparison Guide](docs/COMPARISON_GUIDE.md)** - Statistical comparison of experiments
+- **[Best Practices Guide](docs/BEST_PRACTICES.md)** - Recommendations for effective experimentation
+
+### Multi-Experiment System
+- **[Architecture Guide](docs/architecture.md)** - System design and multi-experiment components
 - **[Configuration Reference](docs/configuration_reference.md)** - Complete config schema and examples
 - **[Validation System](docs/validation_system.md)** - Configuration validation reference
 - **[Troubleshooting Guide](docs/troubleshooting.md)** - Common issues and solutions
 
-### Specification
+### Metrics and Analysis
+- **[Metrics Guide](docs/metrics.md)** - Complete reference for all 16 metrics
+- **[Statistical Power Analysis](docs/statistical_power_analysis.md)** - Sample size calculations
+- **[API Usage Reconciliation](docs/reconcile_usage_guide.md)** - Accurate cost tracking
+
+### Legacy Documentation
+- [Original Quickstart](docs/quickstart.md) - Legacy single-run quickstart (deprecated)
 - [Feature Specification](specs/001-baes-experiment-framework/spec.md) - Requirements and user stories
 - [Implementation Plan](specs/001-baes-experiment-framework/plan.md) - Technical design
 - [Research Decisions](specs/001-baes-experiment-framework/research.md) - Design rationale
-- [Task Breakdown](specs/001-baes-experiment-framework/tasks.md) - Implementation tasks
 
 ### Testing
 - **Test Suite:** Comprehensive unit tests with 100% pass rate
@@ -100,6 +161,24 @@ firefox analysis_output/timeline_chart.svg
 
 ```
 baes_experiment/
+├── experiments/                 # 🆕 Multi-experiment storage (isolated)
+│   ├── <experiment_name>/       # Individual experiment directory
+│   │   ├── config.yaml          # Experiment configuration (immutable)
+│   │   ├── README.md            # Auto-generated documentation
+│   │   ├── runs/                # Run outputs for this experiment
+│   │   │   ├── manifest.json    # Run tracking and metadata
+│   │   │   ├── baes/            # Framework-specific runs
+│   │   │   ├── chatdev/
+│   │   │   └── ghspec/
+│   │   ├── analysis/            # Analysis outputs
+│   │   │   ├── report.md        # Statistical report
+│   │   │   └── visualizations/  # Charts and graphs
+│   │   └── .meta/               # Metadata
+│   │       └── config.hash      # Config integrity verification
+│   └── .experiment_registry.json # 🆕 Global experiment registry
+├── scripts/                     # 🆕 Experiment management
+│   ├── new_experiment.py        # Create experiments (interactive/CLI)
+│   └── run_experiment.py        # Run experiments (high-level wrapper)
 ├── config/                      # Experiment configuration
 │   ├── experiment.yaml          # Framework configs, timeouts, seeds
 │   ├── prompts/                 # 6-step CRUD evolution scenario
@@ -123,17 +202,33 @@ baes_experiment/
 │       ├── logger.py            # Structured JSON logging
 │       ├── config_loader.py     # YAML validation
 │       ├── isolation.py         # Workspace management
-│       └── api_client.py        # OpenAI Usage API verification
+│       ├── api_client.py        # OpenAI Usage API verification
+│       ├── experiment_paths.py  # 🆕 Path resolution for experiments
+│       └── experiment_registry.py # 🆕 Global experiment tracking
 ├── runners/                     # Entry point scripts
-│   ├── run_experiment.sh        # Main experiment orchestrator
-│   └── analyze_results.sh       # Analysis pipeline
-├── runs/                        # Experiment outputs (gitignored)
+│   ├── run_experiment.sh        # ⚠️ DEPRECATED (use scripts/run_experiment.py)
+│   ├── analyze_results.sh       # Analysis pipeline (experiment-aware)
+│   └── reconcile_usage.sh       # 🆕 API usage reconciliation
+├── runs/                        # 🗄️ Legacy run outputs (gitignored, deprecated)
 ├── tests/                       # Test suite
 │   ├── unit/                    # Unit tests
 │   ├── integration/             # Integration tests
 │   └── contract/                # Contract tests
 └── docs/                        # Documentation
+    ├── QUICKSTART.md            # 🆕 5-minute getting started guide
+    ├── WORKFLOWS.md             # 🆕 Common usage patterns
+    ├── COMPARISON_GUIDE.md      # 🆕 Statistical comparison guide
+    ├── BEST_PRACTICES.md        # 🆕 Recommendations and tips
+    └── ...                      # Other documentation
 ```
+
+**Key Changes:**
+- 🆕 **experiments/** directory: All experiments organized by name
+- 🆕 **Experiment Registry**: Global tracking of all experiments
+- 🆕 **Config Hash**: Immutable configuration with integrity verification
+- 🆕 **Isolated Runs**: Each experiment has its own runs and analysis
+- ⚠️ **Deprecated**: Legacy `runners/run_experiment.sh` (use `scripts/run_experiment.py`)
+- 🗄️ **Legacy**: Old `runs/` directory maintained for backward compatibility
 
 ## Metrics Reference
 

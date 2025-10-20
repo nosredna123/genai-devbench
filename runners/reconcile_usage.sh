@@ -1,18 +1,44 @@
 #!/bin/bash
 # Reconcile token usage data from OpenAI Usage API
 #
-# Usage:
-#   ./runners/reconcile_usage.sh                    # Reconcile all pending runs
-#   ./runners/reconcile_usage.sh chatdev            # Reconcile specific framework
-#   ./runners/reconcile_usage.sh chatdev run-abc123 # Reconcile specific run
-#   ./runners/reconcile_usage.sh --list             # List pending runs
-#   ./runners/reconcile_usage.sh --help             # Show help
+# Supports both legacy mode (./runs) and multi-experiment mode (experiments/<name>/runs)
+#
+# Multi-Experiment Mode (NEW):
+#   ./runners/reconcile_usage.sh <experiment>                  # Reconcile all pending runs
+#   ./runners/reconcile_usage.sh <experiment> <framework>      # Reconcile specific framework
+#   ./runners/reconcile_usage.sh <experiment> <framework> <run># Reconcile specific run
+#   ./runners/reconcile_usage.sh <experiment> --list           # List pending runs
+#
+# Legacy Mode (backward compatible, uses ./runs):
+#   ./runners/reconcile_usage.sh                               # Reconcile all pending runs
+#   ./runners/reconcile_usage.sh <framework>                   # Reconcile specific framework
+#   ./runners/reconcile_usage.sh <framework> <run-id>          # Reconcile specific run
+#   ./runners/reconcile_usage.sh --list                        # List pending runs
+#
+# Options:
+#   --help, -h              Show help message
 
 set -e
 
 # Get project root
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# AUTO-DETECT MODE: Multi-Experiment vs Legacy
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+EXPERIMENT_NAME=""
+MODE="legacy"
+
+# Check if first argument is an experiment directory
+if [ -d "experiments/${1:-}" ]; then
+    EXPERIMENT_NAME="$1"
+    MODE="multi-experiment"
+    shift  # Remove experiment name from arguments
+fi
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # Activate environment
 if [ ! -d ".venv" ]; then
@@ -39,7 +65,11 @@ export PYTHONPATH="$PROJECT_ROOT"
 
 # Print header
 echo "========================================"
-echo "Usage API Reconciliation"
+if [ "$MODE" = "multi-experiment" ]; then
+    echo "Usage API Reconciliation: $EXPERIMENT_NAME"
+else
+    echo "Usage API Reconciliation (Legacy Mode)"
+fi
 echo "========================================"
 echo ""
 
@@ -48,29 +78,50 @@ case "${1:-}" in
   --help|-h)
     echo "Reconcile token usage data from OpenAI Usage API with double-check verification"
     echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "MULTI-EXPERIMENT MODE (Recommended)"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Usage:"
-    echo "  $0                      # Reconcile all pending runs (>30 min old)"
-    echo "  $0 <framework>          # Reconcile specific framework"
-    echo "  $0 <framework> <run-id> # Reconcile specific run"
-    echo "  $0 --list               # List pending runs"
-    echo "  $0 --list --verbose     # List ALL runs with detailed status"
-    echo "  $0 --help               # Show this help"
+    echo "  $0 <experiment>                     # Reconcile all pending runs"
+    echo "  $0 <experiment> <framework>         # Reconcile specific framework"
+    echo "  $0 <experiment> <framework> <run>   # Reconcile specific run"
+    echo "  $0 <experiment> --list              # List pending runs"
     echo ""
-    echo "Options:"
+    echo "Examples:"
+    echo "  $0 baseline                         # Reconcile all in baseline experiment"
+    echo "  $0 baseline --list                  # Show what needs verification"
+    echo "  $0 baseline baes                    # Reconcile BAEs runs only"
+    echo "  $0 baseline baes test_run_001       # Reconcile specific run"
+    echo "  $0 baseline --list --verbose        # Show all runs with details"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "LEGACY MODE (Backward Compatible, uses ./runs)"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Usage:"
+    echo "  $0                                  # Reconcile all pending (>30 min old)"
+    echo "  $0 <framework>                      # Reconcile specific framework"
+    echo "  $0 <framework> <run-id>             # Reconcile specific run"
+    echo "  $0 --list                           # List pending runs"
+    echo ""
+    echo "Examples:"
+    echo "  $0                                  # Reconcile all pending"
+    echo "  $0 chatdev                          # Reconcile ChatDev runs"
+    echo "  $0 chatdev test_run_123             # Reconcile specific run"
+    echo "  $0 --list                           # Show what needs verification"
+    echo "  $0 --list --verbose                 # Show all runs with details"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "OPTIONS"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  --min-age MINUTES       # Only reconcile runs older than this (default: 30)"
     echo "  --max-age HOURS         # Don't reconcile runs older than this (default: 24)"
     echo "  --force                 # Force reconciliation even if already verified"
     echo "  --verbose               # Show detailed information (use with --list)"
+    echo "  --help, -h              # Show this help message"
     echo ""
-    echo "Examples:"
-    echo "  $0                                    # Reconcile all pending"
-    echo "  $0 chatdev                            # Reconcile ChatDev runs"
-    echo "  $0 chatdev test_run_123               # Reconcile specific run"
-    echo "  $0 --list                             # Show what needs verification"
-    echo "  $0 --list --verbose                   # Show all runs with details"
-    echo "  $0 --min-age 60                       # Wait 60 minutes before reconciling"
-    echo ""
-    echo "Double-Check Verification:"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "DOUBLE-CHECK VERIFICATION"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  Runs are marked 'verified' only when TWO consecutive reconciliation"
     echo "  attempts return identical token counts with at least 60 minutes between them."
     echo "  This ensures Usage API data has fully stabilized."
@@ -80,7 +131,9 @@ case "${1:-}" in
     echo ""
     echo "  Configure interval: RECONCILIATION_VERIFICATION_INTERVAL_MIN=60 in .env"
     echo ""
-    echo "Environment:"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "ENVIRONMENT"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  OPEN_AI_KEY_ADM must be set in .env file"
     echo "  This key requires api.usage.read scope"
     echo "  RECONCILIATION_VERIFICATION_INTERVAL_MIN (default: 60)"
@@ -115,7 +168,19 @@ import json
 from datetime import datetime, timezone
 import time
 
-reconciler = UsageReconciler()
+# Multi-experiment mode support
+experiment_name = "${EXPERIMENT_NAME}" if "${EXPERIMENT_NAME}" else None
+
+if experiment_name:
+    from src.utils.experiment_paths import ExperimentPaths
+    ep = ExperimentPaths(experiment_name)
+    reconciler = UsageReconciler(runs_dir=ep.runs_dir)
+    all_runs = find_runs(experiment_name=experiment_name)
+else:
+    # Legacy mode
+    reconciler = UsageReconciler()
+    all_runs = find_runs()
+
 verbose = $VERBOSE_PYTHON
 
 if verbose:
@@ -337,7 +402,17 @@ from src.orchestrator.usage_reconciler import UsageReconciler
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
-reconciler = UsageReconciler()
+
+# Multi-experiment mode support
+experiment_name = "${EXPERIMENT_NAME}" if "${EXPERIMENT_NAME}" else None
+
+if experiment_name:
+    from src.utils.experiment_paths import ExperimentPaths
+    ep = ExperimentPaths(experiment_name)
+    reconciler = UsageReconciler(runs_dir=ep.runs_dir)
+else:
+    # Legacy mode
+    reconciler = UsageReconciler()
 
 try:
     report = reconciler.reconcile_run(
@@ -410,7 +485,17 @@ from src.orchestrator.usage_reconciler import UsageReconciler
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
-reconciler = UsageReconciler()
+
+# Multi-experiment mode support
+experiment_name = "${EXPERIMENT_NAME}" if "${EXPERIMENT_NAME}" else None
+
+if experiment_name:
+    from src.utils.experiment_paths import ExperimentPaths
+    ep = ExperimentPaths(experiment_name)
+    reconciler = UsageReconciler(runs_dir=ep.runs_dir)
+else:
+    # Legacy mode
+    reconciler = UsageReconciler()
 
 framework = "$FRAMEWORK" if "$FRAMEWORK" else None
 

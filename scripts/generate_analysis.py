@@ -6,17 +6,24 @@ and produces a comprehensive statistical report. It replaces the embedded
 Python code in analyze_results.sh with a cleaner, config-driven approach.
 
 Usage:
+    # Legacy mode (backward compatible)
     python generate_analysis.py [--output-dir OUTPUT_DIR] [--config CONFIG]
     
+    # Multi-experiment mode
+    python generate_analysis.py EXPERIMENT_NAME
+    
 Arguments:
-    --output-dir: Directory to save analysis outputs (default: ./analysis_output)
-    --config: Path to experiment config YAML (default: config/experiment.yaml)
+    experiment_name: Name of experiment to analyze (optional, uses new system)
+    --output-dir: Directory to save analysis outputs (default: ./analysis_output or experiments/<name>/analysis)
+    --config: Path to experiment config YAML (default: config/experiment.yaml or experiments/<name>/config.yaml)
+    --runs-dir: Directory containing runs (default: ./runs or experiments/<name>/runs)
 """
 
 import argparse
 import sys
 from pathlib import Path
 from collections import defaultdict
+from typing import Optional
 import json
 
 # Add project root to path
@@ -32,15 +39,17 @@ from src.analysis.visualization_factory import VisualizationFactory
 from src.orchestrator.config_loader import load_config
 from src.utils.logger import get_logger
 from src.orchestrator.manifest_manager import get_manifest, find_runs
+from src.utils.experiment_paths import ExperimentPaths, ExperimentNotFoundError
 
 logger = get_logger(__name__)
 
 
-def load_run_data(runs_dir: Path) -> tuple[dict, dict]:
+def load_run_data(runs_dir: Path, experiment_name: Optional[str] = None) -> tuple[dict, dict]:
     """Load all verified run data from manifest.
     
     Args:
         runs_dir: Path to runs directory
+        experiment_name: Name of experiment (optional, for multi-experiment support)
         
     Returns:
         Tuple of (frameworks_data, timeline_data) where:
@@ -52,7 +61,7 @@ def load_run_data(runs_dir: Path) -> tuple[dict, dict]:
     
     # Get manifest
     try:
-        manifest = get_manifest()
+        manifest = get_manifest(experiment_name)
         logger.info("Manifest loaded: %d total runs across %d frameworks", 
                     manifest['total_runs'], len(manifest['frameworks']))
     except FileNotFoundError:
@@ -63,7 +72,7 @@ def load_run_data(runs_dir: Path) -> tuple[dict, dict]:
         sys.exit(1)
     
     # Query all runs from manifest
-    all_runs = find_runs()
+    all_runs = find_runs(experiment_name=experiment_name)
     
     if not all_runs:
         logger.error("No runs found in manifest")
@@ -224,19 +233,64 @@ def compute_aggregates(frameworks_data: dict) -> dict:
 
 def main():
     """Main entry point for analysis."""
-    parser = argparse.ArgumentParser(description='Generate statistical analysis and visualizations')
-    parser.add_argument('--output-dir', default='./analysis_output',
-                       help='Directory to save outputs (default: ./analysis_output)')
-    parser.add_argument('--config', default='config/experiment.yaml',
-                       help='Path to config file (default: config/experiment.yaml)')
-    parser.add_argument('--runs-dir', default='./runs',
-                       help='Directory containing run data (default: ./runs)')
+    parser = argparse.ArgumentParser(
+        description='Generate statistical analysis and visualizations',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Legacy mode (backward compatible)
+  python generate_analysis.py --output-dir ./analysis_output
+  
+  # Multi-experiment mode
+  python generate_analysis.py baseline
+  python generate_analysis.py test_exp
+        """
+    )
+    
+    parser.add_argument(
+        'experiment',
+        nargs='?',
+        help='Experiment name (uses experiments/<name>/ structure)'
+    )
+    parser.add_argument('--output-dir',
+                       help='Directory to save outputs (overrides default)')
+    parser.add_argument('--config',
+                       help='Path to config file (overrides default)')
+    parser.add_argument('--runs-dir',
+                       help='Directory containing run data (overrides default)')
+    
     args = parser.parse_args()
     
-    # Paths
-    runs_dir = Path(args.runs_dir)
-    output_dir = Path(args.output_dir)
-    config_file = Path(args.config)
+    # Determine if using multi-experiment mode
+    experiment_name = args.experiment
+    
+    if experiment_name:
+        # Multi-experiment mode
+        logger.info("Using multi-experiment mode for: %s", experiment_name)
+        
+        try:
+            exp_paths = ExperimentPaths(experiment_name)
+        except ExperimentNotFoundError as e:
+            logger.error(str(e))
+            sys.exit(1)
+        
+        # Use experiment-specific paths (can be overridden by CLI args)
+        runs_dir = Path(args.runs_dir) if args.runs_dir else exp_paths.runs_dir
+        output_dir = Path(args.output_dir) if args.output_dir else exp_paths.analysis_dir
+        config_file = Path(args.config) if args.config else exp_paths.config_path
+        
+        logger.info("Experiment: %s", experiment_name)
+        logger.info("  Config: %s", config_file)
+        logger.info("  Runs: %s", runs_dir)
+        logger.info("  Output: %s", output_dir)
+    else:
+        # Legacy mode (backward compatible)
+        logger.info("Using legacy mode (backward compatible)")
+        
+        runs_dir = Path(args.runs_dir) if args.runs_dir else Path('./runs')
+        output_dir = Path(args.output_dir) if args.output_dir else Path('./analysis_output')
+        config_file = Path(args.config) if args.config else Path('config/experiment.yaml')
+        experiment_name = None  # No experiment name in legacy mode
     
     # Validate runs directory exists
     if not runs_dir.exists():
@@ -258,7 +312,7 @@ def main():
     
     # Step 1: Load run data
     logger.info("Loading run data from manifest...")
-    frameworks_data, timeline_data = load_run_data(runs_dir)
+    frameworks_data, timeline_data = load_run_data(runs_dir, experiment_name)
     
     # Step 2: Compute aggregate metrics
     aggregated_data = compute_aggregates(frameworks_data)

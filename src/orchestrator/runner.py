@@ -43,16 +43,23 @@ class StepTimeoutError(Exception):
 class OrchestratorRunner:
     """Manages the execution of a single framework run."""
     
-    def __init__(self, framework_name: str, config_path: str = "config/experiment.yaml"):
+    def __init__(
+        self,
+        framework_name: str,
+        config_path: str = "config/experiment.yaml",
+        experiment_name: Optional[str] = None
+    ):
         """
         Initialize orchestrator runner.
         
         Args:
             framework_name: Name of framework (baes, chatdev, ghspec)
             config_path: Path to experiment configuration
+            experiment_name: Name of experiment (optional, for multi-experiment support)
         """
         self.framework_name = framework_name
         self.config_path = config_path
+        self.experiment_name = experiment_name
         self.config = None
         self.adapter = None
         self.metrics_collector = None
@@ -235,7 +242,11 @@ class OrchestratorRunner:
             # Generate run ID and create isolated workspace
             from src.utils.isolation import generate_run_id
             self.run_id = generate_run_id()
-            run_dir, workspace_dir = create_isolated_workspace(self.framework_name, self.run_id)
+            run_dir, workspace_dir = create_isolated_workspace(
+                self.framework_name,
+                self.run_id,
+                self.experiment_name
+            )
             self.workspace_path = str(workspace_dir)
             
             # Initialize logging context for per-run, per-step logging
@@ -446,7 +457,7 @@ class OrchestratorRunner:
                 'total_tokens_in': metrics['aggregate_metrics'].get('TOK_IN', 0),
                 'total_tokens_out': metrics['aggregate_metrics'].get('TOK_OUT', 0)
             }
-            update_manifest(run_data)
+            update_manifest(run_data, self.experiment_name)
             logger.info("Updated runs manifest",
                        extra={'run_id': self.run_id, 'event': 'manifest_updated'})
             

@@ -2,10 +2,16 @@
 # Analysis entry point for BAEs experiment results
 # 
 # Usage:
+#   # Legacy mode (backward compatible)
 #   ./runners/analyze_results.sh [output_dir]
 #
+#   # Multi-experiment mode
+#   ./runners/analyze_results.sh EXPERIMENT_NAME
+#
 # Arguments:
-#   output_dir: Directory to save analysis outputs (default: ./analysis_output)
+#   experiment_name or output_dir: 
+#     - If matches experiment in experiments/, uses multi-experiment mode
+#     - Otherwise treats as output directory (legacy mode)
 #
 # This script:
 # 1. Loads metrics from all framework runs in runs/ directory
@@ -16,18 +22,15 @@
 
 set -euo pipefail
 
-# Configuration
-RUNS_DIR="./runs"
-OUTPUT_DIR="${1:-./analysis_output}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-CONFIG_FILE="$PROJECT_ROOT/config/experiment.yaml"
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
+
+# Script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Helper functions
 log_info() {
@@ -42,12 +45,50 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Determine mode (multi-experiment or legacy)
+if [ $# -ge 1 ]; then
+    ARG1="$1"
+    # Check if argument is an experiment name
+    if [ -d "$PROJECT_ROOT/experiments/$ARG1" ]; then
+        # Multi-experiment mode
+        EXPERIMENT_NAME="$ARG1"
+        RUNS_DIR="$PROJECT_ROOT/experiments/$EXPERIMENT_NAME/runs"
+        OUTPUT_DIR="$PROJECT_ROOT/experiments/$EXPERIMENT_NAME/analysis"
+        CONFIG_FILE="$PROJECT_ROOT/experiments/$EXPERIMENT_NAME/config.yaml"
+        MODE="multi-experiment"
+        
+        log_info "Multi-experiment mode: $EXPERIMENT_NAME"
+    else
+        # Legacy mode - treat argument as output directory
+        RUNS_DIR="$PROJECT_ROOT/runs"
+        OUTPUT_DIR="$ARG1"
+        CONFIG_FILE="$PROJECT_ROOT/config/experiment.yaml"
+        MODE="legacy"
+        EXPERIMENT_NAME=""
+        
+        log_info "Legacy mode: custom output directory"
+    fi
+else
+    # Default legacy mode
+    RUNS_DIR="$PROJECT_ROOT/runs"
+    OUTPUT_DIR="$PROJECT_ROOT/analysis_output"
+    CONFIG_FILE="$PROJECT_ROOT/config/experiment.yaml"
+    MODE="legacy"
+    EXPERIMENT_NAME=""
+    
+    log_info "Legacy mode: default output directory"
+fi
+
 # Validate environment
 log_info "Validating environment..."
 
 if [ ! -d "$RUNS_DIR" ]; then
     log_error "Runs directory not found: $RUNS_DIR"
-    log_error "Please run experiments first using ./runners/run_experiment.sh"
+    if [ "$MODE" = "multi-experiment" ]; then
+        log_error "Please run experiment first: python scripts/run_experiment.py $EXPERIMENT_NAME"
+    else
+        log_error "Please run experiments first using ./runners/run_experiment.sh"
+    fi
     exit 1
 fi
 
@@ -69,10 +110,17 @@ mkdir -p "$OUTPUT_DIR"
 
 # Run the new Python analysis script
 log_info "Running analysis with VisualizationFactory..."
-python3 "$PROJECT_ROOT/scripts/generate_analysis.py" \
-    --output-dir "$OUTPUT_DIR" \
-    --config "$CONFIG_FILE" \
-    --runs-dir "$RUNS_DIR"
+
+if [ "$MODE" = "multi-experiment" ]; then
+    # Multi-experiment mode: pass experiment name as positional argument
+    python3 "$PROJECT_ROOT/scripts/generate_analysis.py" "$EXPERIMENT_NAME"
+else
+    # Legacy mode: pass paths as options
+    python3 "$PROJECT_ROOT/scripts/generate_analysis.py" \
+        --output-dir "$OUTPUT_DIR" \
+        --config "$CONFIG_FILE" \
+        --runs-dir "$RUNS_DIR"
+fi
 
 # Check exit code
 if [ $? -eq 0 ]; then

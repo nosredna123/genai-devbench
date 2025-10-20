@@ -1,7 +1,25 @@
 #!/bin/bash
 
-# Run BAEs experiment framework
-# Usage: ./run_experiment.sh {baes|chatdev|ghspec|all}
+# ⚠️  DEPRECATED - This script is maintained for backward compatibility only
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 
+# 🔄 MIGRATION RECOMMENDED
+#
+# This script uses the legacy ./runs directory and does not support
+# multi-experiment configurations. Please migrate to the new workflow:
+#
+# ✅ NEW WAY (Recommended - Multi-Experiment Support):
+#    python scripts/run_experiment.py <experiment_name> [framework]
+#
+#    Examples:
+#      python scripts/run_experiment.py baseline          # Run all frameworks
+#      python scripts/run_experiment.py baseline baes     # Run specific framework
+#
+# ⚠️  OLD WAY (This script - Legacy, ./runs directory only):
+#    ./runners/run_experiment.sh {baes|chatdev|ghspec|all}
+#
+# Migration Guide: See docs/PHASE_4_PLAN.md
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 set -euo pipefail
 

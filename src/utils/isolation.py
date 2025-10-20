@@ -7,8 +7,9 @@ Provides functions to create and manage isolated workspaces per run.
 import shutil
 import uuid
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Optional
 from src.utils.logger import get_logger
+from src.utils.experiment_paths import ExperimentPaths
 
 logger = get_logger(__name__)
 
@@ -23,13 +24,18 @@ def generate_run_id() -> str:
     return str(uuid.uuid4())
 
 
-def create_isolated_workspace(framework: str, run_id: str) -> Tuple[Path, Path]:
+def create_isolated_workspace(
+    framework: str,
+    run_id: str,
+    experiment_name: Optional[str] = None
+) -> Tuple[Path, Path]:
     """
     Create isolated workspace directory for a run.
     
     Args:
         framework: Framework name (baes, chatdev, ghspec)
         run_id: Unique run identifier
+        experiment_name: Name of experiment (optional, for backward compatibility)
         
     Returns:
         Tuple of (run_dir, workspace_dir) Path objects
@@ -38,7 +44,14 @@ def create_isolated_workspace(framework: str, run_id: str) -> Tuple[Path, Path]:
         run_dir: runs/baes/550e8400-e29b-41d4-a716-446655440000/
         workspace_dir: runs/baes/550e8400-e29b-41d4-a716-446655440000/workspace/
     """
-    run_dir = Path("runs") / framework / run_id
+    # Get run directory
+    if experiment_name:
+        exp_paths = ExperimentPaths(experiment_name)
+        run_dir = exp_paths.get_run_dir(framework, run_id)
+    else:
+        # Backward compatibility: use old path
+        run_dir = Path("runs") / framework / run_id
+    
     workspace_dir = run_dir / "workspace"
     
     # Check for collision (should be astronomically rare with UUIDs)
@@ -49,7 +62,13 @@ def create_isolated_workspace(framework: str, run_id: str) -> Tuple[Path, Path]:
         )
         # Append a suffix to avoid collision
         collision_id = str(uuid.uuid4())[:8]
-        run_dir = Path("runs") / framework / f"{run_id}-{collision_id}"
+        
+        if experiment_name:
+            exp_paths = ExperimentPaths(experiment_name)
+            run_dir = exp_paths.runs_dir / framework / f"{run_id}-{collision_id}"
+        else:
+            run_dir = Path("runs") / framework / f"{run_id}-{collision_id}"
+        
         workspace_dir = run_dir / "workspace"
     
     # Create directories
@@ -88,26 +107,45 @@ def cleanup_workspace(workspace_dir: Path, run_id: str) -> None:
     )
 
 
-def get_run_directory(framework: str, run_id: str) -> Path:
+def get_run_directory(
+    framework: str,
+    run_id: str,
+    experiment_name: Optional[str] = None
+) -> Path:
     """
     Get the run directory path for a given framework and run ID.
     
     Args:
         framework: Framework name
         run_id: Run identifier
+        experiment_name: Name of experiment (optional, for backward compatibility)
         
     Returns:
         Path to run directory
     """
-    return Path("runs") / framework / run_id
+    if experiment_name:
+        exp_paths = ExperimentPaths(experiment_name)
+        return exp_paths.get_run_dir(framework, run_id)
+    else:
+        # Backward compatibility: use old path
+        return Path("runs") / framework / run_id
 
 
-def ensure_runs_directory() -> None:
+def ensure_runs_directory(experiment_name: Optional[str] = None) -> None:
     """
     Ensure the top-level runs directory exists.
     
     Creates runs/ if it doesn't exist.
+    
+    Args:
+        experiment_name: Name of experiment (optional, for backward compatibility)
     """
-    runs_dir = Path("runs")
-    runs_dir.mkdir(exist_ok=True)
+    if experiment_name:
+        exp_paths = ExperimentPaths(experiment_name)
+        runs_dir = exp_paths.runs_dir
+    else:
+        # Backward compatibility: use old path
+        runs_dir = Path("runs")
+    
+    runs_dir.mkdir(exist_ok=True, parents=True)
     logger.debug("Ensured runs directory exists")
