@@ -2,9 +2,10 @@
 """
 Reset verification status to 'pending' to allow reconciliation to re-run.
 
-This script marks metrics.json files as needing reconciliation by:
-- Setting verification_status to 'pending'
-- Removing existing usage_api_reconciliation data
+This script marks metrics.json files and runs_manifest.json as needing reconciliation by:
+- Setting verification_status to 'pending' in all metrics.json files
+- Removing existing usage_api_reconciliation data from metrics.json files
+- Updating verification_status to 'pending' in runs_manifest.json
 
 This allows the reconciliation script to re-collect and update token data
 from the OpenAI Usage API without changing the existing token values.
@@ -17,6 +18,7 @@ Usage:
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -113,6 +115,68 @@ def find_metrics_files(
     return sorted(metrics_files)
 
 
+def update_manifest_status(
+    framework: Optional[str] = None,
+    run_id: Optional[str] = None,
+    dry_run: bool = False
+) -> int:
+    """
+    Update verification_status to 'pending' in runs_manifest.json.
+    
+    Args:
+        framework: Optional framework filter
+        run_id: Optional run ID filter
+        dry_run: If True, only show what would be changed
+        
+    Returns:
+        Number of runs updated
+    """
+    manifest_path = Path("runs") / "runs_manifest.json"
+    
+    if not manifest_path.exists():
+        print(f"Warning: Manifest not found: {manifest_path}")
+        return 0
+    
+    try:
+        with open(manifest_path, 'r', encoding='utf-8') as f:
+            manifest = json.load(f)
+    except Exception as e:
+        print(f"Error reading manifest: {e}")
+        return 0
+    
+    # Update runs to pending based on filters
+    updated_count = 0
+    for run in manifest.get('runs', []):
+        # Apply filters
+        if framework and run.get('framework') != framework:
+            continue
+        if run_id and run.get('run_id') != run_id:
+            continue
+        
+        # Update status if needed
+        if run.get('verification_status') != 'pending':
+            if dry_run:
+                print(f"  Would update manifest: {run.get('run_id')}")
+            else:
+                run['verification_status'] = 'pending'
+            updated_count += 1
+    
+    if updated_count > 0 and not dry_run:
+        # Update metadata
+        manifest['last_updated'] = datetime.now(timezone.utc).isoformat()
+        
+        # Save updated manifest
+        try:
+            with open(manifest_path, 'w', encoding='utf-8') as f:
+                json.dump(manifest, f, indent=2)
+            print(f"  ✓ Updated {updated_count} run(s) in manifest")
+        except Exception as e:
+            print(f"  ✗ Error writing manifest: {e}")
+            return 0
+    
+    return updated_count
+
+
 def main():
     """Main entry point."""
     # Parse arguments
@@ -167,12 +231,22 @@ def main():
             reset_count += 1
     
     print()
+    
+    # Update manifest
+    print("Updating runs_manifest.json...")
+    manifest_count = update_manifest_status(framework, run_id, dry_run=dry_run)
+    
+    print()
     print("=" * 60)
     if dry_run:
-        print(f"Would reset {reset_count} / {len(metrics_files)} file(s)")
+        print(f"Would reset:")
+        print(f"  - {reset_count} / {len(metrics_files)} metrics.json file(s)")
+        print(f"  - {manifest_count} run(s) in manifest")
         print("Run without --dry-run to apply changes")
     else:
-        print(f"Reset {reset_count} / {len(metrics_files)} file(s) to 'pending' status")
+        print(f"Successfully reset:")
+        print(f"  - {reset_count} / {len(metrics_files)} metrics.json file(s)")
+        print(f"  - {manifest_count} run(s) in manifest")
         print()
         print("Next steps:")
         print("  1. Run: ./runners/reconcile_usage.sh")
