@@ -588,11 +588,27 @@ class UsageReconciler:
         )
         
         # Get all runs from manifest
-        try:
-            all_runs = find_runs(framework=framework)
-        except Exception as e:
-            logger.error(f"Failed to query manifest: {e}")
-            return results
+        # For standalone experiments, load manifest directly
+        manifest_path = Path("runs/manifest.json")
+        if manifest_path.exists():
+            try:
+                with open(manifest_path, 'r') as f:
+                    manifest = json.load(f)
+                all_runs = manifest.get("runs", [])
+                
+                # Apply framework filter if specified
+                if framework:
+                    all_runs = [r for r in all_runs if r.get("framework") == framework]
+            except Exception as e:
+                logger.error(f"Failed to load manifest: {e}")
+                return results
+        else:
+            # Fallback to find_runs for multi-experiment setups
+            try:
+                all_runs = find_runs(framework=framework)
+            except Exception as e:
+                logger.error(f"Failed to query manifest: {e}")
+                return results
         
         if not all_runs:
             logger.warning("No runs found in manifest")
