@@ -1,10 +1,10 @@
 {
   "version": "1.0",
-  "last_updated": "2025-10-20T11:21:41.256744Z",
-  "total_runs": 214,
+  "last_updated": "2025-10-20T12:29:27.549900Z",
+  "total_runs": 215,
   "frameworks": {
     "chatdev": 62,
-    "baes": 77,
+    "baes": 78,
     "ghspec": 75
   },
   "runs": [
@@ -2144,9 +2144,19 @@
       "path": "baes/6d5f179c-c3a6-404b-98be-ca536e72f01b",
       "start_time": "2025-10-20T11:15:51.133707Z",
       "end_time": "2025-10-20T11:18:46.250545Z",
-      "verification_status": "data_not_available",
-      "total_tokens_in": 0,
-      "total_tokens_out": 0
+      "verification_status": "verified",
+      "total_tokens_in": 25156,
+      "total_tokens_out": 6518
+    },
+    {
+      "run_id": "23f46f6b-929e-429b-ba74-4b0d20abc1ed",
+      "framework": "baes",
+      "path": "baes/23f46f6b-929e-429b-ba74-4b0d20abc1ed",
+      "start_time": "2025-10-20T11:34:33.248721Z",
+      "end_time": "2025-10-20T11:37:12.779947Z",
+      "verification_status": "verified",
+      "total_tokens_in": 25156,
+      "total_tokens_out": 6481
     }
   ]
 }
