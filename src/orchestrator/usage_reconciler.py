@@ -417,6 +417,9 @@ class UsageReconciler:
         if len(attempts) == 0:
             return 0  # First attempt, no stability yet
         
+        # Read verification interval from environment at runtime
+        verification_interval_min = int(os.getenv('RECONCILIATION_VERIFICATION_INTERVAL_MIN', '0'))
+        
         stable_count = 0
         prev = current_attempt
         
@@ -430,7 +433,7 @@ class UsageReconciler:
             except (KeyError, ValueError):
                 break  # Invalid timestamp, stop counting
             
-            if time_diff_minutes < DEFAULT_VERIFICATION_INTERVAL_MIN:
+            if time_diff_minutes < verification_interval_min:
                 break  # Gap too small, stop counting
             
             # Check if token counts are identical
@@ -522,8 +525,11 @@ class UsageReconciler:
         # Data is stable - count consecutive stable verifications
         stable_count = self._count_stable_verifications(attempts, current_attempt)
         
+        # Read minimum stable verifications from environment at runtime
+        min_stable_verifications = int(os.getenv('RECONCILIATION_MIN_STABLE_VERIFICATIONS', '2'))
+        
         # Check if we have enough stable verifications
-        if stable_count >= DEFAULT_MIN_STABLE_VERIFICATIONS:
+        if stable_count >= min_stable_verifications:
             # Calculate token coverage rate
             coverage_rate = steps_with_tokens / total_steps if total_steps > 0 else 0
             
@@ -542,11 +548,11 @@ class UsageReconciler:
                 }
         else:
             # Need more stable verifications
-            need_more = DEFAULT_MIN_STABLE_VERIFICATIONS - stable_count
+            need_more = min_stable_verifications - stable_count
             coverage_note = f" ({steps_with_tokens}/{total_steps} steps with tokens)" if steps_with_tokens < total_steps else ""
             return {
                 'status': 'pending',
-                'message': f'⏳ Awaiting verification: {stable_count}/{DEFAULT_MIN_STABLE_VERIFICATIONS} stable checks completed{coverage_note}'
+                'message': f'⏳ Awaiting verification: {stable_count}/{min_stable_verifications} stable checks completed{coverage_note}'
             }
     
     def reconcile_all_pending(
