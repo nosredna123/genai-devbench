@@ -440,6 +440,13 @@ or check the source code comments.
 
 {api_keys}
 
+# Usage Reconciliation Configuration
+# How often to check for stable reconciliation (in minutes)
+RECONCILIATION_VERIFICATION_INTERVAL_MIN=2
+
+# Number of consecutive stable checks required to consider reconciliation complete
+RECONCILIATION_MIN_STABLE_VERIFICATIONS=3
+
 # Optional: Logging configuration
 # LOG_LEVEL=INFO
 
