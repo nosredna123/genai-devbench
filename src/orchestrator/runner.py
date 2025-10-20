@@ -282,6 +282,7 @@ class OrchestratorRunner:
             self.validator.start_downtime_monitoring()
             
             # Execute 6 steps sequentially
+            # TODO: #3 The number of steps must be loaded from config
             for step_num in range(1, 7):
                 # Load step prompt
                 prompt_path = Path(f"config/prompts/step_{step_num}.txt")
@@ -311,6 +312,9 @@ class OrchestratorRunner:
                     logger.info("Step completed successfully",
                                extra={'run_id': self.run_id, 'step': step_num,
                                      'event': 'step_complete'})
+                    
+                    # Add a sleep time between steps to avoid overlap usage data
+                    time.sleep(2)
                                      
                 except Exception as e:
                     logger.error("Step failed permanently",
@@ -509,6 +513,7 @@ class OrchestratorRunner:
             run_count = 0
             
             # Execute runs until stopping rule satisfied
+            # TODO: #2 review MAX_RUNS and MIN_RUNS rules
             while run_count < 25:  # MAX_RUNS
                 run_count += 1
                 total_runs += 1
