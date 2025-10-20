@@ -159,13 +159,18 @@ class ArtifactCollector:
             'hitl': [],
         }
         
-        # Collect prompts for enabled frameworks
+        # Collect prompts - all prompt files are shared across frameworks
         prompts_dir = config_dir / 'prompts'
         if prompts_dir.exists():
+            # Collect all .txt files directly in prompts directory
+            for file_path in prompts_dir.glob('*.txt'):
+                if file_path.is_file():
+                    artifacts['prompts'].append(file_path)
+            
+            # Also check for framework-specific subdirectories if they exist
             for framework in self.enabled_frameworks:
                 framework_prompts_dir = prompts_dir / framework
                 if framework_prompts_dir.exists() and framework_prompts_dir.is_dir():
-                    # Collect all files in framework prompts directory
                     for file_path in framework_prompts_dir.rglob('*'):
                         if file_path.is_file():
                             artifacts['prompts'].append(file_path)
