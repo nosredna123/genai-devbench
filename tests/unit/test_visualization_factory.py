@@ -323,18 +323,17 @@ class TestChartDataPreparation:
     def test_prepare_boxplot_data(
         self, full_config, sample_frameworks_data
     ):
-        """Box plot should use run-level data."""
+        """Box plot should raise ValueError when metric is missing."""
         factory = VisualizationFactory(full_config)
         boxplot_config = full_config['visualizations']['cost_boxplot']
         
-        chart_data, kwargs = factory._prepare_boxplot(
-            boxplot_config,
-            sample_frameworks_data,
-            {}
-        )
-        
-        # Note: sample data doesn't have COST_USD, so result should be empty
-        assert chart_data == {} or chart_data is None
+        # Sample data doesn't have COST_USD, so should raise ValueError
+        with pytest.raises(ValueError, match="Boxplot requires metric 'COST_USD' but missing in frameworks"):
+            factory._prepare_boxplot(
+                boxplot_config,
+                sample_frameworks_data,
+                {}
+            )
 
 
 # =============================================================================
