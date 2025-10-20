@@ -5,12 +5,15 @@ Create new experiment from template or scratch.
 Interactive wizard or CLI mode for experiment creation.
 Validates inputs, generates directory structure, registers experiment.
 
+Generated experiments are created in the parent directory of the generator
+by default (as sibling directories), making them completely independent.
+
 Usage:
     # Interactive wizard
     python scripts/new_experiment.py
     
-    # CLI mode
-    python scripts/new_experiment.py --name baseline --model gpt-4o \\
+    # CLI mode (creates ../my_experiment/)
+    python scripts/new_experiment.py --name my_experiment --model gpt-4o \\
         --frameworks baes,chatdev --runs 50
     
     # From template
@@ -18,7 +21,7 @@ Usage:
     
     # Custom experiments directory
     python scripts/new_experiment.py --name test --model gpt-4o \\
-        --frameworks baes --runs 10 --experiments-dir /path/to/custom/experiments
+        --frameworks baes --runs 10 --experiments-dir /path/to/custom/location
 """
 
 import sys
@@ -309,11 +312,12 @@ def interactive_wizard() -> Dict[str, Any]:
         try:
             validate_experiment_name(name)
             
-            # Check if directory already exists
-            if Path('experiments').exists():
-                if (Path('experiments') / name).exists():
-                    print(f"❌ Experiment directory '{name}' already exists. Choose different name.")
-                    continue
+            # Check if directory already exists in parent directory
+            generator_root = Path(__file__).parent.parent
+            parent_dir = generator_root.parent
+            if (parent_dir / name).exists():
+                print(f"❌ Experiment directory '{name}' already exists in {parent_dir}. Choose different name.")
+                continue
             
             break
         
@@ -495,6 +499,7 @@ def create_experiment(
         frameworks: List of enabled frameworks
         max_runs: Maximum runs per framework
         template_path: Optional template experiment directory
+        experiments_base_dir: Optional base directory (defaults to parent of generator)
         
     Raises:
         ExperimentCreationError: If creation fails
@@ -520,7 +525,9 @@ def create_experiment(
     if experiments_base_dir:
         output_dir = experiments_base_dir / name
     else:
-        output_dir = Path('experiments') / name
+        # Default: create in parent directory of the generator project
+        generator_root = Path(__file__).parent.parent
+        output_dir = generator_root.parent / name
     
     # Check if already exists
     if output_dir.exists():
@@ -623,7 +630,7 @@ Examples:
     parser.add_argument(
         '--experiments-dir',
         type=Path,
-        help='Custom base directory for experiments (default: ./experiments)'
+        help='Custom base directory for experiments (default: parent directory of generator)'
     )
     
     return parser.parse_args()
