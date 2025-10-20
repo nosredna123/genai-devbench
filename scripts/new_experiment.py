@@ -196,19 +196,54 @@ def generate_config(
     
     else:
         # Generate from scratch
+        # Set min_runs intelligently: min(5, max_runs) to avoid validation errors
+        min_runs = min(5, max_runs)
+        
         config = {
+            'random_seed': 42,
             'model': model,
+            'prompts_dir': 'config/prompts',
+            'hitl_path': 'config/hitl/expanded_spec.txt',
             'stopping_rule': {
+                'min_runs': min_runs,
                 'max_runs': max_runs,
-                'timeout_seconds': 3600
+                'confidence_level': 0.95,
+                'max_half_width_pct': 10,
+                'metrics': ['TOK_IN', 'T_WALL_seconds', 'COST_USD']
+            },
+            'timeouts': {
+                'step_timeout_seconds': 600,
+                'health_check_interval_seconds': 5,
+                'api_retry_attempts': 3
             },
             'frameworks': {
-                fw_name: {
-                    'enabled': fw_name in frameworks,
-                    'adapter': f'src.adapters.{fw_name}_adapter',
-                    'config': {}
+                'baes': {
+                    'enabled': 'baes' in frameworks,
+                    'repo_url': 'https://github.com/gesad-lab/baes_demo',
+                    'commit_hash': '1dd573633a98b8baa636c200bc1684cec7a8179f',
+                    'api_port': 8100,
+                    'ui_port': 8600,
+                    'max_retries': 3,
+                    'auto_restart_servers': False,
+                    'use_venv': True,
+                    'api_key_env': 'OPENAI_API_KEY_BAES'
+                },
+                'chatdev': {
+                    'enabled': 'chatdev' in frameworks,
+                    'repo_url': 'https://github.com/OpenBMB/ChatDev.git',
+                    'commit_hash': '52edb89997b4312ad27d8c54584d0a6c59940135',
+                    'api_port': 8001,
+                    'ui_port': 3001,
+                    'api_key_env': 'OPENAI_API_KEY_CHATDEV'
+                },
+                'ghspec': {
+                    'enabled': 'ghspec' in frameworks,
+                    'repo_url': 'https://github.com/github/spec-kit.git',
+                    'commit_hash': '89f4b0b38a42996376c0f083d47281a4c9196761',
+                    'api_port': 8002,
+                    'ui_port': 3002,
+                    'api_key_env': 'OPENAI_API_KEY_GHSPEC'
                 }
-                for fw_name in ['baes', 'chatdev', 'ghspec']
             },
             'metrics': {
                 'enabled': [
