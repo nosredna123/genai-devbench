@@ -552,7 +552,7 @@ class UsageReconciler:
     def reconcile_all_pending(
         self,
         framework: Optional[str] = None,
-        min_age_minutes: int = DEFAULT_VERIFICATION_INTERVAL_MIN,
+        min_age_minutes: Optional[int] = None,
         max_age_hours: int = 24
     ) -> List[Dict[str, Any]]:
         """
@@ -561,12 +561,16 @@ class UsageReconciler:
         Args:
             framework: Specific framework to reconcile (None = all frameworks)
             min_age_minutes: Only reconcile runs older than this (wait for Usage API delay).
-                           Defaults to RECONCILIATION_VERIFICATION_INTERVAL_MIN env var
+                           If None, uses RECONCILIATION_VERIFICATION_INTERVAL_MIN env var
             max_age_hours: Don't reconcile runs older than this (likely won't get data)
             
         Returns:
             List of reconciliation reports
         """
+        # Read env var at runtime if not explicitly provided
+        if min_age_minutes is None:
+            min_age_minutes = int(os.getenv('RECONCILIATION_VERIFICATION_INTERVAL_MIN', '0'))
+        
         results = []
         current_time = time.time()
         min_cutoff = current_time - (min_age_minutes * 60)
