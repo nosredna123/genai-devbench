@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 
-from src.orchestrator.runner import ExperimentRunner
+from src.orchestrator.runner import OrchestratorRunner
 from src.orchestrator.config_loader import load_config
 from src.utils.logger import get_logger
 
@@ -22,17 +22,65 @@ def main():
         config = load_config(config_path)
         
         experiment_name = config.get('experiment_name', 'unnamed')
-        logger.info(f"Starting experiment: {experiment_name}")
-        logger.info(f"Model: {config.get('model', 'unknown')}")
+        model = config.get('model', 'unknown')
         
-        # Create runner
-        runner = ExperimentRunner(config)
+        print("=" * 41)
+        print(f"Running experiment: {experiment_name}")
+        print("=" * 41)
+        print()
+        print("Configuration:")
+        print(f"  Model: {model}")
         
-        # Execute experiment
-        results = runner.run()
+        # Get enabled frameworks
+        enabled_frameworks = [
+            name for name, fw_config in config.get('frameworks', {}).items()
+            if fw_config.get('enabled', False)
+        ]
+        
+        if not enabled_frameworks:
+            logger.error("No frameworks enabled in configuration")
+            return 1
+        
+        print(f"  Frameworks: {', '.join(enabled_frameworks)}")
+        
+        # Get max runs
+        max_runs = config.get('max_runs_per_framework', 1)
+        total_runs = len(enabled_frameworks) * max_runs
+        print(f"  Max runs per framework: {max_runs}")
+        print()
+        print("This may take a while...")
+        print()
+        
+        # Run each framework
+        all_results = {}
+        for framework_name in enabled_frameworks:
+            logger.info(f"Starting {framework_name} runs")
+            framework_results = []
+            
+            for run_num in range(1, max_runs + 1):
+                logger.info(f"Running {framework_name} - run {run_num}/{max_runs}")
+                
+                runner = OrchestratorRunner(
+                    framework_name=framework_name,
+                    config_path=str(config_path),
+                    experiment_name=experiment_name
+                )
+                
+                result = runner.run()
+                framework_results.append(result)
+            
+            all_results[framework_name] = framework_results
         
         logger.info("Experiment completed successfully")
         logger.info(f"Results saved to: {Path('runs').absolute()}")
+        
+        # Print summary
+        print()
+        print("=" * 41)
+        print("✅ Experiment completed!")
+        print("=" * 41)
+        print(f"Results directory: {Path('runs').absolute()}")
+        print()
         
         return 0
         
