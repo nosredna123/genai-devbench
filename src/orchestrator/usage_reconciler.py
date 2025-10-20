@@ -21,8 +21,11 @@ from src.orchestrator.manifest_manager import find_runs
 
 logger = get_logger(__name__, component="reconciliation")
 
-# Default minimum interval between verification attempts (in minutes)
-# Set to 0 for testing/development, increase to 60 for production
+# Minimum wait time (in minutes) before attempting reconciliation:
+# - Minimum age of runs before first reconciliation attempt
+# - Minimum interval between subsequent verification attempts
+# Set to 0 for testing/development (immediate reconciliation)
+# Set to 30+ for production (typical OpenAI Usage API delay is 5-60 minutes)
 DEFAULT_VERIFICATION_INTERVAL_MIN = int(os.getenv('RECONCILIATION_VERIFICATION_INTERVAL_MIN', '0'))
 
 # Minimum number of consecutive stable verifications required
@@ -549,7 +552,7 @@ class UsageReconciler:
     def reconcile_all_pending(
         self,
         framework: Optional[str] = None,
-        min_age_minutes: int = 30,
+        min_age_minutes: int = DEFAULT_VERIFICATION_INTERVAL_MIN,
         max_age_hours: int = 24
     ) -> List[Dict[str, Any]]:
         """
@@ -557,7 +560,8 @@ class UsageReconciler:
         
         Args:
             framework: Specific framework to reconcile (None = all frameworks)
-            min_age_minutes: Only reconcile runs older than this (wait for Usage API delay)
+            min_age_minutes: Only reconcile runs older than this (wait for Usage API delay).
+                           Defaults to RECONCILIATION_VERIFICATION_INTERVAL_MIN env var
             max_age_hours: Don't reconcile runs older than this (likely won't get data)
             
         Returns:
