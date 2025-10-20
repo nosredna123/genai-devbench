@@ -1,8 +1,0 @@
-{
-  "run_id": "5b3890c7-5504-484e-a3fe-70b20139a74d",
-  "framework": "baes",
-  "framework_commit": "1dd573633a98b8baa636c200bc1684cec7a8179f",
-  "archive_path": "run.tar.gz",
-  "archive_hash": "46e96dec3e58cc85da7ed05fd83f385a6640c60af7d7067b25d68af36294ddb7",
-  "archive_size_bytes": 189151513
-}

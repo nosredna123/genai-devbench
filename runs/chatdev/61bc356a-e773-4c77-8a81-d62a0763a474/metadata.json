@@ -1,8 +1,0 @@
-{
-  "run_id": "61bc356a-e773-4c77-8a81-d62a0763a474",
-  "framework": "chatdev",
-  "framework_commit": "52edb89997b4312ad27d8c54584d0a6c59940135",
-  "archive_path": "run.tar.gz",
-  "archive_hash": "348ee3adf872991860ee78bf3b31af683fd0e1df818ef75432cfcb68a6e214db",
-  "archive_size_bytes": 484399752
-}
