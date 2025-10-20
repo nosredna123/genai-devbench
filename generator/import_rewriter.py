@@ -8,14 +8,20 @@ Removes parent project references and updates paths.
 import re
 import ast
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 
 class ImportRewriter:
     """Rewrites imports in Python files for standalone operation."""
     
-    def __init__(self):
-        """Initialize import rewriter."""
+    def __init__(self, enabled_frameworks: Optional[List[str]] = None):
+        """
+        Initialize import rewriter.
+        
+        Args:
+            enabled_frameworks: List of framework names that are enabled (e.g., ['baes', 'chatdev'])
+        """
+        self.enabled_frameworks = enabled_frameworks or []
         # Patterns to detect and remove
         self.parent_reference_patterns = [
             r'from\s+src\.utils\.experiment_registry\s+import.*',
@@ -90,6 +96,10 @@ class ImportRewriter:
         if file_path and file_path.name == 'config_loader.py':
             content = self._rewrite_config_loader(content)
         
+        # Special handling for runner.py - remove unused adapter imports
+        if file_path and file_path.name == 'runner.py':
+            content = self._rewrite_runner_imports(content)
+        
         return content
     
     def _rewrite_experiment_paths(self, content: str) -> str:
@@ -117,6 +127,34 @@ class ImportRewriter:
         
         # Remove validate_exists parameter logic if it references registry
         # (Will be handled by actual implementation review)
+        
+        return content
+    
+    def _rewrite_runner_imports(self, content: str) -> str:
+        """
+        Special rewriting for runner.py to remove unused adapter imports.
+        
+        Changes:
+        - Remove imports for disabled framework adapters
+        - Keep only imports for enabled frameworks
+        """
+        # Define all known framework adapters
+        all_adapters = {
+            'baes': 'from src.adapters.baes_adapter import BAeSAdapter',
+            'chatdev': 'from src.adapters.chatdev_adapter import ChatDevAdapter',
+            'ghspec': 'from src.adapters.ghspec_adapter import GHSpecAdapter',
+        }
+        
+        # Remove imports for disabled frameworks
+        for framework, import_line in all_adapters.items():
+            if framework not in self.enabled_frameworks:
+                # Escape special regex characters and match the entire import line
+                pattern = re.escape(import_line) + r'\s*\n'
+                content = re.sub(
+                    pattern,
+                    f'# [Generator: removed {framework} adapter - framework not enabled]\n',
+                    content
+                )
         
         return content
     

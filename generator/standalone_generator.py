@@ -55,6 +55,15 @@ class StandaloneGenerator:
         # Ensure experiment_name is in config
         config['experiment_name'] = name
         
+        # Get enabled frameworks for import rewriting
+        enabled_frameworks = [
+            name for name, fw_config in config.get('frameworks', {}).items()
+            if fw_config.get('enabled', False)
+        ]
+        
+        # Initialize import rewriter with framework info
+        self.import_rewriter = ImportRewriter(enabled_frameworks)
+        
         # Initialize components
         artifact_collector = ArtifactCollector(config, self.project_root)
         script_generator = ScriptGenerator(config)
