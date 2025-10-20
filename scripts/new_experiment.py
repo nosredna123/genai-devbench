@@ -32,8 +32,10 @@ from datetime import datetime
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.utils.experiment_paths import ExperimentPaths
-from src.utils.experiment_registry import get_registry, ExperimentAlreadyExistsError
+# Generator imports (new)
+from generator.standalone_generator import StandaloneGenerator
+
+# Utility imports
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__, component="new_experiment")
@@ -286,95 +288,6 @@ def generate_config(
 
 
 # =============================================================================
-# README Generation
-# =============================================================================
-
-def generate_readme(
-    name: str,
-    model: str,
-    frameworks: List[str],
-    max_runs: int,
-    config_hash: str
-) -> str:
-    """
-    Generate README.md content for experiment.
-    
-    Args:
-        name: Experiment name
-        model: Model name
-        frameworks: List of enabled frameworks
-        max_runs: Maximum runs per framework
-        config_hash: Configuration hash
-        
-    Returns:
-        README.md content
-    """
-    frameworks_str = ', '.join(frameworks)
-    total_runs = max_runs * len(frameworks)
-    
-    return f"""# Experiment: {name}
-
-**Created:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC  
-**Config Hash:** `{config_hash}`
-
-## Configuration
-
-- **Model:** `{model}`
-- **Frameworks:** {frameworks_str}
-- **Max Runs per Framework:** {max_runs}
-- **Total Max Runs:** {total_runs}
-
-## Directory Structure
-
-```
-{name}/
-├── config.yaml          # Experiment configuration
-├── README.md            # This file
-├── runs/                # Run outputs
-│   ├── baes/
-│   ├── chatdev/
-│   └── ghspec/
-├── analysis/            # Analysis results
-│   ├── visualizations/
-│   └── report.md
-└── .meta/               # Metadata
-    ├── manifest.json    # Run manifest
-    └── config.hash      # Config hash
-```
-
-## Usage
-
-### Run Experiment
-
-```bash
-# From project root
-./runners/run_experiment.sh {name}
-```
-
-### Analyze Results
-
-```bash
-./runners/analyze_results.sh {name}
-```
-
-### Check Status
-
-```bash
-python -c "from src.utils.experiment_registry import get_registry; \\
-           import json; \\
-           print(json.dumps(get_registry().get_experiment('{name}'), indent=2))"
-```
-
-## Notes
-
-- Configuration is immutable after first run (hash validation)
-- Each run creates isolated workspace under `runs/<framework>/<run_id>/`
-- Analysis outputs saved to `analysis/`
-- Manifest tracks all completed runs
-"""
-
-
-# =============================================================================
 # Interactive Wizard
 # =============================================================================
 
@@ -396,11 +309,11 @@ def interactive_wizard() -> Dict[str, Any]:
         try:
             validate_experiment_name(name)
             
-            # Check if already exists
-            registry = get_registry()
-            if name in registry.list_experiments():
-                print(f"❌ Experiment '{name}' already exists. Choose different name.")
-                continue
+            # Check if directory already exists
+            if Path('experiments').exists():
+                if (Path('experiments') / name).exists():
+                    print(f"❌ Experiment directory '{name}' already exists. Choose different name.")
+                    continue
             
             break
         
@@ -490,37 +403,42 @@ def interactive_wizard() -> Dict[str, Any]:
     template_path = None
     
     if use_template in ['y', 'yes']:
-        registry = get_registry()
-        experiments = registry.list_experiments()
+        experiments_dir = Path('experiments')
         
-        if not experiments:
+        if not experiments_dir.exists() or not list(experiments_dir.iterdir()):
             print("⚠ No existing experiments to use as template")
         else:
-            print("\nAvailable experiments:")
-            for i, exp_name in enumerate(sorted(experiments.keys()), 1):
-                print(f"  {i}. {exp_name}")
+            # List available experiment directories
+            exp_dirs = [d for d in experiments_dir.iterdir() if d.is_dir() and not d.name.startswith('.')]
             
-            while True:
-                template_choice = input("Select template [number or name]: ").strip()
+            if not exp_dirs:
+                print("⚠ No existing experiments to use as template")
+            else:
+                print("\nAvailable experiments:")
+                for i, exp_dir in enumerate(sorted(exp_dirs), 1):
+                    print(f"  {i}. {exp_dir.name}")
                 
-                # Try as number
-                try:
-                    idx = int(template_choice) - 1
-                    if 0 <= idx < len(experiments):
-                        template_name = sorted(experiments.keys())[idx]
-                        template_path = Path(f"experiments/{template_name}")
+                while True:
+                    template_choice = input("Select template [number or name]: ").strip()
+                    
+                    # Try as number
+                    try:
+                        idx = int(template_choice) - 1
+                        if 0 <= idx < len(exp_dirs):
+                            template_path = sorted(exp_dirs)[idx]
+                            break
+                    except ValueError:
+                        pass
+                    
+                    # Try as name
+                    template_candidate = experiments_dir / template_choice
+                    if template_candidate.exists() and template_candidate.is_dir():
+                        template_path = template_candidate
                         break
-                except ValueError:
-                    pass
+                    
+                    print("❌ Invalid choice")
                 
-                # Try as name
-                if template_choice in experiments:
-                    template_path = Path(f"experiments/{template_choice}")
-                    break
-                
-                print("❌ Invalid choice")
-            
-            print(f"✓ Using template: {template_path.name}")
+                print(f"✓ Using template: {template_path.name}")
     
     print()
     print("=" * 70)
@@ -586,7 +504,7 @@ def create_experiment(
     validate_model(model)
     validate_frameworks(frameworks)
     
-    logger.info(f"Creating experiment: {name}")
+    logger.info(f"Creating standalone experiment: {name}")
     
     # Load template config if provided
     template_config = None
@@ -596,74 +514,59 @@ def create_experiment(
     
     # Generate configuration
     config = generate_config(model, frameworks, max_runs, template_config)
+    config['experiment_name'] = name  # Add experiment name to config
     
-    # Create experiment paths (validate_exists=False for new experiments)
-    exp_paths = ExperimentPaths(
-        name,
-        experiments_base_dir=experiments_base_dir,
-        auto_create_structure=True,
-        validate_exists=False
-    )
+    # Determine output directory
+    if experiments_base_dir:
+        output_dir = experiments_base_dir / name
+    else:
+        output_dir = Path('experiments') / name
     
-    # Compute config hash
-    config_hash = exp_paths.compute_config_hash(config)
+    # Check if already exists
+    if output_dir.exists():
+        raise ExperimentCreationError(
+            f"Experiment directory already exists: {output_dir}\n"
+            f"Please choose a different name or delete the existing directory."
+        )
     
-    # Write config.yaml
-    config_path = exp_paths.experiment_dir / "config.yaml"
-    with open(config_path, 'w', encoding='utf-8') as f:
-        yaml.dump(config, f, default_flow_style=False, sort_keys=False, indent=2)
+    logger.info(f"Output directory: {output_dir}")
     
-    logger.info(f"Created config: {config_path}")
-    
-    # Write config hash
-    hash_path = exp_paths.meta_dir / "config.hash"
-    hash_path.write_text(config_hash, encoding='utf-8')
-    
-    logger.info(f"Saved config hash: {config_hash}")
-    
-    # Generate README.md
-    readme_content = generate_readme(name, model, frameworks, max_runs, config_hash)
-    readme_path = exp_paths.experiment_dir / "README.md"
-    readme_path.write_text(readme_content, encoding='utf-8')
-    
-    logger.info(f"Created README: {readme_path}")
-    
-    # Copy prompts and hitl from template if available
-    if template_path:
-        # Copy prompts
-        template_prompts = template_path / "prompts"
-        if template_prompts.exists():
-            shutil.copytree(template_prompts, exp_paths.prompts_dir, dirs_exist_ok=True)
-            logger.info(f"Copied prompts from template")
-        
-        # Copy hitl
-        template_hitl = template_path / "hitl"
-        if template_hitl.exists():
-            shutil.copytree(template_hitl, exp_paths.hitl_dir, dirs_exist_ok=True)
-            logger.info(f"Copied hitl config from template")
-    
-    # Register in .experiments.json
+    # Generate standalone experiment using the new generator
     try:
-        registry = get_registry()
-        registry.register_experiment(name, config, config_hash)
-        logger.info("Registered in .experiments.json")
-    
-    except ExperimentAlreadyExistsError as e:
-        # Clean up created directory
-        shutil.rmtree(exp_paths.experiment_dir)
-        raise ExperimentCreationError(str(e))
+        generator = StandaloneGenerator()
+        generator.generate(name, config, output_dir)
+    except Exception as e:
+        # Clean up on failure
+        if output_dir.exists():
+            logger.warning(f"Cleaning up failed generation: {output_dir}")
+            shutil.rmtree(output_dir)
+        raise ExperimentCreationError(f"Generation failed: {e}")
     
     # Success
+    print("=" * 70)
+    print("✅ Standalone experiment created successfully!")
+    print("=" * 70)
     print()
-    print("✅ Experiment created successfully!")
+    print(f"📁 Location: {output_dir.absolute()}")
+    print(f"🎯 Type: Fully independent git repository")
+    print(f"📦 Model: {model}")
+    print(f"🔧 Frameworks: {', '.join(frameworks)}")
+    print(f"🔢 Max runs: {max_runs} per framework ({max_runs * len(frameworks)} total)")
     print()
-    print(f"📁 Location: {exp_paths.experiment_dir}")
-    print(f"🔑 Config hash: {config_hash}")
+    print("=" * 70)
+    print("Quick start:")
+    print("=" * 70)
+    print(f"  cd {output_dir}")
+    print("  ./setup.sh")
+    print("  # Edit .env with your API keys")
+    print("  ./run.sh")
     print()
-    print("Next steps:")
-    print(f"  1. Review configuration: {config_path}")
-    print(f"  2. Run experiment: ./runners/run_experiment.sh {name}")
-    print(f"  3. Analyze results: ./runners/analyze_results.sh {name}")
+    print("The experiment is now a standalone project with:")
+    print("  ✓ Complete source code")
+    print("  ✓ Configuration and prompts")
+    print("  ✓ Setup and run scripts")
+    print("  ✓ Git repository initialized")
+    print("  ✓ No dependencies on this generator")
     print()
 
 

@@ -1,21 +1,26 @@
-# GenAI-DevBench
+# GenAI-DevBench - Experiment Generator
 
-**Rigorous benchmarking for GenAI-powered software development**
+**Generate standalone experiment projects for evaluating GenAI software development frameworks**
 
-This framework executes reproducible experiments to compare three LLM-driven frameworks (BAEs, ChatDev, GitHub Spec-kit) across a six-step academic CRUD evolution scenario. It provides deterministic orchestration, reproducible metrics collection, and automated statistical analysis.
+GenAI-DevBench is a powerful generator that creates complete, self-contained experiment projects for rigorous benchmarking of AI-powered development frameworks (BAES, ChatDev, GitHub Copilot). Each generated experiment is a fully independent Git repository with everything needed to run sophisticated comparative evaluations.
 
-## Features
+---
 
-- **Automated Execution**: Single-command orchestration of complete experiment runs
-- **Deterministic HITL**: Fixed clarification responses with SHA-1 verification for reproducible results
-- **Comprehensive Metrics**: 16 metrics including autonomy (AUTR), quality (Q*, ESR, CRUDe, MC), efficiency (tokens, time, AEI), and reliability (ZDI, RTE, MCI)
-- **Statistical Analysis**: Bootstrap confidence intervals, Kruskal-Wallis tests, Dunn-Šidák pairwise comparisons, Cliff's δ effect sizes
-- **Convergence Detection**: Automatic stopping when 95% CI half-width < 10% of mean (min 5, max 25 runs)
-- **Publication-Quality Visualizations**: Radar charts, Pareto plots, timeline charts (SVG export)
-- **Complete Archival**: Full workspace preservation with SHA-256 verification
-- **Isolation**: Per-run UUID workspaces with deterministic seeding
+## 🎯 What Does This Do?
 
-## Quick Start
+This generator creates **standalone experiment projects** that:
+
+- ✅ Are completely independent (no dependencies on this generator after creation)
+- ✅ Include only the code and configurations needed for your specific setup
+- ✅ Come with one-command setup and execution scripts
+- ✅ Are initialized as Git repositories ready for version control
+- ✅ Can be distributed, archived, or run on any machine with Python 3.9+
+
+**Think of it as:** A project template generator specifically designed for AI framework evaluation experiments.
+
+---
+
+## ⚡ Quick Start
 
 ### Prerequisites
 
