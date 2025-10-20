@@ -318,15 +318,8 @@ def interactive_wizard() -> Dict[str, Any]:
             existing_path = parent_dir / name
             
             if existing_path.exists():
-                print(f"⚠️  Warning: Directory '{name}' already exists at {existing_path}")
-                overwrite = input("Do you want to overwrite it? This will DELETE all existing content! [y/N]: ").strip().lower()
-                
-                if overwrite in ['y', 'yes']:
-                    print(f"⚠️  Confirmed: Will overwrite {existing_path}")
-                    break
-                else:
-                    print("Please choose a different name.")
-                    continue
+                print(f"ℹ️  Note: Directory '{name}' already exists at {existing_path}")
+                print(f"   You'll be asked how to handle this next.")
             
             break
         
