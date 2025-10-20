@@ -455,28 +455,41 @@ class UsageReconciler:
         # Check if data is identical
         data_identical = (current_in == previous_in and current_out == previous_out)
         
+        # Check if all steps that should have tokens actually have them
+        steps_with_tokens = current_attempt.get('steps_with_tokens', 0)
+        total_steps = current_attempt.get('total_steps', 0)
+        all_steps_have_tokens = (steps_with_tokens == total_steps)
+        
         if data_identical:
             # Check time gap
             if time_diff_minutes >= DEFAULT_VERIFICATION_INTERVAL_MIN:
+                # Check if all steps have tokens before marking as verified
+                if not all_steps_have_tokens:
+                    return {
+                        'status': 'warning',
+                        'message': f'⚠️ Data stable but incomplete: only {steps_with_tokens}/{total_steps} steps have tokens. Some steps may have failed or not called the API.'
+                    }
                 # ✅ VERIFIED!
                 return {
                     'status': 'verified',
-                    'message': f'✅ Data stable across {time_diff_minutes:.0f} minute interval ({current_in:,} in, {current_out:,} out)'
+                    'message': f'✅ Data stable across {time_diff_minutes:.0f} minute interval ({current_in:,} in, {current_out:,} out) - all {total_steps} steps verified'
                 }
             else:
                 # Data matches but too soon
                 wait_more = DEFAULT_VERIFICATION_INTERVAL_MIN - time_diff_minutes
+                incomplete_note = f" (⚠️ only {steps_with_tokens}/{total_steps} steps have tokens)" if not all_steps_have_tokens else ""
                 return {
                     'status': 'pending',
-                    'message': f'Data matches but interval too short ({time_diff_minutes:.0f}m < {DEFAULT_VERIFICATION_INTERVAL_MIN}m), wait {wait_more:.0f}m more'
+                    'message': f'Data matches but interval too short ({time_diff_minutes:.0f}m < {DEFAULT_VERIFICATION_INTERVAL_MIN}m), wait {wait_more:.0f}m more{incomplete_note}'
                 }
         else:
             # Data still changing (normal - API data arriving)
             increase_in = current_in - previous_in
             increase_out = current_out - previous_out
+            incomplete_note = f" (currently {steps_with_tokens}/{total_steps} steps have tokens)" if not all_steps_have_tokens else ""
             return {
                 'status': 'pending',
-                'message': f'Data still arriving (+{increase_in:,} in, +{increase_out:,} out tokens since last attempt)'
+                'message': f'Data still arriving (+{increase_in:,} in, +{increase_out:,} out tokens since last attempt){incomplete_note}'
             }
     
     def reconcile_all_pending(
