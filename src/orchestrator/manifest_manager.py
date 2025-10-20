@@ -47,18 +47,8 @@ def get_manifest(experiment_name: Optional[str] = None) -> Dict[str, Any]:
         exp_paths = ExperimentPaths(experiment_name)
         manifest_path = exp_paths.manifest_path
     else:
-        # Check for standalone experiment manifest first
-        standalone_path = Path("runs/manifest.json")
-        old_path = Path("runs/runs_manifest.json")
-        
-        if standalone_path.exists():
-            manifest_path = standalone_path
-        elif old_path.exists():
-            # Backward compatibility: use old path if it exists
-            manifest_path = old_path
-        else:
-            # Default to standalone path for new manifests
-            manifest_path = standalone_path
+        # Standalone experiment: use runs/manifest.json
+        manifest_path = Path("runs/manifest.json")
     
     if not manifest_path.exists():
         logger.info("No manifest found, creating empty one")
@@ -97,18 +87,8 @@ def update_manifest(run_data: Dict[str, Any], experiment_name: Optional[str] = N
         exp_paths = ExperimentPaths(experiment_name)
         manifest_path = exp_paths.manifest_path
     else:
-        # Check for standalone experiment manifest first
-        standalone_path = Path("runs/manifest.json")
-        old_path = Path("runs/runs_manifest.json")
-        
-        if standalone_path.exists():
-            manifest_path = standalone_path
-        elif old_path.exists():
-            # Backward compatibility: use old path if it exists
-            manifest_path = old_path
-        else:
-            # Default to standalone path for new manifests
-            manifest_path = standalone_path
+        # Standalone experiment: use runs/manifest.json
+        manifest_path = Path("runs/manifest.json")
     
     # Ensure directory exists
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
