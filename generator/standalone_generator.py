@@ -396,6 +396,13 @@ if __name__ == '__main__':
         run_path.chmod(0o755)  # Make executable
         print("  ✓ run.sh")
         
+        # reconcile_usage.sh
+        reconcile_script = script_generator.generate_reconcile_usage_script()
+        reconcile_path = output_dir / 'reconcile_usage.sh'
+        reconcile_path.write_text(reconcile_script, encoding='utf-8')
+        reconcile_path.chmod(0o755)  # Make executable
+        print("  ✓ reconcile_usage.sh")
+        
         # README.md
         readme = script_generator.generate_readme()
         (output_dir / 'README.md').write_text(readme, encoding='utf-8')
@@ -517,6 +524,7 @@ if __name__ == '__main__':
         required_files = [
             'setup.sh',
             'run.sh',
+            'reconcile_usage.sh',
             'README.md',
             'config.yaml',
             'requirements.txt',
@@ -537,7 +545,7 @@ if __name__ == '__main__':
             print("  ✓ All required files present")
         
         # Check scripts are executable
-        for script in ['setup.sh', 'run.sh']:
+        for script in ['setup.sh', 'run.sh', 'reconcile_usage.sh']:
             script_path = output_dir / script
             if script_path.exists() and not script_path.stat().st_mode & 0o111:
                 print(f"  ⚠️  Warning: {script} is not executable")

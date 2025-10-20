@@ -483,7 +483,7 @@ def _merge_experiment_updates(temp_dir: Path, target_dir: Path) -> None:
     Updates:
     - src/ (source code)
     - config/ (configuration and prompts)
-    - setup.sh, run.sh (scripts)
+    - setup.sh, run.sh, reconcile_usage.sh (scripts)
     - requirements.txt (dependencies)
     - README.md (documentation)
     - .gitignore (git configuration)
@@ -511,6 +511,7 @@ def _merge_experiment_updates(temp_dir: Path, target_dir: Path) -> None:
         'config.yaml',  # Main configuration file with experiment settings
         'setup.sh',
         'run.sh',
+        'reconcile_usage.sh',  # Usage reconciliation script
         'requirements.txt',
         'README.md',
         '.gitignore',

@@ -265,6 +265,7 @@ Results will be saved to `./runs/`
 ├── config.yaml          # Experiment configuration
 ├── setup.sh             # One-command setup
 ├── run.sh               # One-command execution
+├── reconcile_usage.sh   # Usage API reconciliation
 ├── .env                 # Environment variables (API keys)
 ├── .gitignore           # Git ignore patterns
 ├── requirements.txt     # Python dependencies
@@ -319,6 +320,64 @@ python -m src.main
 python -m src.analysis.report_generator
 ```
 
+## Usage Reconciliation
+
+The OpenAI Usage API has a 5-60 minute reporting delay. During experiment runs, 
+token counts are estimated. After the delay, use the reconciliation script to 
+update with accurate data from the Usage API.
+
+### Workflow
+
+1. **Run experiment**
+   ```bash
+   ./run.sh
+   ```
+
+2. **Wait 30-60 minutes** for Usage API data propagation
+
+3. **Check what needs reconciliation**
+   ```bash
+   ./reconcile_usage.sh --list
+   ```
+
+4. **Reconcile token counts**
+   ```bash
+   ./reconcile_usage.sh
+   ```
+
+5. **Verify reconciliation**
+   ```bash
+   ./reconcile_usage.sh --list --verbose
+   ```
+
+### Commands
+
+```bash
+# List runs needing reconciliation
+./reconcile_usage.sh --list
+
+# See detailed status of all runs
+./reconcile_usage.sh --list --verbose
+
+# Reconcile all pending runs
+./reconcile_usage.sh
+
+# Reconcile specific framework
+./reconcile_usage.sh baes
+
+# Reconcile specific run
+./reconcile_usage.sh baes abc123-run-id
+
+# Show help
+./reconcile_usage.sh --help
+```
+
+### API Key Requirements
+
+The reconciliation script requires an API key with `api.usage.read` scope.
+Set `OPEN_AI_KEY_ADM` in your `.env` file. You can use the same key as one
+of your frameworks, or create a dedicated key.
+
 ## Analysis
 
 After running, experiment results are saved to:
@@ -331,6 +390,9 @@ Generate analysis report:
 source venv/bin/activate
 python -m src.analysis.report_generator
 ```
+
+**Important:** For accurate cost and token metrics, reconcile usage data 
+before generating analysis reports.
 
 ## Troubleshooting
 
@@ -353,6 +415,24 @@ python -m src.setup_frameworks
 1. Verify keys in `.env` are correct (start with `sk-`)
 2. Check API key permissions on OpenAI platform
 3. Verify different keys are used for each framework (if required)
+4. For reconciliation, ensure `OPEN_AI_KEY_ADM` has `api.usage.read` scope
+
+### Reconciliation Issues
+
+**No runs listed for reconciliation:**
+- Runs may be too recent (< 30 minutes old) - wait and try again
+- Runs may already be verified - use `--list --verbose` to see all runs
+- Check that runs actually completed successfully
+
+**Reconciliation returns 0 tokens:**
+- Usage API delay may be longer than expected - wait and retry
+- API key may lack `api.usage.read` scope - check permissions
+- Verify the API key in `OPEN_AI_KEY_ADM` is correct
+
+**Permission denied error:**
+```bash
+chmod +x reconcile_usage.sh
+```
 
 ### Import Errors
 
@@ -440,6 +520,12 @@ or check the source code comments.
 
 {api_keys}
 
+# Usage Reconciliation API Key
+# This key is used to query the OpenAI Usage API for token reconciliation
+# It requires 'api.usage.read' scope
+# You can use the same key as one of the frameworks above, or a dedicated key
+OPEN_AI_KEY_ADM=sk-your-admin-api-key-here
+
 # Usage Reconciliation Configuration
 # How often to check for stable reconciliation (in minutes)
 RECONCILIATION_VERIFICATION_INTERVAL_MIN=2
@@ -520,3 +606,440 @@ htmlcov/
 .pytest_cache/
 """
         return gitignore
+    
+    def generate_reconcile_usage_script(self) -> str:
+        """
+        Generate reconcile_usage.sh script for standalone experiment.
+        
+        Returns:
+            Shell script content
+        """
+        script = f"""#!/bin/bash
+# Reconcile token usage data from OpenAI Usage API
+# 
+# The OpenAI Usage API has a 5-60 minute reporting delay. This script updates
+# metrics.json files with accurate token counts after that delay.
+#
+# Usage:
+#   ./reconcile_usage.sh              # Reconcile all pending runs
+#   ./reconcile_usage.sh --list       # List runs needing reconciliation
+#   ./reconcile_usage.sh --help       # Show detailed help
+#   ./reconcile_usage.sh <framework>  # Reconcile specific framework
+#   ./reconcile_usage.sh <framework> <run-id>  # Reconcile specific run
+
+set -e
+
+# Check if setup was run
+if [ ! -d "venv" ]; then
+    echo "❌ Virtual environment not found. Run ./setup.sh first!"
+    exit 1
+fi
+
+# Activate virtual environment
+source venv/bin/activate
+
+# Load environment variables
+if [ -f ".env" ]; then
+    set -a
+    source .env
+    set +a
+fi
+
+# Check for required API key (for Usage API access)
+# Note: Uses OPEN_AI_KEY_ADM or falls back to first framework key
+if [ -z "${{OPEN_AI_KEY_ADM}}" ]; then
+    # Try to use first available framework key
+    FIRST_KEY=""
+{self._generate_fallback_key_logic()}
+    if [ -z "$FIRST_KEY" ]; then
+        echo "⚠️  Warning: No OPEN_AI_KEY_ADM found in .env"
+        echo "   Usage reconciliation requires an API key with usage read permissions"
+        echo "   The script will attempt to use framework keys, but may fail"
+    else
+        export OPEN_AI_KEY_ADM="$FIRST_KEY"
+    fi
+fi
+
+export PYTHONPATH="$(pwd)"
+
+# Parse arguments
+case "${{1:-}}" in
+    --help|-h)
+        cat << 'HELP_EOF'
+Reconcile Usage - Update token counts from OpenAI Usage API
+
+USAGE:
+    ./reconcile_usage.sh [OPTIONS] [FRAMEWORK] [RUN_ID]
+
+OPTIONS:
+    --help, -h          Show this help message
+    --list              List all runs needing reconciliation
+    --list --verbose    Show detailed status of all runs
+
+EXAMPLES:
+    # List runs needing reconciliation
+    ./reconcile_usage.sh --list
+
+    # See detailed status of all runs
+    ./reconcile_usage.sh --list --verbose
+
+    # Reconcile all pending runs (recommended)
+    ./reconcile_usage.sh
+
+    # Reconcile specific framework
+    ./reconcile_usage.sh baes
+    ./reconcile_usage.sh chatdev
+
+    # Reconcile specific run
+    ./reconcile_usage.sh baes abc123-run-id
+
+WORKFLOW:
+    1. Run experiment: ./run.sh
+    2. Wait 30-60 minutes for Usage API data propagation
+    3. List pending: ./reconcile_usage.sh --list
+    4. Reconcile: ./reconcile_usage.sh
+    5. Verify: Check metrics.json files or run analysis
+
+NOTES:
+    - OpenAI Usage API has 5-60 minute reporting delay
+    - Script will skip runs younger than 30 minutes
+    - Runs are verified after multiple stable checks
+    - Requires API key with 'api.usage.read' scope
+
+For more information, see the documentation.
+HELP_EOF
+        exit 0
+        ;;
+    
+    --list)
+        VERBOSE=""
+        if [ "${{2:-}}" = "--verbose" ]; then
+            VERBOSE="--verbose"
+        fi
+        
+        python3 << EOF
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd()))
+
+from src.orchestrator.usage_reconciler import UsageReconciler
+from src.orchestrator.manifest_manager import find_runs
+from src.utils.logger import get_logger
+import time
+
+logger = get_logger(__name__)
+reconciler = UsageReconciler()
+
+# Get all runs
+all_runs = find_runs()
+
+if not all_runs:
+    print("No runs found in this experiment.")
+    sys.exit(0)
+
+# Categorize runs
+verified_runs = []
+pending_runs = []
+too_recent_runs = []
+no_data_runs = []
+
+current_time = time.time()
+min_age_seconds = 30 * 60  # 30 minutes
+
+for run_entry in all_runs:
+    run_id = run_entry['run_id']
+    framework = run_entry['framework']
+    
+    # Load metrics to check status
+    metrics_file = Path('runs') / framework / run_id / 'metrics.json'
+    if not metrics_file.exists():
+        no_data_runs.append((framework, run_id))
+        continue
+    
+    import json
+    with open(metrics_file) as f:
+        metrics = json.load(f)
+    
+    # Check verification status
+    reconciliation = metrics.get('usage_api_reconciliation', {{}})
+    status = reconciliation.get('verification_status', 'pending')
+    
+    if status == 'verified':
+        verified_runs.append((framework, run_id, metrics, reconciliation))
+    else:
+        # Check age
+        created_at = run_entry.get('created_at')
+        if created_at:
+            run_age = current_time - created_at
+            if run_age < min_age_seconds:
+                wait_minutes = (min_age_seconds - run_age) / 60
+                too_recent_runs.append((framework, run_id, wait_minutes, metrics))
+            else:
+                pending_runs.append((framework, run_id, run_age / 3600, metrics, reconciliation))
+        else:
+            pending_runs.append((framework, run_id, 0, metrics, reconciliation))
+
+verbose = "$VERBOSE" == "--verbose"
+
+if verbose:
+    # Verbose mode: show everything
+    print("=" * 70)
+    print("RECONCILIATION STATUS - ALL RUNS")
+    print("=" * 70)
+    print()
+    print(f"Total runs: {{len(all_runs)}}")
+    print(f"  ✅ Verified: {{len(verified_runs)}}")
+    print(f"  ⏳ Pending verification: {{len(pending_runs)}}")
+    print(f"  🕐 Too recent: {{len(too_recent_runs)}}")
+    print(f"  ❓ No reconciliation data: {{len(no_data_runs)}}")
+    print()
+    
+    if verified_runs:
+        print("─" * 70)
+        print("✅ VERIFIED RUNS")
+        print("─" * 70)
+        for fw, rid, metrics, recon in verified_runs:
+            short_id = rid[:8] if len(rid) > 8 else rid
+            attempts = recon.get('attempts', [])
+            if attempts:
+                last = attempts[-1]
+                tokens_in = last.get('total_tokens_in', 0)
+                tokens_out = last.get('total_tokens_out', 0)
+                print(f"  ✅ {{fw}}/{{short_id}}...")
+                print(f"     Tokens: {{tokens_in:,}} in / {{tokens_out:,}} out")
+                print(f"     Verified at: {{recon.get('verified_at', 'N/A')}}")
+        print()
+    
+    if pending_runs:
+        print("─" * 70)
+        print("⏳ PENDING VERIFICATION")
+        print("─" * 70)
+        for fw, rid, age_hours, metrics, recon in pending_runs:
+            short_id = rid[:8] if len(rid) > 8 else rid
+            attempts = recon.get('attempts', [])
+            attempt_count = len(attempts)
+            print(f"  ⏳ {{fw}}/{{short_id}}...")
+            print(f"     Status: {{recon.get('verification_status', 'pending')}} (attempt {{attempt_count}})")
+            print(f"     Age: {{age_hours:.1f}} hours")
+            if attempts:
+                last = attempts[-1]
+                tokens_in = last.get('total_tokens_in', 0)
+                tokens_out = last.get('total_tokens_out', 0)
+                print(f"     Tokens: {{tokens_in:,}} in / {{tokens_out:,}} out")
+        print()
+    
+    if too_recent_runs:
+        print("─" * 70)
+        print("🕐 TOO RECENT FOR RECONCILIATION")
+        print("─" * 70)
+        for fw, rid, wait_min, metrics in too_recent_runs:
+            short_id = rid[:8] if len(rid) > 8 else rid
+            agg = metrics.get('aggregate_metrics', {{}})
+            tokens_in = agg.get('TOK_IN', 0)
+            tokens_out = agg.get('TOK_OUT', 0)
+            print(f"  🕐 {{fw}}/{{short_id}}...")
+            print(f"     Tokens: {{tokens_in:,}} in / {{tokens_out:,}} out")
+            print(f"     Wait {{wait_min:.1f}} more minutes")
+        print()
+    
+    if no_data_runs:
+        print("─" * 70)
+        print("❓ NO RECONCILIATION DATA")
+        print("─" * 70)
+        for fw, rid in no_data_runs:
+            short_id = rid[:8] if len(rid) > 8 else rid
+            print(f"  ❓ {{fw}}/{{short_id}}...")
+        print()
+    
+else:
+    # Normal mode: only show pending
+    if not pending_runs:
+        print("✅ No runs need reconciliation")
+        print()
+        if verified_runs:
+            print(f"   {{len(verified_runs)}} run(s) already verified")
+        if too_recent_runs:
+            print(f"   {{len(too_recent_runs)}} run(s) too recent (wait 30+ minutes)")
+        print()
+        print("💡 Tip: Use '--list --verbose' to see ALL runs and their status")
+    else:
+        print(f"Found {{len(pending_runs)}} run(s) pending verification:")
+        print()
+        for fw, rid, age_hours, metrics, recon in pending_runs:
+            short_id = rid[:8] if len(rid) > 8 else rid
+            attempts = recon.get('attempts', [])
+            attempt_count = len(attempts)
+            print(f"  ⏳ {{fw}}/{{short_id}}...")
+            print(f"     Status: {{recon.get('verification_status', 'pending')}} (attempt {{attempt_count}})")
+            print(f"     Age: {{age_hours:.1f}} hours")
+            msg = recon.get('verification_message', 'Not yet reconciled')
+            print(f"     Message: {{msg}}")
+            print()
+        
+        print("💡 Tip: Use '--list --verbose' to see ALL runs and their status")
+
+EOF
+        exit 0
+        ;;
+    
+    *)
+        # Reconcile mode
+        FRAMEWORK="${{1:-}}"
+        RUN_ID="${{2:-}}"
+        
+        if [ -n "$RUN_ID" ]; then
+            # Reconcile specific run
+            echo "Reconciling specific run: $FRAMEWORK/$RUN_ID"
+            echo ""
+            
+            python3 << EOF
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd()))
+
+from src.orchestrator.usage_reconciler import UsageReconciler
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
+reconciler = UsageReconciler()
+
+try:
+    report = reconciler.reconcile_run("$RUN_ID", "$FRAMEWORK")
+    
+    print(f"✅ Reconciliation complete")
+    print()
+    print(f"Status: {{report['status']}}")
+    print(f"Input tokens: {{report['total_tokens_in']:,}}")
+    print(f"Output tokens: {{report['total_tokens_out']:,}}")
+    print(f"Steps with tokens: {{report['steps_with_tokens']}}/{{report['total_steps']}}")
+    print(f"Message: {{report['verification_message']}}")
+    print()
+    
+    if report['status'] == 'verified':
+        print("🎉 Data verified and stable!")
+    elif report['status'] == 'pending':
+        print("⏳ Verification pending - run again later to confirm stability")
+    
+except Exception as e:
+    print(f"❌ Error: {{e}}")
+    sys.exit(1)
+EOF
+            
+        elif [ -n "$FRAMEWORK" ]; then
+            # Reconcile specific framework
+            echo "Reconciling framework: $FRAMEWORK"
+            echo ""
+            
+            python3 << EOF
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd()))
+
+from src.orchestrator.usage_reconciler import UsageReconciler
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
+reconciler = UsageReconciler()
+
+try:
+    results = reconciler.reconcile_all_pending(framework="$FRAMEWORK")
+    
+    if not results:
+        print("✅ No runs need reconciliation for $FRAMEWORK")
+    else:
+        print(f"Processed {{len(results)}} run(s):")
+        print()
+        
+        for report in results:
+            status_icon = "✅" if report['status'] == 'verified' else "⏳"
+            print(f"{{status_icon}} {{report['framework']}}/{{report['run_id'][:8]}}...")
+            print(f"   Tokens: {{report['total_tokens_in']:,}} in / {{report['total_tokens_out']:,}} out")
+            print(f"   Status: {{report['status']}}")
+            print()
+            
+except Exception as e:
+    print(f"❌ Error: {{e}}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+EOF
+            
+        else:
+            # Reconcile all pending
+            echo "Reconciling all pending runs..."
+            echo ""
+            
+            python3 << EOF
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd()))
+
+from src.orchestrator.usage_reconciler import UsageReconciler
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
+reconciler = UsageReconciler()
+
+try:
+    results = reconciler.reconcile_all_pending()
+    
+    if not results:
+        print("✅ No runs need reconciliation")
+        print()
+        print("All runs are either:")
+        print("  - Already verified")
+        print("  - Too recent (< 30 minutes old)")
+        print("  - Outside reconciliation window")
+        print()
+        print("Run './reconcile_usage.sh --list --verbose' to see all runs")
+    else:
+        print(f"Processed {{len(results)}} run(s):")
+        print()
+        
+        verified_count = sum(1 for r in results if r['status'] == 'verified')
+        pending_count = sum(1 for r in results if r['status'] == 'pending')
+        
+        for report in results:
+            status_icon = "✅" if report['status'] == 'verified' else "⏳"
+            short_id = report['run_id'][:8] if len(report['run_id']) > 8 else report['run_id']
+            print(f"{{status_icon}} {{report['framework']}}/{{short_id}}...")
+            print(f"   Tokens: {{report['total_tokens_in']:,}} in / {{report['total_tokens_out']:,}} out")
+            print(f"   Status: {{report['status']}}")
+            msg = report.get('verification_message', '')
+            if msg:
+                print(f"   {{msg}}")
+            print()
+        
+        print("─" * 60)
+        print(f"Summary: {{verified_count}} verified, {{pending_count}} pending")
+        print()
+        
+        if pending_count > 0:
+            print("⏳ Some runs are pending verification.")
+            print("   Run this script again later to confirm data stability.")
+        
+except Exception as e:
+    print(f"❌ Error: {{e}}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+EOF
+        fi
+        ;;
+esac
+
+echo ""
+echo "✅ Reconciliation complete!"
+echo ""
+"""
+        return script
+    
+    def _generate_fallback_key_logic(self) -> str:
+        """Generate bash code to find first available API key."""
+        checks = []
+        for fw in self.enabled_frameworks:
+            key_var = f"OPENAI_API_KEY_{fw.upper()}"
+            checks.append(f'''    if [ -z "$FIRST_KEY" ] && [ -n "${{{key_var}}}" ]; then
+        FIRST_KEY="${{{key_var}}}"
+    fi''')
+        return '\n'.join(checks)
