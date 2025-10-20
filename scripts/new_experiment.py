@@ -315,9 +315,18 @@ def interactive_wizard() -> Dict[str, Any]:
             # Check if directory already exists in parent directory
             generator_root = Path(__file__).parent.parent
             parent_dir = generator_root.parent
-            if (parent_dir / name).exists():
-                print(f"❌ Experiment directory '{name}' already exists in {parent_dir}. Choose different name.")
-                continue
+            existing_path = parent_dir / name
+            
+            if existing_path.exists():
+                print(f"⚠️  Warning: Directory '{name}' already exists at {existing_path}")
+                overwrite = input("Do you want to overwrite it? This will DELETE all existing content! [y/N]: ").strip().lower()
+                
+                if overwrite in ['y', 'yes']:
+                    print(f"⚠️  Confirmed: Will overwrite {existing_path}")
+                    break
+                else:
+                    print("Please choose a different name.")
+                    continue
             
             break
         
@@ -480,7 +489,8 @@ def create_experiment(
     frameworks: List[str],
     max_runs: int,
     template_path: Optional[Path] = None,
-    experiments_base_dir: Optional[Path] = None
+    experiments_base_dir: Optional[Path] = None,
+    force: bool = False
 ) -> None:
     """
     Create new experiment.
@@ -500,6 +510,7 @@ def create_experiment(
         max_runs: Maximum runs per framework
         template_path: Optional template experiment directory
         experiments_base_dir: Optional base directory (defaults to parent of generator)
+        force: If True, overwrite existing directory without asking
         
     Raises:
         ExperimentCreationError: If creation fails
@@ -531,10 +542,41 @@ def create_experiment(
     
     # Check if already exists
     if output_dir.exists():
-        raise ExperimentCreationError(
-            f"Experiment directory already exists: {output_dir}\n"
-            f"Please choose a different name or delete the existing directory."
-        )
+        logger.warning(f"Directory already exists: {output_dir}")
+        
+        # Force flag: remove without asking
+        if force:
+            logger.info(f"Force flag set: Removing existing directory: {output_dir}")
+            print(f"🗑️  Removing existing directory (--force)...")
+            shutil.rmtree(output_dir)
+            print(f"✓ Removed {output_dir}")
+            print()
+        
+        # In non-interactive mode without force, fail with error
+        elif not sys.stdout.isatty():
+            raise ExperimentCreationError(
+                f"Experiment directory already exists: {output_dir}\n"
+                f"Use --force to overwrite, --experiments-dir to specify a different location,\n"
+                f"or delete the existing directory manually."
+            )
+        
+        # Interactive mode: ask for confirmation
+        else:
+            print()
+            print(f"⚠️  Warning: Directory already exists: {output_dir}")
+            overwrite = input("Overwrite existing directory? This will DELETE all content! [y/N]: ").strip().lower()
+            print()
+            
+            if overwrite not in ['y', 'yes']:
+                print("❌ Cancelled. Please choose a different name or location.")
+                sys.exit(0)
+            
+            # Remove existing directory
+            logger.info(f"Removing existing directory: {output_dir}")
+            print(f"🗑️  Removing existing directory...")
+            shutil.rmtree(output_dir)
+            print(f"✓ Removed {output_dir}")
+            print()
     
     logger.info(f"Output directory: {output_dir}")
     
@@ -595,6 +637,10 @@ Examples:
   python scripts/new_experiment.py --name baseline --model gpt-4o \\
       --frameworks baes,chatdev --runs 50
   
+  # Force overwrite existing directory
+  python scripts/new_experiment.py --name baseline --model gpt-4o \\
+      --frameworks baes --runs 10 --force
+  
   # From template
   python scripts/new_experiment.py --name variant1 --template baseline
         """
@@ -631,6 +677,12 @@ Examples:
         '--experiments-dir',
         type=Path,
         help='Custom base directory for experiments (default: parent directory of generator)'
+    )
+    
+    parser.add_argument(
+        '--force',
+        action='store_true',
+        help='Overwrite existing experiment directory without asking'
     )
     
     return parser.parse_args()
@@ -680,7 +732,8 @@ def main():
                 'frameworks': frameworks,
                 'max_runs': args.runs,
                 'template_path': template_path,
-                'experiments_base_dir': args.experiments_dir
+                'experiments_base_dir': args.experiments_dir,
+                'force': args.force
             }
         
         # Create experiment
