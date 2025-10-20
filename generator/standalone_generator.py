@@ -96,11 +96,15 @@ class StandaloneGenerator:
         print("🚫 Generating .gitignore...")
         self._generate_gitignore(script_generator, output_dir)
         
-        # Step 10: Initialize git repository
+        # Step 10: Copy .env file if it exists
+        print("🔑 Checking for .env file...")
+        self._copy_env_file(output_dir)
+        
+        # Step 11: Initialize git repository
         print("🔄 Initializing git repository...")
         self._initialize_git_repo(output_dir, name)
         
-        # Step 11: Validate generated project
+        # Step 12: Validate generated project
         print("✅ Validating generated project...")
         self._validate_generated_project(output_dir)
         
@@ -357,6 +361,26 @@ if __name__ == '__main__':
         gitignore_content = script_generator.generate_gitignore()
         (output_dir / '.gitignore').write_text(gitignore_content, encoding='utf-8')
         print("  ✓ .gitignore")
+    
+    def _copy_env_file(self, output_dir: Path) -> None:
+        """
+        Copy .env file from generator directory if it exists.
+        
+        This preserves API keys and configuration from the generator,
+        saving users time in setting up the new experiment.
+        
+        Args:
+            output_dir: Output directory for generated project
+        """
+        source_env = self.project_root / '.env'
+        
+        if source_env.exists():
+            dest_env = output_dir / '.env'
+            shutil.copy2(source_env, dest_env)
+            print("  ✓ Copied .env file from generator")
+            print("  ℹ️  API keys and configuration preserved")
+        else:
+            print("  ℹ️  No .env file found in generator (will use .env.example)")
     
     def _initialize_git_repo(self, output_dir: Path, name: str) -> None:
         """Initialize git repository."""
