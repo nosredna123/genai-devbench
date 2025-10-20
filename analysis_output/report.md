@@ -1,10 +1,10 @@
 # Statistical Analysis Report
 
-**Generated:** 2025-10-19 19:30:28 UTC
+**Generated:** 2025-10-20 12:29:30 UTC
 
-**Frameworks:** baes, chatdev, ghspec
+**Frameworks:** baes
 
-**Sample Size:** 200 total runs (baes: 75, chatdev: 60, ghspec: 65)
+**Sample Size:** 2 total runs (baes: 2)
 
 ---
 
@@ -178,17 +178,6 @@ This study compares three autonomous AI-powered software development frameworks 
 - Kernel-mediated request processing with specialized entities
 - Repository: `gesad-lab/baes_demo` (commit: `1dd5736`)
 
-**2. ChatDev** (OpenBMB/ChatDev)
-- Multi-agent collaborative framework with role-based AI agents (CEO, CTO, Programmer, Reviewer)
-- Waterfall-inspired workflow with distinct phases (design, coding, testing, documentation)
-- Repository: `OpenBMB/ChatDev` (commit: `52edb89`)
-
-**3. GHSpec** (GitHub Spec-Kit)
-- Specification-driven development framework following structured phases
-- Four-phase workflow: specification → planning → task breakdown → implementation
-- Sequential task execution with full context awareness
-- Repository: `github/spec-kit` (commit: `89f4b0b`)
-
 ### 📊 Data Quality Statement
 
 **Reconciliation-Based Run Selection**: This analysis includes **only runs with verified, stable token data** to ensure reproducibility and statistical validity.
@@ -198,8 +187,8 @@ This study compares three autonomous AI-powered software development frameworks 
 - Ensures data propagation complete and values stable
 - Status tracked in `usage_api_reconciliation.verification_status` field
 
-**Data Quality Statistics** (of 204 total runs):
-- ✅ **Verified**: 200 runs (98.0%) - **INCLUDED in analysis**
+**Data Quality Statistics** (of 6 total runs):
+- ✅ **Verified**: 2 runs (33.3%) - **INCLUDED in analysis**
 - ⏳ **Pending**: 1 run (1.5%) - Reconciliation in progress - EXCLUDED
 - 🕐 **None**: 3 runs (4.6%) - Too recent (< 30 min) - EXCLUDED
 
@@ -223,11 +212,9 @@ if verification_status != 'verified':
 
 #### **Sample Size and Replication**
 
-This analysis is based on **200 VERIFIED experimental runs** across three frameworks:
+This analysis is based on **2 VERIFIED experimental runs** across three frameworks:
 
-- **baes**: 75 independent runs
-- **chatdev**: 60 independent runs
-- **ghspec**: 65 independent runs
+- **baes**: 2 independent runs
 
 **Replication Protocol:**
 - Each run executes the complete 6-step evolution scenario independently
@@ -240,14 +227,14 @@ This analysis is based on **200 VERIFIED experimental runs** across three framew
 - Non-deterministic LLM responses introduce natural variance across runs
 
 **Statistical Power:**
-- Current sample sizes (baes: 75, chatdev: 60, ghspec: 65) provide sufficient power for detecting large effect sizes
+- Current sample sizes (baes: 2) provide sufficient power for detecting large effect sizes
 - **Bootstrap confidence intervals** (10,000 resamples) quantify uncertainty in our estimates:
   - Simulates collecting 10,000 alternative datasets by resampling our actual data with replacement
   - Each resample calculates the metric (e.g., mean AUTR), creating a distribution of possible values
   - 95% CI shows the range where we expect the true population mean to fall 95% of the time
   - This accounts for the fact that we only have a limited sample (not infinite runs)
 - Stopping rule: Continue until CI half-width ≤ 10% of mean (max 50 runs per framework)
-- Current status: baes (75/50), chatdev (60/50), ghspec (65/50)
+- Current status: baes (2/50)
 
 #### **Standardized Task Sequence**
 
@@ -273,7 +260,7 @@ To ensure fair comparison, the following variables are **held constant** across 
 
 **API Infrastructure**:
 - Each framework uses a **dedicated OpenAI API key** (prevents quota conflicts)
-- API keys: `OPENAI_API_KEY_BAES`, `OPENAI_API_KEY_CHATDEV`, `OPENAI_API_KEY_GHSPEC`
+- API keys: `OPENAI_API_KEY_BAES`
 - Token consumption measured via **OpenAI Usage API** (`/v1/organization/usage/completions`)
 - Time-window queries (Unix timestamps) ensure accurate attribution to each execution step
 
@@ -394,7 +381,7 @@ python run.py --task "<step_text>" --name "BAEs_Step1_<run_id>" \
 - **Non-Parametric Tests**: Kruskal-Wallis and Dunn-Šidák avoid normality assumptions
 - **Effect Sizes**: Cliff's delta quantifies practical significance beyond p-values
 - **Bootstrap CI**: 95% confidence intervals with 10,000 resamples for stable estimates
-- **Small Sample Awareness**: Current results (baes: 75, chatdev: 60, ghspec: 65) show large CI widths; p-values > 0.05 expected
+- **Small Sample Awareness**: Current results (baes: 2) show large CI widths; p-values > 0.05 expected
   - *Stopping Rule*: Experiment continues until CI half-width ≤ 10% of mean (50 runs max)
 
 **Interpretation Caveats:**
@@ -413,8 +400,6 @@ python run.py --task "<step_text>" --name "BAEs_Step1_<run_id>" \
 
 **Commit Hashes**:
 - BAEs: `1dd573633a98b8baa636c200bc1684cec7a8179f`
-- ChatDev: `52edb89997b4312ad27d8c54584d0a6c59940135`
-- GHSpec: `89f4b0b38a42996376c0f083d47281a4c9196761`
 
 ---
 
@@ -632,7 +617,7 @@ This report uses non-parametric statistics to compare frameworks robustly.
 
 ## Executive Summary (Reliable Metrics Only)
 
-*Based on 200 VERIFIED runs across 3 frameworks: baes (n=75), chatdev (n=60), ghspec (n=65)*
+*Based on 2 VERIFIED runs across 1 frameworks: baes (n=2)*
 
 **Analysis Scope**: This summary focuses on **reliably measured metrics only** with consistent data sources across all frameworks.
 
@@ -644,17 +629,15 @@ See 'Limitations and Future Work' section for discussion of excluded metrics.
 
 ### 🏆 Best Performers (Reliable Metrics)
 
-- **Fastest Execution**: baes (151.9s / 2.5 min)
-- **Most Token-Efficient**: baes (23,495 input tokens)
-- **Best Cache Efficiency**: chatdev (11.0% cache hit rate)
-- **Fewest API Calls**: baes (14 calls average)
+- **Fastest Execution**: baes (167.3s / 2.8 min)
+- **Most Token-Efficient**: baes (25,156 input tokens)
+- **Best Cache Efficiency**: baes (0.0% cache hit rate)
+- **Fewest API Calls**: baes (15 calls average)
 
 ### 📊 Key Insights (Reliable Metrics)
 
-- Execution time varies **9.2x** between fastest and slowest frameworks
-- Token consumption varies **9.5x** across frameworks
-- Tokens-per-API-call varies **2.0x** (indicates different batching strategies)
-- All frameworks benefit from OpenAI's prompt caching (reduces costs ~50% on cached tokens)
+- Tokens-per-API-call varies **1.0x** (indicates different batching strategies)
+- No prompt caching detected in this experiment (task may be too varied for cache hits)
 
 ### 🔬 Measurement Scope
 
@@ -691,9 +674,7 @@ See 'Metric Definitions' section for complete measurement status details.
 
 | Framework | N | TOK_IN | TOK_OUT | API_CALLS | CACHED_TOKENS | T_WALL_seconds | ZDI | UTT |
 |-----------|---|------------|------------|------------|------------|------------|------------|------------|
-| baes | 75 | 23,495 [22,512, 24,488] 🟢 | 6,421 [6,137, 6,707] 🟢 | 13.81 [13.27, 14.36] 🔴 | 1916.59 [984.75, 3002.03] 🟡 | 151.9 [142.2, 163.3] 🟢 | 31 [28, 33] 🟢 | 6 [6, 6] 🟢 |
-| chatdev | 60 | 222,808 [217,851, 227,782] 🔴 | 77,639 [75,923, 79,482] 🔴 | 125.13 [120.85, 129.23] 🟢 | 24443.73 [22137.60, 26805.33] 🟢 | 1400.7 [1317.2, 1489.4] 🔴 | 281 [263, 298] 🔴 | 6 [6, 6] 🟢 |
-| ghspec | 65 | 45,732 [41,269, 49,972] 🟡 | 23,035 [20,750, 25,213] 🟡 | 51.26 [46.20, 55.98] 🟡 | 693.17 [299.32, 1197.29] 🔴 | 473.7 [420.8, 525.5] 🟡 | 95 [84, 105] 🟡 | 6 [6, 6] 🟢 |
+| baes | 2 | 25,156 [25,156, 25,156] | 6,500 [6,481, 6,518] | 15.00 [15.00, 15.00] | 0.00 [0.00, 0.00] | 167.3 [159.5, 175.1] | 34 [32, 36] | 6 [6, 6] |
 
 
 ## 2. Relative Performance
@@ -704,9 +685,7 @@ Performance normalized to best framework (100% = best performer).
 
 | Framework | Tokens (↓) | Time (↓) | Test Auto (↑) | Efficiency (↑) | Quality (↑) |
 |-----------|---------------|---------------|---------------|---------------|---------------|
-| baes | 100% 🟢 | 100% 🟢 | N/A | N/A | N/A |
-| chatdev | 948% 🔴 | 922% 🔴 | N/A | N/A | N/A |
-| ghspec | 195% 🔴 | 312% 🔴 | N/A | N/A | N/A |
+| baes | N/A | N/A | N/A | N/A | N/A |
 
 
 3. Kruskal-Wallis H-Tests (Reliable Metrics Only)
@@ -721,33 +700,21 @@ Testing for significant differences across all frameworks using **reliably measu
 
 | Metric | H | p-value | Significant | Groups | N |
 |--------|---|---------|-------------|--------|---|
-| TOK_IN | 152.184 | 0.0000 | ✓ Yes | 3 | 200 |
+| TOK_OUT | 0.000 | 1.0000 | ✗ No | 1 | 2 |
 
-💬 *Strong evidence that frameworks differ significantly on TOK_IN. See pairwise comparisons below.*
+💬 *No evidence of differences - frameworks perform similarly on TOK_OUT.*
 
-| TOK_OUT | 158.693 | 0.0000 | ✓ Yes | 3 | 200 |
+| T_WALL_seconds | 0.000 | 1.0000 | ✗ No | 1 | 2 |
 
-💬 *Strong evidence that frameworks differ significantly on TOK_OUT. See pairwise comparisons below.*
+💬 *No evidence of differences - frameworks perform similarly on T_WALL_seconds.*
 
-| API_CALLS | 159.134 | 0.0000 | ✓ Yes | 3 | 200 |
+| ZDI | 0.000 | 1.0000 | ✗ No | 1 | 2 |
 
-💬 *Strong evidence that frameworks differ significantly on API_CALLS. See pairwise comparisons below.*
-
-| CACHED_TOKENS | 120.360 | 0.0000 | ✓ Yes | 3 | 200 |
-
-💬 *Strong evidence that frameworks differ significantly on CACHED_TOKENS. See pairwise comparisons below.*
-
-| T_WALL_seconds | 157.202 | 0.0000 | ✓ Yes | 3 | 200 |
-
-💬 *Strong evidence that frameworks differ significantly on T_WALL_seconds. See pairwise comparisons below.*
-
-| ZDI | 157.302 | 0.0000 | ✓ Yes | 3 | 200 |
-
-💬 *Strong evidence that frameworks differ significantly on ZDI. See pairwise comparisons below.*
+💬 *No evidence of differences - frameworks perform similarly on ZDI.*
 
 
 
-**Metrics Excluded** (zero variance): `UTT`
+**Metrics Excluded** (zero variance): `TOK_IN`, `API_CALLS`, `CACHED_TOKENS`, `UTT`
 
 *Note: These metrics show identical values across all runs (no variance to test).*
 
@@ -759,97 +726,13 @@ Dunn-Šidák corrected pairwise tests with Cliff's delta effect sizes.
 
 *Note: Metrics with zero variance are excluded from pairwise comparisons.*
 
-### TOK_IN
-
-| Comparison | p-value | Significant | Cliff's δ | Effect Size |
-|------------|---------|-------------|-----------|-------------|
-| baes vs chatdev | 0.0000 | ✓ | -1.000 | large |
-| baes vs ghspec | 0.0000 | ✓ | -0.726 | large |
-| chatdev vs ghspec | 0.0000 | ✓ | 1.000 | large |
-
-  *→ baes has large lower TOK_IN than chatdev (δ=-1.000)*
-  *→ baes has large lower TOK_IN than ghspec (δ=-0.726)*
-  *→ chatdev has large higher TOK_IN than ghspec (δ=1.000)*
-
-
-### TOK_OUT
-
-| Comparison | p-value | Significant | Cliff's δ | Effect Size |
-|------------|---------|-------------|-----------|-------------|
-| baes vs chatdev | 0.0000 | ✓ | -1.000 | large |
-| baes vs ghspec | 0.0000 | ✓ | -0.809 | large |
-| chatdev vs ghspec | 0.0000 | ✓ | 1.000 | large |
-
-  *→ baes has large lower TOK_OUT than chatdev (δ=-1.000)*
-  *→ baes has large lower TOK_OUT than ghspec (δ=-0.809)*
-  *→ chatdev has large higher TOK_OUT than ghspec (δ=1.000)*
-
-
-### API_CALLS
-
-| Comparison | p-value | Significant | Cliff's δ | Effect Size |
-|------------|---------|-------------|-----------|-------------|
-| baes vs chatdev | 0.0000 | ✓ | -1.000 | large |
-| baes vs ghspec | 0.0000 | ✓ | -0.814 | large |
-| chatdev vs ghspec | 0.0000 | ✓ | 1.000 | large |
-
-  *→ baes has large lower API_CALLS than chatdev (δ=-1.000)*
-  *→ baes has large lower API_CALLS than ghspec (δ=-0.814)*
-  *→ chatdev has large higher API_CALLS than ghspec (δ=1.000)*
-
-
-### CACHED_TOKENS
-
-| Comparison | p-value | Significant | Cliff's δ | Effect Size |
-|------------|---------|-------------|-----------|-------------|
-| baes vs chatdev | 0.0000 | ✓ | -0.966 | large |
-| baes vs ghspec | 0.0000 | ✓ | 0.015 | negligible |
-| chatdev vs ghspec | 0.0000 | ✓ | 0.995 | large |
-
-  *→ baes has large lower CACHED_TOKENS than chatdev (δ=-0.966)*
-  *→ Statistically significant but practically negligible difference*
-  *→ chatdev has large higher CACHED_TOKENS than ghspec (δ=0.995)*
-
-
-### T_WALL_seconds
-
-| Comparison | p-value | Significant | Cliff's δ | Effect Size |
-|------------|---------|-------------|-----------|-------------|
-| baes vs chatdev | 0.0000 | ✓ | -1.000 | large |
-| baes vs ghspec | 0.0000 | ✓ | -0.796 | large |
-| chatdev vs ghspec | 0.0000 | ✓ | 0.995 | large |
-
-  *→ baes has large lower T_WALL_seconds than chatdev (δ=-1.000)*
-  *→ baes has large lower T_WALL_seconds than ghspec (δ=-0.796)*
-  *→ chatdev has large higher T_WALL_seconds than ghspec (δ=0.995)*
-
-
-### ZDI
-
-| Comparison | p-value | Significant | Cliff's δ | Effect Size |
-|------------|---------|-------------|-----------|-------------|
-| baes vs chatdev | 0.0000 | ✓ | -1.000 | large |
-| baes vs ghspec | 0.0000 | ✓ | -0.797 | large |
-| chatdev vs ghspec | 0.0000 | ✓ | 0.995 | large |
-
-  *→ baes has large lower ZDI than chatdev (δ=-1.000)*
-  *→ baes has large lower ZDI than ghspec (δ=-0.797)*
-  *→ chatdev has large higher ZDI than ghspec (δ=0.995)*
-
-
 5. Outlier Detection (Reliable Metrics Only)
 
 Values > 3.0σ from median (per framework, per metric).
 
 **Analysis Scope**: Only reliably measured metrics checked for outliers.
 
-**baes:**
-  - **CACHED_TOKENS**: 3 outlier(s) at runs [67, 69, 73] with values [20608, 18816, 15360]
-  - **T_WALL_seconds**: 1 outlier(s) at runs [23] with values [412.0262072086334]
-  - **ZDI**: 1 outlier(s) at runs [23] with values [83]
-
-**ghspec:**
-  - **CACHED_TOKENS**: 2 outlier(s) at runs [8, 63] with values [11264, 7168]
+No outliers detected.
 
 
 ## 6. Visual Summary (Reliable Metrics Only)
@@ -894,13 +777,7 @@ All visualizations use **reliably measured metrics only** to ensure accurate fra
 
 - **📊 Analysis Scope**: Recommendations based on **reliably measured metrics only** (tokens, time, API calls, caching). Quality metrics (Q*, ESR, CRUDe, MC) and autonomy metrics (AUTR, AEI) excluded due to measurement limitations. See 'Limitations and Future Work' section for details.
 
-- **💰 Cost Optimization**: Choose **baes** if minimizing LLM token costs is priority. It uses 9.5x fewer tokens than chatdev.
-
-- **⚡ Speed Priority**: Choose **baes** for fastest execution. It completes tasks 9.2x faster than chatdev (saves ~20.8 minutes per task).
-
-- **📡 API Efficiency**: **ghspec** uses fewest API calls, while **chatdev** maximizes tokens per call (better batching). Choose based on latency vs throughput priority.
-
-- **💾 Cost Savings**: **chatdev** achieves 11.0% cache hit rate, reducing costs through OpenAI's prompt caching (~50% discount on cached tokens).
+- **📡 API Efficiency**: **baes** uses fewest API calls, while **baes** maximizes tokens per call (better batching). Choose based on latency vs throughput priority.
 
 ### 📋 Decision Matrix
 
@@ -976,7 +853,7 @@ This report focuses on **reliably measured metrics only** to maintain scientific
 - **Effort**: 12-20 hours
 
 **Priority 4: Experiment Scaling (Statistical Power)**
-- Increase sample size beyond current 200 runs
+- Increase sample size beyond current 2 runs
 - Achieve statistical significance (current p-values > 0.05 for most comparisons)
 - Narrow confidence intervals
 - **Benefit**: Conclusive statistical evidence
