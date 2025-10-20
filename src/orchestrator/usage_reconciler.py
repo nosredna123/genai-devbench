@@ -603,20 +603,31 @@ class UsageReconciler:
                 logger.debug(f"Metrics file not found: {framework_name}/{run_id}")
                 continue
             
-            # Check file age
-            file_mtime = metrics_file.stat().st_mtime
+            # Check run age using start_time from manifest (not file mtime)
+            start_time_str = run_entry.get('start_time')
+            if start_time_str:
+                # Parse ISO timestamp from manifest
+                try:
+                    start_time_dt = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                    start_timestamp = start_time_dt.timestamp()
+                except (ValueError, AttributeError) as e:
+                    logger.warning(f"Could not parse start_time for {framework_name}/{run_id}: {e}")
+                    continue
+            else:
+                logger.warning(f"No start_time in manifest for {framework_name}/{run_id}")
+                continue
             
-            if file_mtime > min_cutoff:
+            if start_timestamp > min_cutoff:
                 logger.debug(
                     f"Run too recent: {framework_name}/{run_id} "
-                    f"({(current_time - file_mtime) / 60:.1f} minutes old)"
+                    f"({(current_time - start_timestamp) / 60:.1f} minutes old)"
                 )
                 continue
             
-            if file_mtime < max_cutoff:
+            if start_timestamp < max_cutoff:
                 logger.debug(
                     f"Run too old: {framework_name}/{run_id} "
-                    f"({(current_time - file_mtime) / 3600:.1f} hours old)"
+                    f"({(current_time - start_timestamp) / 3600:.1f} hours old)"
                 )
                 continue
             
