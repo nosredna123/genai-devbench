@@ -314,7 +314,7 @@ class OrchestratorRunner:
                                      'event': 'step_complete'})
                     
                     # Add a sleep time between steps to avoid overlap usage data
-                    time.sleep(2)
+                    time.sleep(1)
                                      
                 except Exception as e:
                     logger.error("Step failed permanently",
