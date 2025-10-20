@@ -293,6 +293,20 @@ class BAeSAdapter(BaseAdapter):
                 raise ValueError(error_msg)
             
             all_success = True
+            
+            logger.info(
+                f"Executing {len(requests_list)} BAEs request(s) for step {step_num}",
+                extra={
+                    'run_id': self.run_id,
+                    'step': step_num,
+                    'event': 'step_requests_start',
+                    'metadata': {
+                        'request_count': len(requests_list),
+                        'requests_preview': requests_list[:3]  # First 3 for debugging
+                    }
+                }
+            )
+            
             for idx, request in enumerate(requests_list):
                 logger.info(f"Executing BAEs request {idx+1}/{len(requests_list)}: {request}",
                            extra={'run_id': self.run_id, 'step': step_num})
@@ -325,6 +339,23 @@ class BAeSAdapter(BaseAdapter):
                 end_timestamp=end_timestamp,
                 model=None  # Don't filter by model - time window is sufficient
             )
+            
+            # Log warning if step completed but has no API calls (may indicate an issue)
+            if all_success and api_calls == 0:
+                logger.warning(
+                    f"⚠️ Step {step_num} completed successfully but recorded 0 API calls!",
+                    extra={
+                        'run_id': self.run_id,
+                        'step': step_num,
+                        'event': 'zero_api_calls',
+                        'metadata': {
+                            'duration': duration,
+                            'request_count': len(requests_list),
+                            'requests': requests_list,
+                            'note': 'BAeS framework may not have called OpenAI API, or calls happened outside time window'
+                        }
+                    }
+                )
             
             logger.info("BAEs step completed",
                        extra={'run_id': self.run_id, 'step': step_num, 'event': 'step_complete',
