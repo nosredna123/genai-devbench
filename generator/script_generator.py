@@ -980,7 +980,7 @@ except Exception as e:
     sys.exit(1)
 EOF
             
-        else:
+        else
             # Reconcile all pending
             echo "Reconciling all pending runs..."
             echo ""
