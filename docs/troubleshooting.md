@@ -682,7 +682,7 @@ pip install -r requirements.txt
 If issues persist:
 
 1. **Check Logs**: `runs/<framework>/<run-id>/event_log.jsonl`
-2. **Search Issues**: [GitHub Issues](https://github.com/gesad-lab/baes_experiment/issues)
+2. **Search Issues**: [GitHub Issues](https://github.com/gesad-lab/genai-devbench/issues)
 3. **Open New Issue**: Include logs, config, and error messages
 4. **Community**: Discussions tab for questions
 
@@ -941,7 +941,7 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 
 3. Run from project root:
 ```bash
-cd /path/to/baes_experiment
+cd /path/to/genai-devbench
 pytest tests/unit/test_report_generation.py -v
 ```
 

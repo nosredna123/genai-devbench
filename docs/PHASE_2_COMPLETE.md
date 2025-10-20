@@ -192,7 +192,7 @@ manifest = get_manifest("baseline")  # Required parameter
 ## Directory Structure After Phase 2
 
 ```
-baes_experiment/
+genai-devbench/
 ├── experiments/
 │   └── test_exp/                    # Experiment directory
 │       ├── config.yaml              # Experiment config

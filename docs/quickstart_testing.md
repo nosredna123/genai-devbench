@@ -8,7 +8,7 @@
 # 1. Activate environment and load .env
 source .venv/bin/activate
 set -a && source .env && set +a
-export PYTHONPATH=/home/amg/projects/uece/baes/baes_experiment
+export PYTHONPATH=/home/amg/projects/uece/baes/genai-devbench
 
 # 2. Run unit tests first (0.36 seconds)
 pytest tests/unit/ -v

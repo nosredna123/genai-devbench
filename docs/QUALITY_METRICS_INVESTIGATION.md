@@ -85,7 +85,7 @@ metrics = self.metrics_collector.get_aggregate_metrics(
 
 ### 2. Log Evidence
 
-**Log File**: `/home/amg/projects/uece/baes/baes_experiment/logs/experiment_run_20251009_143107.log`
+**Log File**: `/home/amg/projects/uece/baes/genai-devbench/logs/experiment_run_20251009_143107.log`
 
 **Connection Failures** (run_id: `66768e5b-597d-4294-9617-0f9e7d903dfd`):
 ```json

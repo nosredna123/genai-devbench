@@ -368,5 +368,5 @@ The implementation successfully extends the BAEs experiment framework with **API
 
 **Implementation by**: GitHub Copilot AI Assistant  
 **Date**: October 16, 2025  
-**Repository**: gesad-lab/baes_experiment  
+**Repository**: gesad-lab/genai-devbench  
 **Branch**: main  

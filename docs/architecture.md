@@ -417,7 +417,7 @@ usage = client.verify_token_usage(run_id)
 ## Directory Structure
 
 ```
-baes_experiment/
+genai-devbench/
 ├── config/                      # Configuration files
 │   ├── experiment.yaml          # Main config (frameworks, timeouts, seeds)
 │   ├── prompts/                 # CRUD evolution prompts (6 steps)

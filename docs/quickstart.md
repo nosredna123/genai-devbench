@@ -28,8 +28,8 @@ You'll need API keys for the frameworks you want to test:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/gesad-lab/baes_experiment.git
-cd baes_experiment
+git clone https://github.com/gesad-lab/genai-devbench.git
+cd genai-devbench
 ```
 
 ### 2. Create Virtual Environment (Recommended)
@@ -257,6 +257,6 @@ rm -rf runs/*/  # WARNING: Deletes all run data
 
 For additional help:
 
-- **Issues**: [GitHub Issues](https://github.com/gesad-lab/baes_experiment/issues)
+- **Issues**: [GitHub Issues](https://github.com/gesad-lab/genai-devbench/issues)
 - **Documentation**: Browse the `docs/` directory
 - **Logs**: Check `event_log.jsonl` for detailed execution traces

@@ -83,7 +83,7 @@ fi
 ## Directory Structure After Phase 3
 
 ```
-baes_experiment/
+genai-devbench/
 ├── experiments/
 │   └── baseline/                    # Experiment directory
 │       ├── config.yaml              # Experiment config

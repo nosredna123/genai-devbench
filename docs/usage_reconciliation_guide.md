@@ -111,7 +111,7 @@ Add to your crontab:
 
 ```cron
 # Reconcile every hour
-0 * * * * cd /path/to/baes_experiment && ./runners/reconcile_usage.sh >> logs/reconciliation.log 2>&1
+0 * * * * cd /path/to/genai-devbench && ./runners/reconcile_usage.sh >> logs/reconciliation.log 2>&1
 ```
 
 ### GitHub Actions (Optional)
@@ -298,7 +298,7 @@ pip install -r requirements.txt
 
 ```cron
 # Reconcile every hour (recommended)
-0 * * * * cd /path/to/baes_experiment && ./runners/reconcile_usage.sh
+0 * * * * cd /path/to/genai-devbench && ./runners/reconcile_usage.sh
 ```
 
 ## Architecture

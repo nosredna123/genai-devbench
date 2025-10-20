@@ -279,7 +279,7 @@ EOF
 
 ```cron
 # Update token usage every hour
-0 * * * * cd /path/to/baes_experiment && ./runners/reconcile_usage.sh >> logs/reconciliation.log 2>&1
+0 * * * * cd /path/to/genai-devbench && ./runners/reconcile_usage.sh >> logs/reconciliation.log 2>&1
 ```
 
 #### Pros

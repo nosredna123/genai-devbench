@@ -1,6 +1,6 @@
-# BAEs Experiment Framework
+# GenAI-DevBench
 
-**Automated experiment orchestrator for comparing LLM-driven software generation systems**
+**Rigorous benchmarking for GenAI-powered software development**
 
 This framework executes reproducible experiments to compare three LLM-driven frameworks (BAEs, ChatDev, GitHub Spec-kit) across a six-step academic CRUD evolution scenario. It provides deterministic orchestration, reproducible metrics collection, and automated statistical analysis.
 
@@ -28,8 +28,8 @@ This framework executes reproducible experiments to compare three LLM-driven fra
 
 ```bash
 # Clone repository
-git clone https://github.com/gesad-lab/baes_experiment.git
-cd baes_experiment
+git clone https://github.com/nosredna123/genai-devbench.git
+cd genai-devbench
 
 # Create virtual environment (recommended)
 python3 -m venv venv
@@ -160,7 +160,7 @@ cat runs/baes/<run-id>/metrics.json
 ## Architecture
 
 ```
-baes_experiment/
+genai-devbench/
 ├── experiments/                 # 🆕 Multi-experiment storage (isolated)
 │   ├── <experiment_name>/       # Individual experiment directory
 │   │   ├── config.yaml          # Experiment configuration (immutable)
@@ -292,11 +292,11 @@ This project is licensed under CC BY 4.0 - see [LICENSE](LICENSE) file for detai
 If you use this framework in your research, please cite:
 
 ```bibtex
-@software{baes_experiment_2025,
-  title={BAEs Experiment Framework},
+@software{genai-devbench_2025,
+  title={GenAI-DevBench},
   author={GESAD Lab},
   year={2025},
-  url={https://github.com/gesad-lab/baes_experiment}
+  url={https://github.com/nosredna123/genai-devbench}
 }
 ```
 

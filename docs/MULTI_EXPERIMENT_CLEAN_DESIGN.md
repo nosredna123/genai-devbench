@@ -22,7 +22,7 @@ No legacy modes, no fallbacks, no complexity. Every experiment is:
 
 ### Project Root
 ```
-baes_experiment/
+genai-devbench/
 ├── experiments/                      # ALL experiments live here
 │   ├── baseline_gpt4o_mini/
 │   ├── baes_deep_dive_gpt5/

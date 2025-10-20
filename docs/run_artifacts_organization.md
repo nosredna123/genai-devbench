@@ -130,7 +130,7 @@ def execute_step(self, step_num, prompt, previous_output):
 ## Directory Structure After Implementation
 
 ```
-baes_experiment/
+genai-devbench/
 ├── runs/
 │   ├── chatdev/
 │   │   ├── run_20251009_142201/
