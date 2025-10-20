@@ -125,5 +125,6 @@
     "discrepancy_pct_in": 0,
     "discrepancy_pct_out": 0,
     "error": null
-  }
+  },
+  "verification_status": "pending"
 }
