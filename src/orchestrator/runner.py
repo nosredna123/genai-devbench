@@ -1,7 +1,7 @@
 """
 Orchestrator runner for managing single and multi-framework executions.
 
-Handles timeouts, retries, and full run lifecycle.
+Handles timeouts, retries, and full run lifecycle with per-run, per-step logging.
 """
 
 import signal
@@ -13,7 +13,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import subprocess
-from src.utils.logger import get_logger
+from src.utils.logger import get_logger, LogContext
+from src.utils.log_summary import LogSummarizer
 from src.utils.isolation import create_isolated_workspace, cleanup_workspace
 from src.utils.api_client import OpenAIAPIClient
 from src.orchestrator.config_loader import load_config, set_deterministic_seeds
@@ -25,7 +26,7 @@ from src.adapters.chatdev_adapter import ChatDevAdapter
 from src.adapters.ghspec_adapter import GHSpecAdapter
 from src.analysis.stopping_rule import check_convergence, get_convergence_summary
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="orchestrator")
 
 # Constants
 STEP_TIMEOUT = 600  # 10 minutes per step
@@ -237,8 +238,20 @@ class OrchestratorRunner:
             run_dir, workspace_dir = create_isolated_workspace(self.framework_name, self.run_id)
             self.workspace_path = str(workspace_dir)
             
+            # Initialize logging context for per-run, per-step logging
+            logs_dir = run_dir / "logs"
+            log_context = LogContext.get_instance()
+            log_context.set_run_context(
+                run_id=self.run_id,
+                framework=self.framework_name,
+                logs_dir=logs_dir
+            )
+            
             # Initialize HITL event log (T039)
             self.hitl_log_path = run_dir / "hitl_events.jsonl"
+            
+            # Track run start time for summary
+            run_start_time = datetime.utcnow()
             
             logger.info("Starting framework run",
                        extra={'run_id': self.run_id, 'framework': self.framework_name,
@@ -281,17 +294,30 @@ class OrchestratorRunner:
             self.metrics_collector.start_run()
             self.validator.start_downtime_monitoring()
             
+            # Track step summaries for log summary
+            step_summaries = []
+            errors_and_warnings = []
+            
             # Execute 6 steps sequentially
             # TODO: #3 The number of steps must be loaded from config
             for step_num in range(1, 7):
+                # Set logging context for this step
+                log_context.set_step_context(step_num)
+                
                 # Load step prompt
                 prompt_path = Path(f"config/prompts/step_{step_num}.txt")
                 with open(prompt_path, 'r', encoding='utf-8') as f:
                     command_text = f.read().strip()
                     
+                step_start_time = datetime.utcnow()
+                step_status = "success"
+                step_error = None
+                retries = 0
+                
                 try:
                     # Execute step with timeout and retry
                     result = self._execute_step_with_retry(step_num, command_text)
+                    retries = result.get('retry_count', 0)
                     
                     # Record metrics
                     self.metrics_collector.record_step(
@@ -299,7 +325,7 @@ class OrchestratorRunner:
                         command=command_text,
                         duration_seconds=result.get('duration_seconds', 0),
                         success=result.get('success', True),
-                        retry_count=result.get('retry_count', 0),
+                        retry_count=retries,
                         hitl_count=result.get('hitl_count', 0),
                         tokens_in=result.get('tokens_in', 0),
                         tokens_out=result.get('tokens_out', 0),
@@ -316,11 +342,61 @@ class OrchestratorRunner:
                     # Add a sleep time between steps to avoid overlap usage data
                     time.sleep(1)
                                      
+                except StepTimeoutError as e:
+                    step_status = "timeout"
+                    step_error = str(e)
+                    errors_and_warnings.append({
+                        'timestamp': datetime.utcnow().isoformat() + 'Z',
+                        'level': 'TIMEOUT',
+                        'message': f"Step {step_num}: {step_error}"
+                    })
+                    logger.error("Step timed out",
+                               extra={'run_id': self.run_id, 'step': step_num,
+                                     'metadata': {'error': step_error}})
+                    raise
                 except Exception as e:
+                    step_status = "error"
+                    step_error = str(e)
+                    errors_and_warnings.append({
+                        'timestamp': datetime.utcnow().isoformat() + 'Z',
+                        'level': 'ERROR',
+                        'message': f"Step {step_num}: {step_error}"
+                    })
                     logger.error("Step failed permanently",
                                extra={'run_id': self.run_id, 'step': step_num,
-                                     'metadata': {'error': str(e)}})
+                                     'metadata': {'error': step_error}})
                     raise
+                finally:
+                    # Calculate step duration
+                    step_end_time = datetime.utcnow()
+                    step_duration = (step_end_time - step_start_time).total_seconds()
+                    
+                    # Build step summary
+                    step_summary = {
+                        'step_num': step_num,
+                        'status': step_status,
+                        'duration_seconds': step_duration,
+                        'retries': retries,
+                        'api_calls': result.get('api_calls', 0) if 'result' in locals() else 0,
+                        'tokens': {
+                            'prompt': result.get('tokens_in', 0) if 'result' in locals() else 0,
+                            'completion': result.get('tokens_out', 0) if 'result' in locals() else 0,
+                            'total': (result.get('tokens_in', 0) + result.get('tokens_out', 0)) if 'result' in locals() else 0
+                        },
+                        'llm_requests': result.get('api_calls', 0) if 'result' in locals() else 0,
+                    }
+                    
+                    if step_error:
+                        step_summary['error'] = step_error
+                    
+                    # Add note for zero-token steps (template-based)
+                    if step_summary['tokens']['total'] == 0 and step_status == "success":
+                        step_summary['note'] = "Template-based generation (no LLM calls)"
+                    
+                    step_summaries.append(step_summary)
+                    
+                    # Clear step context
+                    log_context.clear_step_context()
                     
             # End metrics collection
             self.metrics_collector.end_run()
@@ -356,7 +432,6 @@ class OrchestratorRunner:
             
             # Save metrics
             metrics_file = Path(run_dir) / "metrics.json"
-            import json
             with open(metrics_file, 'w', encoding='utf-8') as f:
                 json.dump(metrics, f, indent=2)
             
@@ -374,24 +449,76 @@ class OrchestratorRunner:
             update_manifest(run_data)
             logger.info("Updated runs manifest",
                        extra={'run_id': self.run_id, 'event': 'manifest_updated'})
+            
+            # Load HITL events if they exist
+            hitl_events = []
+            if self.hitl_log_path and self.hitl_log_path.exists():
+                with open(self.hitl_log_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        try:
+                            hitl_events.append(json.loads(line.strip()))
+                        except json.JSONDecodeError:
+                            pass
+            
+            # Track run end time for summary
+            run_end_time = datetime.utcnow()
                 
-            # Create archive
+            # Create archive (including logs directory)
             logs_dir = Path(run_dir) / "logs"
             self.archiver.save_commit_info(framework_config['commit_hash'])
             archive_path = self.archiver.create_archive(
                 workspace_dir=workspace_dir,
                 metrics_file=metrics_file,
-                logs={} if not logs_dir.exists() else {}
+                logs={'logs': logs_dir} if logs_dir.exists() else {}
             )
             
             # Compute and save archive hash
             archive_hash = self.archiver.compute_hash(archive_path)
+            archive_size = archive_path.stat().st_size if archive_path.exists() else 0
+            
             self.archiver.create_metadata(
                 archive_path=archive_path,
                 archive_hash=archive_hash,
                 framework=self.framework_name,
                 commit_hash=framework_config['commit_hash']
             )
+            
+            # Generate log summary for git tracking
+            summarizer = LogSummarizer(
+                run_id=self.run_id,
+                framework=self.framework_name,
+                run_dir=run_dir
+            )
+            
+            summary_config = {
+                'model': self.config.get('model'),
+                'step_timeout': STEP_TIMEOUT,
+                'max_retries': MAX_RETRIES,
+                'random_seed': self.config.get('random_seed')
+            }
+            
+            archive_info = {
+                'filename': archive_path.name,
+                'hash': archive_hash,
+                'size': archive_size,
+                'contents': 'workspace/ + logs/ + metrics.json + artifacts/'
+            }
+            
+            summary_text = summarizer.generate_summary(
+                config=summary_config,
+                start_time=run_start_time,
+                end_time=run_end_time,
+                steps=step_summaries,
+                reconciliation=None,  # Will be filled by reconciliation script
+                errors=errors_and_warnings,
+                hitl_events=hitl_events,
+                archive_info=archive_info
+            )
+            
+            summary_path = summarizer.write_summary(summary_text)
+            logger.info("Generated log summary",
+                       extra={'run_id': self.run_id, 'event': 'summary_generated',
+                             'metadata': {'path': str(summary_path)}})
             
             # Verify archive
             self.archiver.verify_archive(archive_path, archive_hash)

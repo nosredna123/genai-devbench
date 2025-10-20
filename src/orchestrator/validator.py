@@ -10,7 +10,7 @@ import threading
 from typing import Dict, List, Tuple, Optional
 from src.utils.logger import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="validator")
 
 
 class Validator:

@@ -10,13 +10,14 @@
 !runs/*/*/*.json
 !runs/*/*/commit.txt
 !runs/*/*/*.md
+!runs/*/*/logs_summary.txt
 
 # Ignore large artifacts in runs
 runs/*/*/workspace/
 runs/*/*/artifacts/
+runs/*/*/logs/
 runs/*/*/*.tar.gz
 runs/*/*/*.zip
-runs/*/*/*.log
 
 # Logs and environment
 logs/

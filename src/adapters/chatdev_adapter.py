@@ -31,7 +31,7 @@ import requests
 from src.adapters.base_adapter import BaseAdapter
 from src.utils.logger import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="adapter")
 
 
 class ChatDevAdapter(BaseAdapter):

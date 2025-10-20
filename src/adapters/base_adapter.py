@@ -13,7 +13,7 @@ from typing import Any, Dict, Tuple, Optional
 from datetime import datetime, timezone
 from src.utils.logger import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="adapter")
 
 
 class BaseAdapter(ABC):

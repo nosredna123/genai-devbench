@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict
 from src.utils.logger import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="orchestrator")
 
 
 class ConfigValidationError(Exception):

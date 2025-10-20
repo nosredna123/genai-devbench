@@ -19,7 +19,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from src.utils.logger import get_logger
 from src.orchestrator.manifest_manager import find_runs
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="reconciliation")
 
 # Default minimum interval between verification attempts (in minutes)
 # Set to 0 for testing/development, increase to 60 for production

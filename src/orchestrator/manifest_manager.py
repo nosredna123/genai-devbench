@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from src.utils.logger import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, component="orchestrator")
 
 MANIFEST_VERSION = "1.0"
 MANIFEST_PATH = Path("runs/runs_manifest.json")

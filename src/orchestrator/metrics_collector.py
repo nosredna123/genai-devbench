@@ -10,6 +10,9 @@ from typing import Any, Dict, Optional
 import math
 from src.utils.cost_calculator import CostCalculator
 from src.utils.metrics_config import get_metrics_config
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__, component="metrics")
 
 
 class MetricsCollector:
