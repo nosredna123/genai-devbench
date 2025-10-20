@@ -25,6 +25,10 @@ logger = get_logger(__name__)
 # Set to 0 for testing/development, increase to 60 for production
 DEFAULT_VERIFICATION_INTERVAL_MIN = int(os.getenv('RECONCILIATION_VERIFICATION_INTERVAL_MIN', '0'))
 
+# Minimum number of consecutive stable verifications required
+# Default: 2 (double-check verification)
+DEFAULT_MIN_STABLE_VERIFICATIONS = int(os.getenv('RECONCILIATION_MIN_STABLE_VERIFICATIONS', '2'))
+
 
 class UsageReconciler:
     """
@@ -388,6 +392,58 @@ class UsageReconciler:
         
         return attempt
     
+    def _count_stable_verifications(
+        self,
+        attempts: List[Dict[str, Any]],
+        current_attempt: Dict[str, Any]
+    ) -> int:
+        """
+        Count consecutive stable verifications.
+        
+        A verification is "stable" if:
+        1. Token counts are identical to previous attempt
+        2. Time gap >= VERIFICATION_INTERVAL_MIN between attempts
+        
+        Args:
+            attempts: List of previous reconciliation attempts
+            current_attempt: Current reconciliation attempt
+            
+        Returns:
+            Number of consecutive stable verifications (0 if none)
+        """
+        if len(attempts) == 0:
+            return 0  # First attempt, no stability yet
+        
+        stable_count = 0
+        prev = current_attempt
+        
+        # Walk backwards through attempts, counting consecutive stable checks
+        for attempt in reversed(attempts):
+            # Check time gap
+            try:
+                current_time = datetime.fromisoformat(prev['timestamp'])
+                prev_time = datetime.fromisoformat(attempt['timestamp'])
+                time_diff_minutes = (current_time - prev_time).total_seconds() / 60
+            except (KeyError, ValueError):
+                break  # Invalid timestamp, stop counting
+            
+            if time_diff_minutes < DEFAULT_VERIFICATION_INTERVAL_MIN:
+                break  # Gap too small, stop counting
+            
+            # Check if token counts are identical
+            prev_in = prev.get('total_tokens_in', 0)
+            prev_out = prev.get('total_tokens_out', 0)
+            attempt_in = attempt.get('total_tokens_in', 0)
+            attempt_out = attempt.get('total_tokens_out', 0)
+            
+            if prev_in == attempt_in and prev_out == attempt_out:
+                stable_count += 1
+                prev = attempt
+            else:
+                break  # Not identical, stop counting
+        
+        return stable_count
+    
     def _check_verification_status(
         self,
         metrics: Dict[str, Any],
@@ -396,14 +452,15 @@ class UsageReconciler:
         run_id: str
     ) -> Dict[str, str]:
         """
-        Check if reconciliation can be verified based on double-check criteria.
+        Check if reconciliation can be verified based on N-check stability criteria.
         
         Verification requires:
-        1. At least 2 attempts
-        2. Time gap >= VERIFICATION_INTERVAL_MIN between last two attempts
-        3. Identical token counts in last two attempts
+        1. N consecutive stable verifications (configurable via RECONCILIATION_MIN_STABLE_VERIFICATIONS)
+        2. Time gap >= VERIFICATION_INTERVAL_MIN between each verification
+        3. Identical token counts across all N verifications
         
-        Also detects anomalies (decreasing token counts).
+        Also detects anomalies (decreasing token counts) and accepts partial token coverage
+        (some steps may not use LLM, which is normal for efficient frameworks like BAeS).
         
         Returns:
             Dict with 'status' and 'message' keys
@@ -411,9 +468,14 @@ class UsageReconciler:
         reconciliation = metrics.get('usage_api_reconciliation', {})
         attempts = reconciliation.get('attempts', [])
         
+        current_in = current_attempt['total_tokens_in']
+        current_out = current_attempt['total_tokens_out']
+        steps_with_tokens = current_attempt.get('steps_with_tokens', 0)
+        total_steps = current_attempt.get('total_steps', 0)
+        
         # No previous attempts - this is the first
         if len(attempts) == 0:
-            if current_attempt['total_tokens_in'] == 0 and current_attempt['total_tokens_out'] == 0:
+            if current_in == 0 and current_out == 0:
                 return {
                     'status': 'data_not_available',
                     'message': 'No token data available from Usage API yet (first attempt)'
@@ -423,16 +485,8 @@ class UsageReconciler:
                 'message': 'First reconciliation attempt successful, awaiting verification'
             }
         
-        # Get previous attempt
+        # Get previous attempt for comparison
         previous_attempt = attempts[-1]
-        
-        # Parse timestamps
-        current_time = datetime.fromisoformat(current_attempt['timestamp'])
-        previous_time = datetime.fromisoformat(previous_attempt['timestamp'])
-        time_diff_minutes = (current_time - previous_time).total_seconds() / 60
-        
-        current_in = current_attempt['total_tokens_in']
-        current_out = current_attempt['total_tokens_out']
         previous_in = previous_attempt['total_tokens_in']
         previous_out = previous_attempt['total_tokens_out']
         
@@ -452,44 +506,44 @@ class UsageReconciler:
                 'message': f'⚠️ Token count DECREASED (in: -{decrease_in}, out: -{decrease_out}) - possible API issue!'
             }
         
-        # Check if data is identical
+        # Check if data is still changing
         data_identical = (current_in == previous_in and current_out == previous_out)
         
-        # Check if all steps that should have tokens actually have them
-        steps_with_tokens = current_attempt.get('steps_with_tokens', 0)
-        total_steps = current_attempt.get('total_steps', 0)
-        all_steps_have_tokens = (steps_with_tokens == total_steps)
-        
-        if data_identical:
-            # Check time gap
-            if time_diff_minutes >= DEFAULT_VERIFICATION_INTERVAL_MIN:
-                # Check if all steps have tokens before marking as verified
-                if not all_steps_have_tokens:
-                    return {
-                        'status': 'warning',
-                        'message': f'⚠️ Data stable but incomplete: only {steps_with_tokens}/{total_steps} steps have tokens. Some steps may have failed or not called the API.'
-                    }
-                # ✅ VERIFIED!
-                return {
-                    'status': 'verified',
-                    'message': f'✅ Data stable across {time_diff_minutes:.0f} minute interval ({current_in:,} in, {current_out:,} out) - all {total_steps} steps verified'
-                }
-            else:
-                # Data matches but too soon
-                wait_more = DEFAULT_VERIFICATION_INTERVAL_MIN - time_diff_minutes
-                incomplete_note = f" (⚠️ only {steps_with_tokens}/{total_steps} steps have tokens)" if not all_steps_have_tokens else ""
-                return {
-                    'status': 'pending',
-                    'message': f'Data matches but interval too short ({time_diff_minutes:.0f}m < {DEFAULT_VERIFICATION_INTERVAL_MIN}m), wait {wait_more:.0f}m more{incomplete_note}'
-                }
-        else:
-            # Data still changing (normal - API data arriving)
-            increase_in = current_in - previous_in
-            increase_out = current_out - previous_out
-            incomplete_note = f" (currently {steps_with_tokens}/{total_steps} steps have tokens)" if not all_steps_have_tokens else ""
+        if not data_identical:
+            # Data still arriving - normal during propagation delay
             return {
                 'status': 'pending',
-                'message': f'Data still arriving (+{increase_in:,} in, +{increase_out:,} out tokens since last attempt){incomplete_note}'
+                'message': f'⏳ Data still arriving: {previous_in:,} → {current_in:,} tokens_in (attempt {len(attempts) + 1})'
+            }
+        
+        # Data is stable - count consecutive stable verifications
+        stable_count = self._count_stable_verifications(attempts, current_attempt)
+        
+        # Check if we have enough stable verifications
+        if stable_count >= DEFAULT_MIN_STABLE_VERIFICATIONS:
+            # Calculate token coverage rate
+            coverage_rate = steps_with_tokens / total_steps if total_steps > 0 else 0
+            
+            # ✅ VERIFIED - data is stable after N checks
+            if coverage_rate == 1.0:
+                # Perfect: all steps used LLM
+                return {
+                    'status': 'verified',
+                    'message': f'✅ Verified after {stable_count} stable checks: {current_in:,} in, {current_out:,} out (all {total_steps} steps used LLM)'
+                }
+            else:
+                # Partial: some steps didn't use LLM (acceptable for efficient frameworks)
+                return {
+                    'status': 'verified',
+                    'message': f'✅ Verified after {stable_count} stable checks: {current_in:,} in, {current_out:,} out ({steps_with_tokens}/{total_steps} steps used LLM, {coverage_rate:.0%} coverage)'
+                }
+        else:
+            # Need more stable verifications
+            need_more = DEFAULT_MIN_STABLE_VERIFICATIONS - stable_count
+            coverage_note = f" ({steps_with_tokens}/{total_steps} steps with tokens)" if steps_with_tokens < total_steps else ""
+            return {
+                'status': 'pending',
+                'message': f'⏳ Awaiting verification: {stable_count}/{DEFAULT_MIN_STABLE_VERIFICATIONS} stable checks completed{coverage_note}'
             }
     
     def reconcile_all_pending(
