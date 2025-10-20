@@ -343,33 +343,16 @@ class OrchestratorRunner:
                 zdi=zdi
             )
             
-            # Verify token counts with OpenAI API (T026)
-            api_key_env = framework_config.get('api_key_env')
-            if api_key_env and os.getenv(api_key_env):
-                logger.info("Verifying token counts with OpenAI API",
-                           extra={'run_id': self.run_id, 'event': 'usage_api_verification'})
-                try:
-                    api_client = OpenAIAPIClient(os.getenv(api_key_env))
-                    usage_verification = api_client.verify_token_counts(
-                        run_id=self.run_id,
-                        local_tokens_in=metrics['aggregate_metrics'].get('TOK_IN', 0),
-                        local_tokens_out=metrics['aggregate_metrics'].get('TOK_OUT', 0)
-                    )
-                    metrics['usage_api_verification'] = usage_verification
-                    
-                    if not usage_verification['verified']:
-                        logger.warning("Token count verification failed",
-                                     extra={'run_id': self.run_id,
-                                           'metadata': {'error': usage_verification.get('error')}})
-                except Exception as e:
-                    logger.error("Usage API verification error",
-                               extra={'run_id': self.run_id,
-                                     'metadata': {'error': str(e)}})
-                    metrics['usage_api_verification'] = {'verified': False, 'error': str(e)}
-            else:
-                logger.info("Skipping usage API verification (no API key)",
-                           extra={'run_id': self.run_id})
-                metrics['usage_api_verification'] = {'verified': False, 'error': 'No API key configured'}
+            # LAZY EVALUATION: Skip Usage API verification during execution
+            # Token metrics are 0 initially and will be backfilled by reconciliation script
+            # Set verification_status to 'pending' to indicate reconciliation is needed
+            logger.info("Skipping Usage API verification (lazy evaluation - reconciliation required)",
+                       extra={'run_id': self.run_id, 'event': 'lazy_evaluation'})
+            metrics['usage_api_verification'] = {
+                'verified': False, 
+                'error': 'Lazy evaluation - metrics will be backfilled by reconciliation script'
+            }
+            metrics['verification_status'] = 'pending'
             
             # Save metrics
             metrics_file = Path(run_dir) / "metrics.json"
@@ -385,8 +368,8 @@ class OrchestratorRunner:
                 'start_time': metrics.get('start_timestamp'),
                 'end_time': metrics.get('end_timestamp'),
                 'verification_status': metrics.get('verification_status', 'pending'),
-                'total_tokens_in': metrics.get('total_tokens_in', 0),
-                'total_tokens_out': metrics.get('total_tokens_out', 0)
+                'total_tokens_in': metrics['aggregate_metrics'].get('TOK_IN', 0),
+                'total_tokens_out': metrics['aggregate_metrics'].get('TOK_OUT', 0)
             }
             update_manifest(run_data)
             logger.info("Updated runs manifest",

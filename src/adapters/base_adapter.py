@@ -42,167 +42,52 @@ class BaseAdapter(ABC):
         model: Optional[str] = None
     ) -> Tuple[int, int, int, int]:
         """
-        Fetch token usage, API calls, and cache metrics from OpenAI Usage API.
+        Lazy evaluation stub for token usage collection.
         
-        This is a general, DRY method that works for ALL frameworks (ChatDev, GHSpec, BAEs)
-        by querying OpenAI's Usage API directly instead of parsing framework-specific logs.
+        LAZY EVALUATION PATTERN:
+        This method intentionally returns (0, 0, 0, 0) during step execution.
+        Token metrics are collected later by the reconciliation script, which:
+        1. Waits for OpenAI Usage API propagation delay (5-15 minutes)
+        2. Queries usage data for the entire run window
+        3. Attributes tokens to individual steps based on timestamps
+        4. Updates metrics.json with verified counts
+        
+        This approach:
+        - Avoids silent failures from API propagation delays
+        - Centralizes data collection in one place (DRY principle)
+        - Ensures all metrics go through the same verification process
+        - Prevents blocking step execution on Usage API availability
         
         Args:
-            api_key_env_var: Environment variable name containing the OpenAI API key
-            start_timestamp: Unix timestamp (seconds) when step execution started
-            end_timestamp: Unix timestamp (seconds) when step execution ended (defaults to now)
-            model: Optional model filter (e.g., "gpt-4o-mini", "gpt-5-mini")
+            api_key_env_var: Environment variable name containing the OpenAI API key (unused)
+            start_timestamp: Unix timestamp (seconds) when step execution started (unused)
+            end_timestamp: Unix timestamp (seconds) when step execution ended (unused)
+            model: Optional model filter (unused)
             
         Returns:
-            Tuple of (tokens_in, tokens_out, api_calls, cached_tokens)
+            Tuple of (0, 0, 0, 0) - indicating metrics need reconciliation
             
         Note:
-            - Uses organization/usage/completions endpoint
-            - Aggregates all API calls within the time window
-            - Returns (0, 0, 0, 0) if API call fails or no usage found
+            All adapters (BAeS, ChatDev, GHSpec) use this method for consistency.
+            The reconciliation script (scripts/reconcile_usage.sh) backfills actual data.
         """
-        try:
-            import requests
-            
-            # Get API key from environment
-            api_key = os.getenv(api_key_env_var)
-            if not api_key:
-                logger.warning(
-                    f"API key not found in environment variable: {api_key_env_var}",
-                    extra={'run_id': self.run_id}
-                )
-                return 0, 0, 0, 0
-            
-            # Use current time if end_timestamp not provided
-            if end_timestamp is None:
-                end_timestamp = int(time.time())
-            
-            # Build API request
-            url = "https://api.openai.com/v1/organization/usage/completions"
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
+        # LAZY EVALUATION: Return zeros immediately
+        # Token metrics will be collected by reconciliation script after Usage API propagation
+        logger.debug(
+            "Lazy evaluation: returning zero metrics (reconciliation required)",
+            extra={
+                'run_id': self.run_id,
+                'step': self.current_step,
+                'metadata': {
+                    'start_timestamp': start_timestamp,
+                    'end_timestamp': end_timestamp or int(time.time()),
+                    'window_seconds': (end_timestamp or int(time.time())) - start_timestamp,
+                    'note': 'Metrics will be backfilled by reconciliation script'
+                }
             }
-            params = {
-                "start_time": str(int(start_timestamp)),  # Convert to string
-                "end_time": str(int(end_timestamp)),      # Convert to string
-                "bucket_width": "1d",  # Use daily bucket
-                "limit": "31"  # Convert to string - requests library expects strings
-            }
-            
-            # Add model filter if specified
-            if model:
-                params["models"] = [model]
-            
-            logger.debug(
-                "Querying OpenAI Usage API",
-                extra={
-                    'run_id': self.run_id,
-                    'metadata': {
-                        'start_time': start_timestamp,
-                        'end_time': end_timestamp,
-                        'start_dt': datetime.fromtimestamp(start_timestamp, tz=timezone.utc).isoformat(),
-                        'end_dt': datetime.fromtimestamp(end_timestamp, tz=timezone.utc).isoformat(),
-                        'model': model
-                    }
-                }
-            )
-            
-            # Make API request
-            response = requests.get(url, headers=headers, params=params, timeout=30)
-            
-            # Check for permission errors before raising
-            if response.status_code == 401:
-                error_data = response.json()
-                if "api.usage.read" in error_data.get("error", {}).get("message", ""):
-                    logger.error(
-                        "API key lacks 'api.usage.read' scope for Usage API",
-                        extra={
-                            'run_id': self.run_id,
-                            'metadata': {
-                                'api_key_env_var': api_key_env_var,
-                                'error': error_data.get("error", {}).get("message", ""),
-                                'fix': 'Grant api.usage.read scope to the API key in OpenAI dashboard'
-                            }
-                        }
-                    )
-                    return 0, 0, 0, 0  # Return zeros instead of failing
-            
-            response.raise_for_status()
-            usage_data = response.json()
-            
-            # Aggregate tokens from all buckets
-            # Note: OpenAI Usage API now returns input_tokens/output_tokens (Oct 2025)
-            # but we maintain backwards compatibility with earlier field names.
-            def _extract_tokens(result: Dict[str, Any]) -> tuple[int, int, int, int]:
-                input_fields = (
-                    "input_tokens",
-                    "n_context_tokens_total",
-                    "n_input_tokens_total",
-                    "n_context_tokens",
-                )
-                output_fields = (
-                    "output_tokens",
-                    "n_generated_tokens_total",
-                    "n_output_tokens_total",
-                    "n_generated_tokens",
-                )
-                tokens_in = next((int(result.get(field, 0) or 0) for field in input_fields if field in result), 0)
-                tokens_out = next((int(result.get(field, 0) or 0) for field in output_fields if field in result), 0)
-                
-                # Extract API call count and cached tokens
-                num_requests = int(result.get("num_model_requests", 0) or 0)
-                cached_tokens = int(result.get("input_cached_tokens", 0) or 0)
-                
-                return tokens_in, tokens_out, num_requests, cached_tokens
-
-            total_input_tokens = 0
-            total_output_tokens = 0
-            total_api_calls = 0
-            total_cached_tokens = 0
-
-            for bucket in usage_data.get("data", []):
-                for result in bucket.get("results", []):
-                    tokens_in, tokens_out, num_requests, cached = _extract_tokens(result)
-                    total_input_tokens += tokens_in
-                    total_output_tokens += tokens_out
-                    total_api_calls += num_requests
-                    total_cached_tokens += cached
-            
-            logger.info(
-                "Token usage fetched from OpenAI Usage API",
-                extra={
-                    'run_id': self.run_id,
-                    'step': self.current_step,
-                    'metadata': {
-                        'tokens_in': total_input_tokens,
-                        'tokens_out': total_output_tokens,
-                        'api_calls': total_api_calls,
-                        'cached_tokens': total_cached_tokens,
-                        'cache_hit_rate': f"{(total_cached_tokens / total_input_tokens * 100):.1f}%" if total_input_tokens > 0 else "0%",
-                        'buckets_count': len(usage_data.get("data", [])),
-                        'model': model
-                    }
-                }
-            )
-            
-            return total_input_tokens, total_output_tokens, total_api_calls, total_cached_tokens
-            
-        except Exception as e:
-            import traceback
-            logger.error(
-                f"Failed to fetch usage from OpenAI API: {e}",
-                extra={
-                    'run_id': self.run_id,
-                    'metadata': {
-                        'error': str(e),
-                        'error_type': type(e).__name__,
-                        'traceback': traceback.format_exc()
-                    }
-                }
-            )
-            # Return 0, 0, 0, 0 on error - non-critical for test execution
-            return 0, 0, 0, 0
+        )
+        
+        return 0, 0, 0, 0
     
     def verify_commit_hash(self, repo_path: Path, expected_hash: str) -> None:
         """

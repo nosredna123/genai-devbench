@@ -59,6 +59,11 @@ class MetricsCollector:
         """
         Record metrics for a single step.
         
+        LAZY EVALUATION PATTERN:
+        Token metrics (tokens_in, tokens_out, api_calls, cached_tokens) will be 0 initially.
+        These are backfilled later by the reconciliation script after OpenAI Usage API
+        propagation delay (5-15 minutes). All steps are marked with verification_status='pending'.
+        
         Args:
             step_num: Step number (1-6)
             command: Natural language command text
@@ -66,28 +71,15 @@ class MetricsCollector:
             success: Whether step completed successfully
             retry_count: Number of retries attempted
             hitl_count: Number of HITL interventions
-            tokens_in: Input tokens consumed (may be 0 initially)
-            tokens_out: Output tokens generated (may be 0 initially)
-            api_calls: Number of API calls made to OpenAI
-            cached_tokens: Number of cached input tokens
+            tokens_in: Input tokens consumed (will be 0 initially, backfilled by reconciliation)
+            tokens_out: Output tokens generated (will be 0 initially, backfilled by reconciliation)
+            api_calls: Number of API calls made to OpenAI (will be 0 initially)
+            cached_tokens: Number of cached input tokens (will be 0 initially)
             start_timestamp: Unix timestamp when step started (for Usage API reconciliation)
             end_timestamp: Unix timestamp when step ended (for Usage API reconciliation)
-        
-        Raises:
-            ValueError: If API calls < 1 (indicates adapter bug or silent failure)
         """
-        # VALIDATION: Fail-fast on impossible metric values
-        # API calls should be >= 1 for every successful step (at least one LLM call required)
-        # EXCEPTION: Usage API has propagation delay (5-15 minutes), so api_calls=0 initially is OK
-        # The reconciliation process will backfill metrics later
-        # However, we still validate that if tokens exist, API calls must exist too
-        if success and tokens_in > 0 and tokens_out > 0 and api_calls < 1:
-            raise ValueError(
-                f"Invalid metrics for step {step_num}: tokens exist but api_calls={api_calls} < 1. "
-                f"This indicates a bug in metrics collection logic. "
-                f"Step details: command='{command[:100]}...', duration={duration_seconds:.2f}s, "
-                f"tokens_in={tokens_in}, tokens_out={tokens_out}, hitl_count={hitl_count}"
-            )
+        # LAZY EVALUATION: Accept zeros for token metrics during execution
+        # Validation is handled by reconciliation script, not during execution
         
         self.steps_data[step_num] = {
             'step_number': step_num,
@@ -101,7 +93,8 @@ class MetricsCollector:
             'api_calls': api_calls,
             'cached_tokens': cached_tokens,
             'start_timestamp': start_timestamp,
-            'end_timestamp': end_timestamp
+            'end_timestamp': end_timestamp,
+            'verification_status': 'pending'  # Will be updated by reconciliation script
         }
         
     def compute_interaction_metrics(self) -> Dict[str, float]:
