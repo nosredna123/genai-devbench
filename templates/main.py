@@ -21,8 +21,16 @@ def main():
         
         config = load_config(config_path)
         
-        experiment_name = config.get('experiment_name', 'unnamed')
-        model = config.get('model', 'unknown')
+        # Validate required configuration fields
+        experiment_name = config.get('experiment_name')
+        if not experiment_name:
+            logger.error("Missing 'experiment_name' in config.yaml")
+            return 1
+        
+        model = config.get('model')
+        if not model:
+            logger.error("Missing 'model' in config.yaml")
+            return 1
         
         print("=" * 41)
         print(f"Running experiment: {experiment_name}")
@@ -43,8 +51,17 @@ def main():
         
         print(f"  Frameworks: {', '.join(enabled_frameworks)}")
         
-        # Get max runs
-        max_runs = config.get('max_runs_per_framework', 1)
+        # Get max runs from stopping_rule (required)
+        stopping_rule = config.get('stopping_rule')
+        if not stopping_rule:
+            logger.error("Missing 'stopping_rule' section in config.yaml")
+            return 1
+        
+        max_runs = stopping_rule.get('max_runs')
+        if max_runs is None:
+            logger.error("Missing 'stopping_rule.max_runs' in config.yaml")
+            return 1
+        
         total_runs = len(enabled_frameworks) * max_runs
         print(f"  Max runs per framework: {max_runs}")
         print()
