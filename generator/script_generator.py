@@ -719,19 +719,27 @@ HELP_EOF
         
         python3 << EOF
 import sys
+import json
 from pathlib import Path
 sys.path.insert(0, str(Path.cwd()))
 
 from src.orchestrator.usage_reconciler import UsageReconciler
-from src.orchestrator.manifest_manager import find_runs
 from src.utils.logger import get_logger
 import time
 
 logger = get_logger(__name__)
 reconciler = UsageReconciler()
 
-# Get all runs
-all_runs = find_runs()
+# Load manifest directly from standalone experiment path
+manifest_path = Path("runs/manifest.json")
+if not manifest_path.exists():
+    print("No runs found in this experiment.")
+    sys.exit(0)
+
+with open(manifest_path, 'r') as f:
+    manifest = json.load(f)
+
+all_runs = manifest.get("runs", [])
 
 if not all_runs:
     print("No runs found in this experiment.")
