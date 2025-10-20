@@ -409,6 +409,14 @@ if __name__ == '__main__':
             }
             standalone_config['frameworks'] = enabled_frameworks
         
+        # Keep only pricing for the selected model
+        if 'pricing' in standalone_config and 'model' in standalone_config:
+            selected_model = standalone_config['model']
+            if selected_model in standalone_config['pricing']:
+                standalone_config['pricing'] = {
+                    selected_model: standalone_config['pricing'][selected_model]
+                }
+        
         # Write config
         config_path = output_dir / 'config.yaml'
         with open(config_path, 'w', encoding='utf-8') as f:
