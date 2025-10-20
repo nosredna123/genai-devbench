@@ -400,6 +400,15 @@ if __name__ == '__main__':
         if 'hitl_path' in standalone_config:
             standalone_config['hitl_path'] = 'config/hitl/expanded_spec.txt'
         
+        # Keep only enabled frameworks
+        if 'frameworks' in standalone_config:
+            enabled_frameworks = {
+                name: fw_config 
+                for name, fw_config in standalone_config['frameworks'].items()
+                if fw_config.get('enabled', False)
+            }
+            standalone_config['frameworks'] = enabled_frameworks
+        
         # Write config
         config_path = output_dir / 'config.yaml'
         with open(config_path, 'w', encoding='utf-8') as f:
