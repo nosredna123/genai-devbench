@@ -483,6 +483,94 @@ def interactive_wizard() -> Dict[str, Any]:
 # Experiment Creation
 # =============================================================================
 
+def _merge_experiment_updates(temp_dir: Path, target_dir: Path) -> None:
+    """
+    Merge updates from temporary generated experiment into existing experiment.
+    
+    Updates:
+    - src/ (source code)
+    - config/ (configuration and prompts)
+    - setup.sh, run.sh (scripts)
+    - requirements.txt (dependencies)
+    - README.md (documentation)
+    - .gitignore (git configuration)
+    
+    Preserves:
+    - runs/ (experiment results)
+    - logs/ (log files)
+    - venv/ (virtual environment)
+    - .git/ (git repository)
+    - .env (user API keys)
+    - frameworks/ (cloned framework repos)
+    
+    Args:
+        temp_dir: Temporary directory with newly generated experiment
+        target_dir: Existing experiment directory to update
+    """
+    import subprocess
+    
+    print(f"📦 Merging updates into {target_dir.name}...")
+    
+    # Directories and files to update (overwrite)
+    items_to_update = [
+        'src',
+        'config',
+        'setup.sh',
+        'run.sh',
+        'requirements.txt',
+        'README.md',
+        '.gitignore',
+        '.env.example',
+    ]
+    
+    # Use rsync if available (better), otherwise use cp
+    try:
+        # Check if rsync is available
+        subprocess.run(['rsync', '--version'], 
+                      capture_output=True, check=True)
+        use_rsync = True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        use_rsync = False
+    
+    for item in items_to_update:
+        source = temp_dir / item
+        if not source.exists():
+            continue
+        
+        target = target_dir / item
+        
+        if use_rsync:
+            # Use rsync for better merging
+            if source.is_dir():
+                # For directories, sync contents
+                cmd = [
+                    'rsync', '-a', '--delete',
+                    str(source) + '/',  # Trailing slash = sync contents
+                    str(target) + '/'
+                ]
+            else:
+                # For files, just copy
+                cmd = ['rsync', '-a', str(source), str(target)]
+            
+            subprocess.run(cmd, check=True, capture_output=True)
+        else:
+            # Fallback to cp
+            if target.exists():
+                if target.is_dir():
+                    shutil.rmtree(target)
+                else:
+                    target.unlink()
+            
+            if source.is_dir():
+                shutil.copytree(source, target)
+            else:
+                shutil.copy2(source, target)
+        
+        print(f"  ✓ Updated {item}")
+    
+    print(f"✓ Merge complete")
+
+
 def create_experiment(
     name: str,
     model: str,
@@ -560,23 +648,87 @@ def create_experiment(
                 f"or delete the existing directory manually."
             )
         
-        # Interactive mode: ask for confirmation
+        # Interactive mode: ask what to do
         else:
             print()
-            print(f"⚠️  Warning: Directory already exists: {output_dir}")
-            overwrite = input("Overwrite existing directory? This will DELETE all content! [y/N]: ").strip().lower()
+            print(f"⚠️  Warning: Directory '{name}' already exists at {output_dir}")
+            print()
+            print("What would you like to do?")
+            print("  1. Update/merge - Keep user data (runs, logs, venv, .git), update code/config")
+            print("  2. Delete and replace - Remove everything and start fresh")
+            print("  3. Cancel - Choose a different name")
             print()
             
-            if overwrite not in ['y', 'yes']:
+            while True:
+                choice = input("Select option [1-3] (default: 3): ").strip() or '3'
+                if choice in ['1', '2', '3']:
+                    break
+                print("❌ Invalid choice. Enter 1, 2, or 3.")
+            
+            print()
+            
+            if choice == '3':
                 print("❌ Cancelled. Please choose a different name or location.")
                 sys.exit(0)
             
-            # Remove existing directory
-            logger.info(f"Removing existing directory: {output_dir}")
-            print(f"🗑️  Removing existing directory...")
-            shutil.rmtree(output_dir)
-            print(f"✓ Removed {output_dir}")
-            print()
+            elif choice == '2':
+                # Delete everything
+                logger.info(f"Removing existing directory: {output_dir}")
+                print(f"🗑️  Removing existing directory...")
+                shutil.rmtree(output_dir)
+                print(f"✓ Removed {output_dir}")
+                print()
+            
+            elif choice == '1':
+                # Merge mode - generate to temp dir and merge
+                logger.info(f"Merge mode: generating to temporary directory")
+                print(f"🔄 Merge mode: Updating experiment with new code/config...")
+                print(f"   Preserving: runs/, logs/, venv/, .git/, .env")
+                print()
+                
+                # Generate to temp directory
+                temp_dir = output_dir.parent / f"{name}_temp_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                logger.info(f"Temporary directory: {temp_dir}")
+                
+                try:
+                    generator = StandaloneGenerator()
+                    generator.generate(name, config, temp_dir)
+                    
+                    # Merge from temp to existing
+                    _merge_experiment_updates(temp_dir, output_dir)
+                    
+                    # Clean up temp directory
+                    logger.info(f"Cleaning up temporary directory: {temp_dir}")
+                    shutil.rmtree(temp_dir)
+                    print(f"✓ Cleaned up temporary files")
+                    print()
+                    
+                    # Success message for merge
+                    print("=" * 70)
+                    print("✅ Experiment updated successfully!")
+                    print("=" * 70)
+                    print()
+                    print(f"📁 Location: {output_dir.absolute()}")
+                    print(f"🔄 Updated: src/, config/, scripts, requirements.txt")
+                    print(f"✓ Preserved: runs/, logs/, venv/, .git/, .env")
+                    print()
+                    print("=" * 70)
+                    print("Next steps:")
+                    print("=" * 70)
+                    print(f"  cd {output_dir}")
+                    print("  # Review changes: git status")
+                    print("  # Update dependencies if needed: pip install -r requirements.txt")
+                    print("  ./run.sh")
+                    print()
+                    return  # Exit early for merge mode
+                    
+                except Exception as e:
+                    # Clean up temp directory on failure
+                    if temp_dir.exists():
+                        logger.warning(f"Cleaning up temporary directory after failure: {temp_dir}")
+                        shutil.rmtree(temp_dir)
+                    raise ExperimentCreationError(f"Merge failed: {e}")
+
     
     logger.info(f"Output directory: {output_dir}")
     
