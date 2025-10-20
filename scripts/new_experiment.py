@@ -508,6 +508,7 @@ def _merge_experiment_updates(temp_dir: Path, target_dir: Path) -> None:
     items_to_update = [
         'src',
         'config',
+        'config.yaml',  # Main configuration file with experiment settings
         'setup.sh',
         'run.sh',
         'requirements.txt',
