@@ -77,13 +77,14 @@ class MetricsCollector:
             ValueError: If API calls < 1 (indicates adapter bug or silent failure)
         """
         # VALIDATION: Fail-fast on impossible metric values
-        # API calls should be >= 1 for every step (at least one LLM call required)
-        # Exception: HITL might bypass LLM, but this should be explicit
-        if api_calls < 1 and success:
+        # API calls should be >= 1 for every successful step (at least one LLM call required)
+        # EXCEPTION: Usage API has propagation delay (5-15 minutes), so api_calls=0 initially is OK
+        # The reconciliation process will backfill metrics later
+        # However, we still validate that if tokens exist, API calls must exist too
+        if success and tokens_in > 0 and tokens_out > 0 and api_calls < 1:
             raise ValueError(
-                f"Invalid metrics for step {step_num}: api_calls={api_calls} < 1 but success=True. "
-                f"This indicates a silent failure in the adapter (likely a command mapping issue). "
-                f"Every successful step must make at least 1 API call. "
+                f"Invalid metrics for step {step_num}: tokens exist but api_calls={api_calls} < 1. "
+                f"This indicates a bug in metrics collection logic. "
                 f"Step details: command='{command[:100]}...', duration={duration_seconds:.2f}s, "
                 f"tokens_in={tokens_in}, tokens_out={tokens_out}, hitl_count={hitl_count}"
             )
