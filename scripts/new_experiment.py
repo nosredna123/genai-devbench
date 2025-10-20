@@ -628,6 +628,22 @@ def create_experiment(
         
         # Force flag: remove without asking
         if force:
+            # Check if user is currently inside the directory to be deleted
+            try:
+                current_dir = Path.cwd().resolve()
+                target_dir = output_dir.resolve()
+                
+                if current_dir == target_dir or target_dir in current_dir.parents:
+                    raise ExperimentCreationError(
+                        f"Cannot delete directory: You are currently inside it!\n"
+                        f"Current directory: {current_dir}\n"
+                        f"Please change to a different directory first:\n"
+                        f"  cd {target_dir.parent}"
+                    )
+            except OSError:
+                # Current directory might already be deleted, continue
+                pass
+            
             logger.info(f"Force flag set: Removing existing directory: {output_dir}")
             print(f"🗑️  Removing existing directory (--force)...")
             shutil.rmtree(output_dir)
@@ -667,6 +683,29 @@ def create_experiment(
             
             elif choice == '2':
                 # Delete everything
+                # Check if user is currently inside the directory to be deleted
+                try:
+                    current_dir = Path.cwd().resolve()
+                    target_dir = output_dir.resolve()
+                    
+                    # Check if current directory is the target or inside it
+                    if current_dir == target_dir or target_dir in current_dir.parents:
+                        print(f"⚠️  WARNING: You are currently inside the directory to be deleted!")
+                        print(f"   Current directory: {current_dir}")
+                        print(f"   This will cause your shell to become invalid.")
+                        print()
+                        print(f"   Please change to a different directory first:")
+                        print(f"   cd {target_dir.parent}")
+                        print()
+                        confirm = input("Continue anyway? [y/N]: ").strip().lower()
+                        if confirm != 'y':
+                            print("❌ Cancelled. Please cd to a different directory and try again.")
+                            sys.exit(0)
+                        print()
+                except OSError:
+                    # Current directory might already be deleted, continue
+                    pass
+                
                 logger.info(f"Removing existing directory: {output_dir}")
                 print(f"🗑️  Removing existing directory...")
                 shutil.rmtree(output_dir)
