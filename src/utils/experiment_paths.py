@@ -52,6 +52,7 @@ class ExperimentPaths:
         self,
         experiment_name: str,
         project_root: Optional[Path] = None,
+        experiments_base_dir: Optional[Path] = None,
         auto_create_structure: bool = False,
         validate_exists: bool = True
     ):
@@ -61,6 +62,7 @@ class ExperimentPaths:
         Args:
             experiment_name: Name of the experiment
             project_root: Project root directory (auto-detected if not provided)
+            experiments_base_dir: Base directory for experiments (default: project_root/experiments)
             auto_create_structure: If True, create missing directories
             validate_exists: If True, validate experiment exists (set False for new experiments)
             
@@ -70,7 +72,8 @@ class ExperimentPaths:
         """
         self.experiment_name = experiment_name
         self.project_root = project_root or self._detect_project_root()
-        self.experiment_dir = self.project_root / "experiments" / experiment_name
+        self.experiments_base_dir = experiments_base_dir or (self.project_root / "experiments")
+        self.experiment_dir = self.experiments_base_dir / experiment_name
         
         # For new experiments, skip validation
         if not validate_exists:
@@ -144,13 +147,11 @@ class ExperimentPaths:
         Returns:
             Formatted string of available experiments
         """
-        experiments_dir = self.project_root / "experiments"
-        
-        if not experiments_dir.exists():
-            return "  (no experiments directory found)"
+        if not self.experiments_base_dir.exists():
+            return f"  (experiments directory not found: {self.experiments_base_dir})"
         
         experiments = [
-            d.name for d in experiments_dir.iterdir()
+            d.name for d in self.experiments_base_dir.iterdir()
             if d.is_dir() and (d / "config.yaml").exists()
         ]
         
@@ -446,6 +447,7 @@ class ExperimentPaths:
 def get_experiment_paths(
     experiment_name: str,
     project_root: Optional[Path] = None,
+    experiments_base_dir: Optional[Path] = None,
     auto_create_structure: bool = False,
     validate_exists: bool = True
 ) -> ExperimentPaths:
@@ -457,6 +459,7 @@ def get_experiment_paths(
     Args:
         experiment_name: Name of the experiment
         project_root: Project root directory (auto-detected if None)
+        experiments_base_dir: Base directory for experiments (default: project_root/experiments)
         auto_create_structure: If True, create missing directories
         validate_exists: If True, validate experiment exists (set False for new experiments)
         
@@ -470,6 +473,7 @@ def get_experiment_paths(
     return ExperimentPaths(
         experiment_name=experiment_name,
         project_root=project_root,
+        experiments_base_dir=experiments_base_dir,
         auto_create_structure=auto_create_structure,
         validate_exists=validate_exists
     )

@@ -15,6 +15,10 @@ Usage:
     
     # From template
     python scripts/new_experiment.py --template experiments/baseline
+    
+    # Custom experiments directory
+    python scripts/new_experiment.py --name test --model gpt-4o \\
+        --frameworks baes --runs 10 --experiments-dir /path/to/custom/experiments
 """
 
 import sys
@@ -553,7 +557,8 @@ def create_experiment(
     model: str,
     frameworks: List[str],
     max_runs: int,
-    template_path: Optional[Path] = None
+    template_path: Optional[Path] = None,
+    experiments_base_dir: Optional[Path] = None
 ) -> None:
     """
     Create new experiment.
@@ -595,6 +600,7 @@ def create_experiment(
     # Create experiment paths (validate_exists=False for new experiments)
     exp_paths = ExperimentPaths(
         name,
+        experiments_base_dir=experiments_base_dir,
         auto_create_structure=True,
         validate_exists=False
     )
@@ -711,6 +717,12 @@ Examples:
         help='Template experiment name or path'
     )
     
+    parser.add_argument(
+        '--experiments-dir',
+        type=Path,
+        help='Custom base directory for experiments (default: ./experiments)'
+    )
+    
     return parser.parse_args()
 
 
@@ -757,7 +769,8 @@ def main():
                 'model': args.model,
                 'frameworks': frameworks,
                 'max_runs': args.runs,
-                'template_path': template_path
+                'template_path': template_path,
+                'experiments_base_dir': args.experiments_dir
             }
         
         # Create experiment

@@ -8,7 +8,7 @@ Wrapper around the orchestrator that handles:
 - Path management
 
 Usage:
-    python scripts/run_experiment.py EXPERIMENT_NAME [FRAMEWORK]
+    python scripts/run_experiment.py EXPERIMENT_NAME [FRAMEWORK] [OPTIONS]
     
 Examples:
     # Run all frameworks for experiment
@@ -16,6 +16,9 @@ Examples:
     
     # Run specific framework
     python scripts/run_experiment.py test_exp baes
+    
+    # Use custom experiments directory
+    python scripts/run_experiment.py test_exp --experiments-dir /path/to/custom/experiments
 """
 
 import sys
@@ -33,13 +36,14 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__, component="experiment_runner")
 
 
-def run_experiment(experiment_name: str, framework: str = "all") -> None:
+def run_experiment(experiment_name: str, framework: str = "all", experiments_base_dir: Path = None) -> None:
     """
     Run experiment for specified framework(s).
     
     Args:
         experiment_name: Name of experiment to run
         framework: Framework name (baes, chatdev, ghspec, or 'all')
+        experiments_base_dir: Custom base directory for experiments
         
     Raises:
         ExperimentNotFoundError: If experiment doesn't exist
@@ -47,7 +51,7 @@ def run_experiment(experiment_name: str, framework: str = "all") -> None:
     """
     # Validate experiment exists
     try:
-        exp_paths = ExperimentPaths(experiment_name)
+        exp_paths = ExperimentPaths(experiment_name, experiments_base_dir=experiments_base_dir)
     except ExperimentNotFoundError as e:
         print(f"❌ {e}")
         sys.exit(1)
@@ -192,10 +196,16 @@ Examples:
         help='Framework to run (default: all enabled frameworks)'
     )
     
+    parser.add_argument(
+        '--experiments-dir',
+        type=Path,
+        help='Custom base directory for experiments (default: ./experiments)'
+    )
+    
     args = parser.parse_args()
     
     try:
-        run_experiment(args.experiment, args.framework)
+        run_experiment(args.experiment, args.framework, args.experiments_dir)
     
     except KeyboardInterrupt:
         print("\n\nCancelled by user.")

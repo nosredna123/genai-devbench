@@ -12,11 +12,15 @@ Usage:
     # Multi-experiment mode
     python generate_analysis.py EXPERIMENT_NAME
     
+    # Custom experiments directory
+    python generate_analysis.py EXPERIMENT_NAME --experiments-dir /path/to/custom/experiments
+    
 Arguments:
     experiment_name: Name of experiment to analyze (optional, uses new system)
     --output-dir: Directory to save analysis outputs (default: ./analysis_output or experiments/<name>/analysis)
     --config: Path to experiment config YAML (default: config/experiment.yaml or experiments/<name>/config.yaml)
     --runs-dir: Directory containing runs (default: ./runs or experiments/<name>/runs)
+    --experiments-dir: Custom base directory for experiments (default: ./experiments)
 """
 
 import argparse
@@ -258,6 +262,9 @@ Examples:
                        help='Path to config file (overrides default)')
     parser.add_argument('--runs-dir',
                        help='Directory containing run data (overrides default)')
+    parser.add_argument('--experiments-dir',
+                       type=Path,
+                       help='Custom base directory for experiments (default: ./experiments)')
     
     args = parser.parse_args()
     
@@ -269,7 +276,7 @@ Examples:
         logger.info("Using multi-experiment mode for: %s", experiment_name)
         
         try:
-            exp_paths = ExperimentPaths(experiment_name)
+            exp_paths = ExperimentPaths(experiment_name, experiments_base_dir=args.experiments_dir)
         except ExperimentNotFoundError as e:
             logger.error(str(e))
             sys.exit(1)
