@@ -14,45 +14,56 @@ pending → warning (if incomplete) → verified
 
 ## Core Verification Rule
 
-**A run can ONLY be marked as `verified` when ALL of the following conditions are met:**
+**A run can be marked as `verified` when ALL of the following conditions are met:**
 
-### 1. Data Stability (Double-Check)
-- At least 2 reconciliation attempts have been made
-- The last 2 attempts show **identical** token counts (no changes)
-- At least **60 minutes** between the last 2 attempts
+### 1. Data Stability (N-Check Verification)
+- At least **N consecutive stable verifications** (configurable via `RECONCILIATION_MIN_STABLE_VERIFICATIONS`, default: 2)
+- Each verification shows **identical** token counts to the previous attempt
+- At least **60 minutes** between each verification attempt (configurable via `RECONCILIATION_VERIFICATION_INTERVAL_MIN`)
 - This ensures OpenAI Usage API data has fully stabilized
 
-### 2. Data Completeness (Critical!)
-- **`steps_with_tokens` MUST equal `total_steps`**
-- Every step that executed successfully MUST have token data
-- If `steps_with_tokens < total_steps`, status is set to `warning`
+**Configuration**:
+- `RECONCILIATION_MIN_STABLE_VERIFICATIONS=1`: Development/Testing (fast feedback)
+- `RECONCILIATION_MIN_STABLE_VERIFICATIONS=2`: Production (default, double-check)
+- `RECONCILIATION_MIN_STABLE_VERIFICATIONS=3`: Research (high confidence)
+- `RECONCILIATION_MIN_STABLE_VERIFICATIONS=4`: Publication (maximum certainty)
 
-### 3. No Anomalies
+### 2. No Anomalies
 - Token counts must never decrease between attempts
 - If tokens decrease, status is set to `warning` with anomaly alert
+
+### 3. Token Coverage (Framework Efficiency)
+**Note:** The system NO LONGER requires all steps to have tokens. Some frameworks (like BAeS) intelligently avoid unnecessary LLM calls by using templates or rules for certain operations. This is treated as **efficiency**, not incomplete data.
+
+- Runs are verified regardless of token coverage percentage
+- Verification message shows coverage rate (e.g., "3/6 steps used LLM, 50% coverage")
+- Zero-token steps are acceptable when data has stabilized across N checks
+- This allows fair comparison of frameworks with different efficiency strategies
 
 ## Status Definitions
 
 ### `verified` ✅
 - All verification rules passed
-- Data is stable and complete
+- Data is stable across N consecutive checks
 - Safe to use for analysis and reports
-- **Example**: 6/6 steps have tokens, stable for 60+ minutes
+- **Examples**: 
+  - "Verified after 2 stable checks: all 6 steps used LLM" (100% coverage)
+  - "Verified after 2 stable checks: 3/6 steps used LLM, 50% coverage" (partial coverage, acceptable)
 
 ### `pending` ⏳
-- Waiting for more time or data to arrive
+- Waiting for more time, data, or verification checks
 - Normal status during reconciliation process
 - **Examples**:
   - First reconciliation attempt
   - Data still changing (tokens increasing)
   - Time gap < 60 minutes between attempts
+  - Only 1/2 stable checks completed (need more verifications)
 
 ### `warning` ⚠️
-- Data is stable BUT incomplete or anomalous
-- **Should NOT be used for final analysis**
+- Token count anomaly detected
+- **Should be investigated before using for analysis**
 - **Examples**:
-  - Only 3/6 steps have tokens (some steps failed/skipped)
-  - Token counts decreased (API anomaly)
+  - Token counts decreased (API anomaly or data loss)
 
 ### `data_not_available` 🕐
 - OpenAI Usage API returned zero tokens
@@ -60,51 +71,50 @@ pending → warning (if incomplete) → verified
 - Or API may be experiencing issues
 - Will retry on next reconciliation
 
-## Why Step Completeness Matters
+## Understanding Token Coverage
 
-### Scenario 1: Partial Step Success (Warning Status)
-```json
-{
-  "total_steps": 6,
-  "steps_with_tokens": 3,
-  "steps": [
-    {"step": 1, "tokens_in": 8389, "tokens_out": 2837},  // ✓ Has tokens
-    {"step": 2, "tokens_in": 9819, "tokens_out": 3098},  // ✓ Has tokens
-    {"step": 3, "tokens_in": 0, "tokens_out": 0},        // ✗ No tokens
-    {"step": 4, "tokens_in": 3711, "tokens_out": 524},   // ✓ Has tokens
-    {"step": 5, "tokens_in": 0, "tokens_out": 0},        // ✗ No tokens
-    {"step": 6, "tokens_in": 0, "tokens_out": 0}         // ✗ No tokens
-  ]
-}
-```
-
-**Status**: `warning`  
-**Reason**: Steps 3, 5, 6 have zero tokens - they either:
-- Failed during execution
-- Were skipped
-- Didn't actually call the OpenAI API
-
-**Impact**: Run can still be analyzed, but metrics are incomplete. Framework comparison may be unfair if other frameworks succeeded on all steps.
-
-### Scenario 2: Complete Step Success (Can be Verified)
+### Scenario 1: Full LLM Usage (100% Coverage)
 ```json
 {
   "total_steps": 6,
   "steps_with_tokens": 6,
   "steps": [
-    {"step": 1, "tokens_in": 8389, "tokens_out": 2837},  // ✓
-    {"step": 2, "tokens_in": 9819, "tokens_out": 3098},  // ✓
-    {"step": 3, "tokens_in": 7245, "tokens_out": 2156},  // ✓
-    {"step": 4, "tokens_in": 3711, "tokens_out": 524},   // ✓
-    {"step": 5, "tokens_in": 5823, "tokens_out": 1890},  // ✓
-    {"step": 6, "tokens_in": 4127, "tokens_out": 1456}   // ✓
+    {"step": 1, "tokens_in": 8389, "tokens_out": 2837},  // ✓ Used LLM
+    {"step": 2, "tokens_in": 9819, "tokens_out": 3098},  // ✓ Used LLM
+    {"step": 3, "tokens_in": 7245, "tokens_out": 2156},  // ✓ Used LLM
+    {"step": 4, "tokens_in": 3711, "tokens_out": 524},   // ✓ Used LLM
+    {"step": 5, "tokens_in": 5823, "tokens_out": 1890},  // ✓ Used LLM
+    {"step": 6, "tokens_in": 4127, "tokens_out": 1456}   // ✓ Used LLM
   ]
 }
 ```
 
-**Status**: `verified` (after 60+ min double-check)  
-**Reason**: All steps have tokens - complete data  
-**Impact**: Safe to use for analysis and comparisons
+**Status**: `verified` (after N stable checks)  
+**Message**: "Verified after 2 stable checks: all 6 steps used LLM"  
+**Framework Strategy**: Traditional approach - calls LLM for every operation  
+**Impact**: Higher token usage, but consistent behavior across all steps
+
+### Scenario 2: Partial LLM Usage (50% Coverage - Efficiency Strategy)
+```json
+{
+  "total_steps": 6,
+  "steps_with_tokens": 3,
+  "steps": [
+    {"step": 1, "tokens_in": 8389, "tokens_out": 2837},  // ✓ Used LLM (new entities)
+    {"step": 2, "tokens_in": 9819, "tokens_out": 3098},  // ✓ Used LLM (relationships)
+    {"step": 3, "tokens_in": 0, "tokens_out": 0},        // ✓ Used template (field addition)
+    {"step": 4, "tokens_in": 0, "tokens_out": 0},        // ✓ Used rules (validation)
+    {"step": 5, "tokens_in": 5823, "tokens_out": 1890},  // ✓ Used LLM (complex feature)
+    {"step": 6, "tokens_in": 0, "tokens_out": 0}         // ✓ Used template (UI generation)
+  ]
+}
+```
+
+**Status**: `verified` (after N stable checks)  
+**Message**: "Verified after 2 stable checks: 3/6 steps used LLM, 50% coverage"  
+**Framework Strategy**: Intelligent optimization - uses templates/rules when possible  
+**Impact**: Lower token usage = lower cost = higher efficiency. Common in BAeS framework.  
+**Note**: This is NOT incomplete data - the framework chose not to call LLM for certain operations
 
 ## Implementation
 
@@ -115,24 +125,40 @@ The verification logic is implemented in:
 
 ### Key Code Snippet
 ```python
-# Check if all steps that should have tokens actually have them
-steps_with_tokens = current_attempt.get('steps_with_tokens', 0)
-total_steps = current_attempt.get('total_steps', 0)
-all_steps_have_tokens = (steps_with_tokens == total_steps)
+# Count consecutive stable verifications
+stable_count = self._count_stable_verifications(attempts, current_attempt)
 
-if data_identical:
-    if time_diff_minutes >= DEFAULT_VERIFICATION_INTERVAL_MIN:
-        # Check completeness before marking as verified
-        if not all_steps_have_tokens:
-            return {
-                'status': 'warning',
-                'message': f'⚠️ Data stable but incomplete: only {steps_with_tokens}/{total_steps} steps have tokens'
-            }
-        # ✅ VERIFIED - all conditions met!
+# Check if we have enough stable verifications
+if stable_count >= DEFAULT_MIN_STABLE_VERIFICATIONS:
+    # Calculate token coverage rate
+    coverage_rate = steps_with_tokens / total_steps if total_steps > 0 else 0
+    
+    # ✅ VERIFIED - data is stable after N checks
+    if coverage_rate == 1.0:
+        # Perfect: all steps used LLM
         return {
             'status': 'verified',
-            'message': f'✅ Data stable across {time_diff_minutes:.0f} minute interval'
+            'message': f'✅ Verified after {stable_count} stable checks: all {total_steps} steps used LLM'
         }
+    else:
+        # Partial: some steps didn't use LLM (acceptable for efficient frameworks)
+        return {
+            'status': 'verified',
+            'message': f'✅ Verified after {stable_count} stable checks: {steps_with_tokens}/{total_steps} steps used LLM, {coverage_rate:.0%} coverage'
+        }
+else:
+    # Need more stable verifications
+    return {
+        'status': 'pending',
+        'message': f'⏳ Awaiting verification: {stable_count}/{DEFAULT_MIN_STABLE_VERIFICATIONS} stable checks completed'
+    }
+```
+
+### Configuration
+```bash
+# In .env file
+RECONCILIATION_MIN_STABLE_VERIFICATIONS=2  # Require 2 consecutive stable checks (default)
+RECONCILIATION_VERIFICATION_INTERVAL_MIN=60  # 60 minutes between checks
 ```
 
 ## Monitoring Verification Status
@@ -217,4 +243,4 @@ if data_identical:
 
 ## Summary
 
-**The Golden Rule**: `verified` status requires **both** data stability (60+ min double-check) **and** data completeness (all steps have tokens). This ensures only high-quality, complete data is used for analysis and framework comparisons.
+**The Golden Rule**: `verified` status requires **data stability** across N consecutive checks (configurable, default: 2), with sufficient time between each check (60+ minutes in production). Token coverage percentage is **informational** - frameworks that intelligently minimize LLM usage are not penalized. This ensures fair comparison of frameworks with different efficiency strategies while maintaining data quality standards.

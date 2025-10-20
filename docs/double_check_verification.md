@@ -1,8 +1,8 @@
-# Double-Check Verification for Token Usage Reconciliation
+# N-Check Verification for Token Usage Reconciliation
 
 ## Overview
 
-The BAEs framework implements a **double-check verification** strategy for reconciling token usage data from the OpenAI Usage API. This ensures that reported token counts are stable and complete before marking an experiment as "verified."
+The experiment framework implements a **configurable N-check verification** strategy for reconciling token usage data from the OpenAI Usage API. This ensures that reported token counts are stable before marking an experiment as "verified." The number of required stability checks is configurable (default: 2 for double-check verification).
 
 ## Problem Statement
 
@@ -12,11 +12,13 @@ The OpenAI Usage API has a **5-60 minute reporting delay** after API calls are m
 - **Uncertainty**: No way to know if data is complete or still arriving
 - **Research integrity issues**: Cannot cite token counts with confidence
 
-## Solution: Double-Check Verification
+## Solution: N-Check Verification
 
 ### Core Principle
 
-**Data is marked "verified" only when TWO consecutive reconciliation attempts return identical token counts with at least 60 minutes between them.**
+**Data is marked "verified" only when N consecutive reconciliation attempts return identical token counts with at least 60 minutes between them.**
+
+Where N is configurable via `RECONCILIATION_MIN_STABLE_VERIFICATIONS` (default: 2).
 
 ### Verification States
 
@@ -41,9 +43,9 @@ The OpenAI Usage API has a **5-60 minute reporting delay** after API calls are m
 
 A run is marked `verified` when ALL of the following conditions are met:
 
-1. **At least 2 reconciliation attempts** have been made
-2. **Time gap ≥ 60 minutes** between the last two attempts
-3. **Identical token counts** in both attempts:
+1. **At least N consecutive stable reconciliation attempts** (configurable via `RECONCILIATION_MIN_STABLE_VERIFICATIONS`, default: 2)
+2. **Time gap ≥ 60 minutes** between each consecutive attempt (configurable via `RECONCILIATION_VERIFICATION_INTERVAL_MIN`)
+3. **Identical token counts** across all N attempts:
    - `tokens_in` identical
    - `tokens_out` identical
 
@@ -99,20 +101,24 @@ The system detects and flags anomalies:
 
 ## Configuration
 
-### Environment Variable
+### Environment Variables
 
 ```bash
 # .env file
-RECONCILIATION_VERIFICATION_INTERVAL_MIN=60  # Default: 60 minutes
+RECONCILIATION_VERIFICATION_INTERVAL_MIN=60  # Time between checks (default: 60 minutes)
+RECONCILIATION_MIN_STABLE_VERIFICATIONS=2    # Number of stable checks required (default: 2)
 ```
 
 ### Recommended Settings
 
-| Scenario | Interval | Rationale |
-|----------|----------|-----------|
-| **Development/Testing** | 30 min | Faster feedback |
-| **Production/Research** | 60 min | High confidence |
-| **High-Stakes** | 90 min | Maximum certainty |
+| Scenario | N Checks | Interval | Rationale |
+|----------|----------|----------|-----------|
+| **Development/Testing** | 1 | 0-30 min | Fast feedback, low confidence |
+| **Production (Default)** | 2 | 60 min | Double-check, good confidence |
+| **Research/Analysis** | 3 | 60 min | Triple-check, high confidence |
+| **Publication/High-Stakes** | 4 | 60-90 min | Maximum certainty |
+
+**Note**: Setting N=1 means data is verified after the second attempt (first + one stable check). This is acceptable for development but not recommended for production.
 
 ## Usage Examples
 
