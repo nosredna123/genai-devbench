@@ -90,12 +90,12 @@ class MetricsConfig:
         Initialize metrics configuration.
         
         Args:
-            config_path: Path to experiment.yaml (defaults to config/experiment.yaml)
+            config_path: Path to config file (defaults to config.yaml)
         """
         if config_path is None:
-            # Default to config/experiment.yaml relative to project root
+            # Default to config.yaml relative to project root
             project_root = Path(__file__).parent.parent.parent
-            config_path = project_root / "config" / "experiment.yaml"
+            config_path = project_root / "config.yaml"
         
         self.config_path = Path(config_path)
         self._config: Dict[str, Any] = {}

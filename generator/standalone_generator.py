@@ -407,37 +407,43 @@ if __name__ == '__main__':
         print("  ✓ .env.example")
     
     def _generate_config_yaml(self, config: Dict[str, Any], output_dir: Path) -> None:
-        """Generate standalone config.yaml."""
-        # Make paths relative to experiment root
-        standalone_config = config.copy()
+        """Generate standalone config.yaml with complete configuration."""
+        # Load the full experiment.yaml from generator to get all pricing and metrics definitions
+        experiment_yaml_path = self.project_root / 'config' / 'experiment.yaml'
+        if experiment_yaml_path.exists():
+            with open(experiment_yaml_path, 'r', encoding='utf-8') as f:
+                full_config = yaml.safe_load(f)
+        else:
+            # Fallback to provided config if experiment.yaml doesn't exist
+            full_config = config.copy()
         
-        # Update paths
-        if 'prompts_dir' in standalone_config:
-            standalone_config['prompts_dir'] = 'config/prompts'
-        if 'hitl_path' in standalone_config:
-            standalone_config['hitl_path'] = 'config/hitl/expanded_spec.txt'
+        # Override with experiment-specific settings
+        full_config['experiment_name'] = config.get('experiment_name')
+        full_config['model'] = config.get('model')
+        full_config['random_seed'] = config.get('random_seed', 42)
         
-        # Keep only enabled frameworks
-        if 'frameworks' in standalone_config:
-            enabled_frameworks = {
-                name: fw_config 
-                for name, fw_config in standalone_config['frameworks'].items()
-                if fw_config.get('enabled', False)
-            }
-            standalone_config['frameworks'] = enabled_frameworks
+        # Update paths to be relative to experiment root
+        full_config['prompts_dir'] = 'config/prompts'
+        full_config['hitl_path'] = 'config/hitl/expanded_spec.txt'
         
-        # Keep only pricing for the selected model
-        if 'pricing' in standalone_config and 'model' in standalone_config:
-            selected_model = standalone_config['model']
-            if selected_model in standalone_config['pricing']:
-                standalone_config['pricing'] = {
-                    selected_model: standalone_config['pricing'][selected_model]
-                }
+        # Update frameworks - set enabled status from config
+        if 'frameworks' in config:
+            for fw_name, fw_config in config['frameworks'].items():
+                if fw_name in full_config.get('frameworks', {}):
+                    full_config['frameworks'][fw_name]['enabled'] = fw_config.get('enabled', False)
         
-        # Write config
+        # Update stopping rule
+        if 'stopping_rule' in config:
+            full_config['stopping_rule'] = config['stopping_rule']
+        
+        # Update timeouts if specified
+        if 'timeouts' in config:
+            full_config['timeouts'] = config['timeouts']
+        
+        # Write complete config
         config_path = output_dir / 'config.yaml'
         with open(config_path, 'w', encoding='utf-8') as f:
-            yaml.dump(standalone_config, f, default_flow_style=False, sort_keys=False, indent=2)
+            yaml.dump(full_config, f, default_flow_style=False, sort_keys=False, indent=2)
         
         print("  ✓ config.yaml")
     

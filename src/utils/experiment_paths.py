@@ -72,8 +72,21 @@ class ExperimentPaths:
         """
         self.experiment_name = experiment_name
         self.project_root = project_root or self._detect_project_root()
-        self.experiments_base_dir = experiments_base_dir or (self.project_root / "experiments")
-        self.experiment_dir = self.experiments_base_dir / experiment_name
+        
+        # Check if this is a standalone experiment (config.yaml at project root, no experiments/ dir)
+        is_standalone = (
+            (self.project_root / "config.yaml").exists() and
+            not (self.project_root / "experiments").exists()
+        )
+        
+        if is_standalone:
+            # Standalone experiment: project root IS the experiment directory
+            self.experiments_base_dir = self.project_root.parent
+            self.experiment_dir = self.project_root
+        else:
+            # Multi-experiment structure: experiments/<name>/
+            self.experiments_base_dir = experiments_base_dir or (self.project_root / "experiments")
+            self.experiment_dir = self.experiments_base_dir / experiment_name
         
         # For new experiments, skip validation
         if not validate_exists:

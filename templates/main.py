@@ -83,7 +83,7 @@ def main():
                     experiment_name=experiment_name
                 )
                 
-                result = runner.run()
+                result = runner.execute_single_run()
                 framework_results.append(result)
             
             all_results[framework_name] = framework_results
