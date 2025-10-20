@@ -720,6 +720,7 @@ HELP_EOF
         python3 << EOF
 import sys
 import json
+import os
 from pathlib import Path
 from datetime import datetime
 sys.path.insert(0, str(Path.cwd()))
@@ -753,7 +754,9 @@ too_recent_runs = []
 no_data_runs = []
 
 current_time = time.time()
-min_age_seconds = 30 * 60  # 30 minutes
+# Read minimum age from environment variable (same as reconciliation uses)
+min_age_minutes = int(os.getenv('RECONCILIATION_VERIFICATION_INTERVAL_MIN', '0'))
+min_age_seconds = min_age_minutes * 60
 
 for run_entry in all_runs:
     run_id = run_entry['run_id']
