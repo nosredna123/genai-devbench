@@ -7,6 +7,7 @@ Implements per-run, per-step logging with component separation.
 
 import json
 import logging
+import os
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -206,6 +207,9 @@ def get_logger(name: str, component: str = "run") -> logging.Logger:
     Automatically uses LogContext to determine log file path.
     Creates per-step, per-component log files when context is set.
     
+    By default, logs are written only to files to keep terminal output clean.
+    Set environment variable BAES_CONSOLE_LOGS=1 to enable console output.
+    
     Args:
         name: Logger name (typically __name__)
         component: Component name (orchestrator, adapter, metrics, validator, reconciliation, run)
@@ -223,11 +227,13 @@ def get_logger(name: str, component: str = "run") -> logging.Logger:
     
     logger.setLevel(logging.DEBUG)
     
-    # Console handler (always present)
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(JSONFormatter())
-    logger.addHandler(console_handler)
+    # Console handler (only if explicitly enabled via environment variable)
+    # By default, logs go only to files to keep terminal output clean
+    if os.environ.get('BAES_CONSOLE_LOGS', '').lower() in ('1', 'true', 'yes'):
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(JSONFormatter())
+        logger.addHandler(console_handler)
     
     # Dynamic file handler that switches files based on context
     file_handler = DynamicFileHandler(component)

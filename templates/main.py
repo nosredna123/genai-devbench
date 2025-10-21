@@ -1,7 +1,9 @@
 """Main entry point for experiment execution."""
 
 import sys
+import time
 from pathlib import Path
+from datetime import datetime
 
 from src.orchestrator.runner import OrchestratorRunner
 from src.orchestrator.config_loader import load_config
@@ -33,13 +35,6 @@ def main():
             logger.error("Missing 'model' in config.yaml")
             return 1
         
-        print("=" * 41)
-        print(f"Running experiment: {experiment_name}")
-        print("=" * 41)
-        print()
-        print("Configuration:")
-        print(f"  Model: {model}")
-        
         # Get enabled frameworks
         enabled_frameworks = [
             name for name, fw_config in config.get('frameworks', {}).items()
@@ -49,8 +44,6 @@ def main():
         if not enabled_frameworks:
             logger.error("No frameworks enabled in configuration")
             return 1
-        
-        print(f"  Frameworks: {', '.join(enabled_frameworks)}")
         
         # Get max runs from stopping_rule (required)
         stopping_rule = config.get('stopping_rule')
@@ -63,34 +56,51 @@ def main():
             logger.error("Missing 'stopping_rule.max_runs' in config.yaml")
             return 1
         
-        total_runs = len(enabled_frameworks) * max_runs
-        print(f"  Max runs per framework: {max_runs}")
+        # Print header
         print()
-        print("This may take a while...")
+        print("=" * 60)
+        print(f"  🧪 Experiment: {experiment_name}")
+        print("=" * 60)
+        print(f"  Model:      {model}")
+        print(f"  Frameworks: {', '.join(enabled_frameworks)}")
+        print(f"  Max runs:   {max_runs} per framework")
+        print("=" * 60)
         print()
         
         # Run each framework
         all_results = {}
-        for framework_name in enabled_frameworks:
+        start_time = time.time()
+        
+        for idx, framework_name in enumerate(enabled_frameworks, 1):
             # Check how many runs already exist for this framework
             existing_runs = find_runs(framework=framework_name)
             existing_count = len(existing_runs)
             
             logger.info(f"Starting {framework_name} runs")
             
+            print(f"[{idx}/{len(enabled_frameworks)}] Framework: {framework_name.upper()}")
+            
             if existing_count >= max_runs:
                 logger.info(f"{framework_name} already has {existing_count}/{max_runs} runs, skipping")
-                print(f"  {framework_name}: Already completed ({existing_count}/{max_runs} runs)")
+                print(f"      ✓ Already completed ({existing_count}/{max_runs} runs)\n")
                 all_results[framework_name] = []
                 continue
             
             # Calculate how many more runs are needed
             runs_needed = max_runs - existing_count
             logger.info(f"{framework_name}: {existing_count} existing runs, {runs_needed} more needed")
-            print(f"  {framework_name}: Running {runs_needed} more runs ({existing_count}/{max_runs} complete)")
+            
+            if existing_count > 0:
+                print(f"      Progress: {existing_count}/{max_runs} runs complete")
+                print(f"      Executing: {runs_needed} remaining runs")
+            else:
+                print(f"      Executing: {runs_needed} runs")
             
             framework_results = []
             for run_num in range(existing_count + 1, max_runs + 1):
+                run_start = time.time()
+                print(f"      → Run {run_num}/{max_runs}...", end=" ", flush=True)
+                
                 logger.info(f"Running {framework_name} - run {run_num}/{max_runs}")
                 
                 runner = OrchestratorRunner(
@@ -101,18 +111,24 @@ def main():
                 
                 result = runner.execute_single_run()
                 framework_results.append(result)
+                
+                run_time = time.time() - run_start
+                print(f"✓ ({run_time:.1f}s)")
             
             all_results[framework_name] = framework_results
+            print()
         
+        total_time = time.time() - start_time
         logger.info("Experiment completed successfully")
         logger.info(f"Results saved to: {Path('runs').absolute()}")
         
         # Print summary
-        print()
-        print("=" * 41)
-        print("✅ Experiment completed!")
-        print("=" * 41)
-        print(f"Results directory: {Path('runs').absolute()}")
+        print("=" * 60)
+        print(f"  ✅ Experiment Complete!")
+        print("=" * 60)
+        print(f"  Total time:   {total_time:.1f}s ({total_time/60:.1f} minutes)")
+        print(f"  Results dir:  {Path('runs').absolute()}")
+        print("=" * 60)
         print()
         
         return 0
