@@ -53,33 +53,44 @@ cp .env.example .env
 
 ### Your First Experiment (5 Minutes)
 
-The framework supports multiple independent experiments with organized, isolated outputs:
+The framework supports **config sets** - curated templates for common scenarios:
 
 ```bash
-# 1. Create an experiment
+# 1. List available config sets
+python scripts/new_experiment.py --list-config-sets
+
+# Output:
+# 📦 Available Config Sets:
+#   • default (6 steps): Traditional 6-step CRUD application
+#   • minimal (1 step): Hello World API for testing
+
+# 2. Generate experiment from config set
 python scripts/new_experiment.py \
     --name my_first_experiment \
-    --model gpt-4o \
+    --config-set default \
+    --model gpt-4o-mini \
     --frameworks baes \
     --runs 10
 
-# 2. Run the experiment
-python scripts/run_experiment.py my_first_experiment
+# 3. Customize (optional)
+vim my_first_experiment/config.yaml
+# → Disable steps, reorder, adjust timeouts
 
-# 3. Analyze results
-./runners/analyze_results.sh my_first_experiment
+# 4. Run the experiment
+cd my_first_experiment
+./run.sh
 
-# 4. View report
-cat experiments/my_first_experiment/analysis/report.md
+# 5. View results
+cat runs/latest/summary.json
 ```
 
 **What happened:**
-- ✅ Created isolated experiment directory
-- ✅ Ran 10 independent BAEs executions
-- ✅ Generated statistical analysis with confidence intervals
-- ✅ Produced comprehensive report with recommendations
+- ✅ Generated experiment from `default` config set (6 CRUD steps)
+- ✅ Copied all prompts, HITL files, and configurations
+- ✅ Created self-contained, runnable experiment
+- ✅ Ready to customize and execute
 
-**See [Quick Start Guide](docs/QUICKSTART.md) for detailed walkthrough.**
+**See [Config Sets Quick Start](docs/configurable_steps/QUICKSTART_CONFIG_SETS.md) for detailed guide.**
 
 ### Compare Multiple Experiments
 
@@ -131,13 +142,71 @@ cat runs/baes/<run-id>/metrics.json
 
 **Note:** Legacy mode is maintained for backward compatibility but new workflows should use the multi-experiment system.
 
+## 📦 Config Sets
+
+**Config Sets** are curated experiment templates that provide pre-configured prompts, steps, and HITL files for common scenarios. They enable rapid experiment creation and standardized testing across different domains.
+
+### Available Config Sets
+
+| Config Set | Steps | Description | Use Case |
+|------------|-------|-------------|----------|
+| **default** | 6 | Traditional CRUD application (Student/Course/Teacher) | Full-featured API testing, framework comparison |
+| **minimal** | 1 | Hello World API | Quick testing, learning, debugging |
+| *microservices* | - | Multi-service architecture | *(Coming in V2)* |
+| *ml_pipeline* | - | ML model development | *(Coming in V2)* |
+
+### Config Set Workflow
+
+```bash
+# 1. List available config sets
+python scripts/new_experiment.py --list-config-sets
+
+# 2. Generate experiment from config set
+python scripts/new_experiment.py \
+    --name my_test \
+    --config-set default \
+    --model gpt-4o-mini \
+    --frameworks baes chatdev \
+    --runs 10
+
+# 3. Customize post-generation (optional)
+vim my_test/config.yaml
+# → Disable steps: set enabled: false
+# → Reorder steps: move entries (executes in declaration order)
+# → Adjust timeouts and metrics
+
+# 4. Run experiment
+cd my_test
+./run.sh
+```
+
+### Features
+
+- ✅ **Curated Templates**: Pre-configured prompts and steps for common scenarios
+- ✅ **Self-Contained**: All files copied (prompts, HITL, configs)
+- ✅ **Customizable**: Edit config.yaml post-generation
+- ✅ **Declaration Order**: Steps execute in YAML order, not sorted by ID
+- ✅ **Fail-Fast Validation**: Catches errors before wasting tokens
+
+### Creating Custom Config Sets
+
+Want to create your own config set? See the [Creating Config Sets Guide](docs/configurable_steps/CREATING_CONFIG_SETS.md).
+
+---
+
 ## Documentation
 
 ### Getting Started
 - **[Quick Start Guide](docs/QUICKSTART.md)** ⭐ **Start here!** - Create your first experiment in 5 minutes
+- **[Config Sets Quick Start](docs/configurable_steps/QUICKSTART_CONFIG_SETS.md)** 🆕 **Config sets guide** - Use curated templates
 - **[Workflows Guide](docs/WORKFLOWS.md)** - Common usage patterns and real-world scenarios
 - **[Comparison Guide](docs/COMPARISON_GUIDE.md)** - Statistical comparison of experiments
 - **[Best Practices Guide](docs/BEST_PRACTICES.md)** - Recommendations for effective experimentation
+
+### Config Sets & Customization 🆕
+- **[Creating Config Sets](docs/configurable_steps/CREATING_CONFIG_SETS.md)** - Build your own config sets
+- **[Implementation Plan](docs/configurable_steps/FINAL-IMPLEMENTATION-PLAN.md)** - Technical design details
+- **[Feature Specification](docs/configurable_steps/feature-spec.md)** - Complete requirements
 
 ### Multi-Experiment System
 - **[Architecture Guide](docs/architecture.md)** - System design and multi-experiment components
