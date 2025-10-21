@@ -988,6 +988,9 @@ EOF
             python3 << EOF
 import sys
 from pathlib import Path
+import json
+import time
+from datetime import datetime, timedelta
 sys.path.insert(0, str(Path.cwd()))
 
 from src.orchestrator.usage_reconciler import UsageReconciler
@@ -995,6 +998,37 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 reconciler = UsageReconciler()
+
+def format_age(seconds):
+    # Format age in a human-readable way
+    if seconds < 3600:
+        return f"{{seconds/60:.0f}}m"
+    elif seconds < 86400:
+        return f"{{seconds/3600:.1f}}h"
+    else:
+        days = seconds / 86400
+        return f"{{days:.1f}}d"
+
+def get_run_age(run_id, framework):
+    # Get age of run from manifest
+    try:
+        manifest_path = Path("runs/manifest.json")
+        if not manifest_path.exists():
+            return None
+        
+        with open(manifest_path, 'r') as f:
+            manifest = json.load(f)
+        
+        for run_entry in manifest.get("runs", []):
+            if run_entry['run_id'] == run_id and run_entry['framework'] == framework:
+                start_time_str = run_entry.get('start_time')
+                if start_time_str:
+                    start_time_dt = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                    start_timestamp = start_time_dt.timestamp()
+                    return time.time() - start_timestamp
+        return None
+    except Exception:
+        return None
 
 try:
     results = reconciler.reconcile_all_pending()
@@ -1009,18 +1043,39 @@ try:
         print()
         print("Run './reconcile_usage.sh --list --verbose' to see all runs")
     else:
-        print(f"Processed {{len(results)}} run(s):")
+        print(f"Processing {{len(results)}} run(s)...")
         print()
         
-        verified_count = sum(1 for r in results if r['status'] == 'verified')
-        pending_count = sum(1 for r in results if r['status'] == 'pending')
+        verified_count = 0
+        pending_count = 0
+        data_not_available_count = 0
         
-        for report in results:
-            status_icon = "✅" if report['status'] == 'verified' else "⏳"
-            short_id = report['run_id'][:8] if len(report['run_id']) > 8 else report['run_id']
-            print(f"{{status_icon}} {{report['framework']}}/{{short_id}}...")
+        for idx, report in enumerate(results, 1):
+            framework = report['framework']
+            run_id = report['run_id']
+            status = report['status']
+            short_id = run_id[:8] if len(run_id) > 8 else run_id
+            
+            # Get age
+            age_seconds = get_run_age(run_id, framework)
+            age_str = format_age(age_seconds) if age_seconds else "?"
+            
+            # Status icon and counter
+            if status == 'verified':
+                status_icon = "✅"
+                verified_count += 1
+            elif status == 'data_not_available':
+                status_icon = "⏳"
+                data_not_available_count += 1
+            else:
+                status_icon = "⏳"
+                pending_count += 1
+            
+            # Progress indicator
+            print(f"[{{idx}}/{{len(results)}}] {{status_icon}} {{framework}}/{{short_id}}... (age: {{age_str}})")
             print(f"   Tokens: {{report['total_tokens_in']:,}} in / {{report['total_tokens_out']:,}} out")
-            print(f"   Status: {{report['status']}}")
+            print(f"   Status: {{status}}")
+            
             msg = report.get('verification_message', '')
             if msg:
                 print(f"   {{msg}}")
@@ -1028,11 +1083,16 @@ try:
         
         print("─" * 60)
         print(f"Summary: {{verified_count}} verified, {{pending_count}} pending")
+        if data_not_available_count > 0:
+            print(f"         {{data_not_available_count}} waiting for Usage API data")
         print()
         
-        if pending_count > 0:
+        if pending_count > 0 or data_not_available_count > 0:
             print("⏳ Some runs are pending verification.")
             print("   Run this script again later to confirm data stability.")
+            if data_not_available_count > 0:
+                print()
+                print("💡 Tip: Usage API data typically available after 30-60 minutes")
         
 except Exception as e:
     print(f"❌ Error: {{e}}")
