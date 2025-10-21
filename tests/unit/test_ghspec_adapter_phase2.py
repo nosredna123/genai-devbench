@@ -66,46 +66,39 @@ class TestGHSpecAdapterPhase2:
         assert adapter.plan_md_path == feature_dir / "plan.md"
         assert adapter.tasks_md_path == feature_dir / "tasks.md"
     
-    @patch('subprocess.run')
-    @patch.object(GHSpecAdapter, 'verify_commit_hash')
+    @patch.object(GHSpecAdapter, 'get_shared_framework_path')
     def test_start_method_clones_and_verifies_repo(
-        self, mock_verify, mock_subprocess, adapter, temp_workspace
+        self, mock_get_framework, adapter, temp_workspace
     ):
-        """Test that start() clones repo, checks out commit, and verifies hash."""
-        # Mock successful subprocess calls
-        mock_subprocess.return_value = MagicMock(returncode=0)
-        mock_verify.return_value = None
+        """Test that start() references shared framework and creates workspace structure."""
+        # Create mock shared framework directory
+        mock_framework_dir = Path(temp_workspace) / "frameworks" / "ghspec"
+        mock_framework_dir.mkdir(parents=True, exist_ok=True)
+        mock_get_framework.return_value = mock_framework_dir
         
         # Call start()
         adapter.start()
         
-        # Verify git clone was called
-        clone_call = mock_subprocess.call_args_list[0]
-        assert clone_call[0][0][0] == 'git'
-        assert clone_call[0][0][1] == 'clone'
-        assert 'spec-kit.git' in clone_call[0][0][2]
+        # Verify get_shared_framework_path was called
+        mock_get_framework.assert_called_once_with('ghspec')
         
-        # Verify git checkout was called
-        checkout_call = mock_subprocess.call_args_list[1]
-        assert checkout_call[0][0][0] == 'git'
-        assert checkout_call[0][0][1] == 'checkout'
-        assert checkout_call[0][0][2] == '89f4b0b38a42996376c0f083d47281a4c9196761'
+        # Verify framework_dir is set to shared location
+        assert adapter.framework_dir == mock_framework_dir
         
-        # Verify commit hash verification was called
-        mock_verify.assert_called_once()
-        
-        # Verify framework_dir is set
-        assert adapter.framework_dir == Path(temp_workspace) / "ghspec_framework"
+        # Verify workspace structure was created
+        assert adapter.specs_dir.exists()
+        assert adapter.feature_dir.exists()
+        assert adapter.src_dir.exists()
     
-    @patch('subprocess.run')
-    @patch.object(GHSpecAdapter, 'verify_commit_hash')
+    @patch.object(GHSpecAdapter, 'get_shared_framework_path')
     def test_start_method_creates_workspace_structure(
-        self, mock_verify, mock_subprocess, adapter, temp_workspace
+        self, mock_get_framework, adapter, temp_workspace
     ):
         """Test that start() creates the complete workspace structure."""
-        # Mock successful subprocess calls
-        mock_subprocess.return_value = MagicMock(returncode=0)
-        mock_verify.return_value = None
+        # Create mock shared framework directory
+        mock_framework_dir = Path(temp_workspace) / "frameworks" / "ghspec"
+        mock_framework_dir.mkdir(parents=True, exist_ok=True)
+        mock_get_framework.return_value = mock_framework_dir
         
         # Call start()
         adapter.start()
@@ -119,31 +112,22 @@ class TestGHSpecAdapterPhase2:
         assert feature_dir.exists()
         assert src_dir.exists()
     
-    @patch('subprocess.run')
-    def test_start_method_handles_clone_failure(self, mock_subprocess, adapter):
-        """Test that start() raises RuntimeError when git clone fails."""
-        # Mock failed subprocess call
-        mock_subprocess.side_effect = subprocess.CalledProcessError(
-            returncode=1,
-            cmd=['git', 'clone'],
-            stderr=b'fatal: repository not found'
-        )
+    def test_start_method_handles_clone_failure(self, adapter):
+        """Test that start() raises RuntimeError when shared framework doesn't exist."""
+        # Don't mock get_shared_framework_path - let it fail naturally
+        # The framework directory won't exist, so it should raise RuntimeError
         
-        # Verify RuntimeError is raised (error message now comes from base adapter)
-        with pytest.raises(RuntimeError, match="Failed to setup ghspec repository"):
+        # Verify RuntimeError is raised with appropriate message
+        with pytest.raises(RuntimeError, match="GitHub Spec-kit initialization failed"):
             adapter.start()
     
-    @patch('subprocess.run')
-    def test_start_method_handles_timeout(self, mock_subprocess, adapter):
-        """Test that start() raises RuntimeError when git clone times out."""
-        # Mock timeout
-        mock_subprocess.side_effect = subprocess.TimeoutExpired(
-            cmd=['git', 'clone'],
-            timeout=120
-        )
+    def test_start_method_handles_timeout(self, adapter):
+        """Test that start() raises RuntimeError when shared framework is missing."""
+        # This test now verifies the error when framework directory doesn't exist
+        # (analogous to the timeout scenario - setup didn't complete successfully)
         
-        # Verify RuntimeError is raised (error message now comes from base adapter)
-        with pytest.raises(RuntimeError, match="ghspec repository setup timed out"):
+        # Verify RuntimeError is raised when framework not found
+        with pytest.raises(RuntimeError, match="GitHub Spec-kit initialization failed"):
             adapter.start()
     
     def test_workspace_structure_idempotent(self, adapter, temp_workspace):

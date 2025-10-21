@@ -1,0 +1,571 @@
+# Base Adapter Methods Contract
+# OpenAPI-style specification for new BaseAdapter methods
+# Date: October 21, 2025
+# Related: data-model.md, research.md
+
+version: "1.0"
+framework: genai-devbench
+component: BaseAdapter
+purpose: "Define generic methods for shared framework and workspace management"
+
+methods:
+  - name: setup_shared_venv
+    purpose: "Create or verify shared virtual environment for a framework"
+    visibility: protected
+    owner: BaseAdapter
+    
+    signature:
+      parameters:
+        - name: framework_name
+          type: str
+          required: true
+          description: "Framework identifier (baes, chatdev, ghspec)"
+          constraints:
+            - "Must match config.yaml framework key"
+            - "Must be alphanumeric + underscore only"
+        
+        - name: requirements_file
+          type: Path
+          required: true
+          description: "Path to requirements.txt relative to framework dir"
+          constraints:
+            - "File must exist in framework directory"
+            - "Must be readable"
+        
+        - name: timeout
+          type: int
+          required: false
+          default: 300
+          description: "Maximum seconds for venv creation (default: 5min)"
+          constraints:
+            - "Must be > 0"
+            - "Must be <= 3600 (1 hour)"
+      
+      returns:
+        type: Path
+        description: "Absolute path to created/verified venv directory"
+        example: "Path('/experiments/my-exp/frameworks/baes/.venv')"
+        constraints:
+          - "Path must exist"
+          - "Path/.venv/bin/python must exist and be executable"
+      
+      raises:
+        - exception: RuntimeError
+          condition: "Framework directory doesn't exist"
+          message: "Framework '{framework_name}' not found in frameworks/"
+        
+        - exception: RuntimeError
+          condition: "requirements.txt not found"
+          message: "Requirements file not found: {requirements_file}"
+        
+        - exception: TimeoutError
+          condition: "Venv creation exceeds timeout"
+          message: "Venv creation timeout after {timeout}s"
+        
+        - exception: subprocess.CalledProcessError
+          condition: "pip install fails"
+          message: "Failed to install requirements: {stderr}"
+        
+        - exception: OSError
+          condition: "Insufficient disk space"
+          message: "Insufficient disk space for venv creation"
+    
+    behavior:
+      preconditions:
+        - "Framework directory exists at self.experiment_root / 'frameworks' / framework_name"
+        - "Python3 is available in PATH"
+        - "Sufficient disk space (>1GB recommended)"
+      
+      postconditions:
+        - "Venv directory exists at frameworks/{framework_name}/.venv"
+        - "All requirements installed"
+        - "Python executable is functional"
+      
+      side_effects:
+        - "Creates .venv directory (~600MB for typical framework)"
+        - "Downloads Python packages from PyPI"
+        - "Writes pip cache to ~/.cache/pip"
+        - "Logs venv creation to logger.info"
+      
+      idempotency: true
+      description: "Safe to call multiple times - checks if venv exists before creating"
+    
+    implementation_notes:
+      algorithm: |
+        1. Check if frameworks/{framework_name}/.venv exists
+        2. If exists:
+           a. Verify .venv/bin/python is executable
+           b. Return venv path if valid
+        3. If not exists:
+           a. Run: python3 -m venv {venv_path} --clear
+           b. Run: {venv_path}/bin/pip install -r {requirements_file} --timeout {timeout}
+           c. Verify installation succeeded
+        4. Return venv path
+      
+      validation:
+        - "Verify venv_path/.venv/bin/python exists"
+        - "Verify venv_path/.venv/bin/python --version succeeds"
+        - "Verify all packages in requirements.txt are installed"
+      
+      error_handling:
+        - "Log all errors with traceback"
+        - "Clean up partial venv on failure (rm -rf .venv)"
+        - "Re-raise exception with context"
+      
+      performance:
+        - "First call: ~3-5 minutes (package installation)"
+        - "Subsequent calls: <1 second (venv exists check)"
+        - "Disk usage: ~600MB per framework venv"
+    
+    testing:
+      unit_tests:
+        - "test_setup_shared_venv_creates_new"
+        - "test_setup_shared_venv_idempotent"
+        - "test_setup_shared_venv_timeout"
+        - "test_setup_shared_venv_missing_requirements"
+      
+      integration_tests:
+        - "test_setup_shared_venv_concurrent_access"
+        - "test_setup_shared_venv_full_workflow"
+
+  - name: get_framework_python
+    purpose: "Get Python executable path from shared venv"
+    visibility: protected
+    owner: BaseAdapter
+    
+    signature:
+      parameters:
+        - name: framework_name
+          type: str
+          required: true
+          description: "Framework identifier (baes, chatdev, ghspec)"
+          constraints:
+            - "Must match config.yaml framework key"
+      
+      returns:
+        type: Path
+        description: "Absolute path to Python executable in shared venv"
+        example: "Path('/experiments/my-exp/frameworks/baes/.venv/bin/python')"
+        constraints:
+          - "Path must exist"
+          - "Path must be executable"
+      
+      raises:
+        - exception: RuntimeError
+          condition: "Framework venv doesn't exist"
+          message: "Venv not found for framework '{framework_name}'. Run setup_shared_venv first."
+        
+        - exception: RuntimeError
+          condition: "Python executable not found in venv"
+          message: "Python executable not found: {expected_path}"
+        
+        - exception: RuntimeError
+          condition: "Python executable not executable"
+          message: "Python executable not executable: {python_path}"
+    
+    behavior:
+      preconditions:
+        - "setup_shared_venv() has been called for this framework"
+        - "Venv exists at frameworks/{framework_name}/.venv"
+      
+      postconditions:
+        - "Returns valid Python executable path"
+        - "Path can be used with subprocess.run()"
+      
+      side_effects:
+        - "None (read-only operation)"
+      
+      idempotency: true
+      description: "Pure function - no state changes"
+    
+    implementation_notes:
+      algorithm: |
+        1. Get framework path from get_shared_framework_path(framework_name)
+        2. Construct python_path = framework_path / '.venv' / 'bin' / 'python'
+        3. Verify python_path.exists() and python_path.is_file()
+        4. Verify os.access(python_path, os.X_OK) for executable permission
+        5. Return python_path
+      
+      validation:
+        - "Verify path exists"
+        - "Verify path is file (not directory or symlink)"
+        - "Verify executable permission"
+      
+      error_handling:
+        - "Raise RuntimeError with clear message if validation fails"
+        - "Include expected path in error message for debugging"
+      
+      performance:
+        - "Execution time: <1ms (filesystem check only)"
+        - "No disk I/O except path validation"
+    
+    testing:
+      unit_tests:
+        - "test_get_framework_python_success"
+        - "test_get_framework_python_venv_missing"
+        - "test_get_framework_python_not_executable"
+
+  - name: create_workspace_structure
+    purpose: "Create run-specific workspace subdirectories"
+    visibility: protected
+    owner: BaseAdapter
+    
+    signature:
+      parameters:
+        - name: subdirs
+          type: list[str]
+          required: true
+          description: "List of subdirectory names to create in workspace"
+          constraints:
+            - "Must not be empty"
+            - "Names must be valid directory names (no /, no ..)"
+            - "Common values: ['managed_system', 'database', 'WareHouse']"
+        
+        - name: exist_ok
+          type: bool
+          required: false
+          default: true
+          description: "If True, don't error if directory already exists"
+      
+      returns:
+        type: dict[str, Path]
+        description: "Mapping of subdir names to absolute paths"
+        example: |
+          {
+            'managed_system': Path('.../workspace/managed_system'),
+            'database': Path('.../workspace/database')
+          }
+        constraints:
+          - "All returned paths must exist"
+          - "All paths must be writable"
+      
+      raises:
+        - exception: ValueError
+          condition: "subdirs list is empty"
+          message: "subdirs list cannot be empty"
+        
+        - exception: ValueError
+          condition: "Invalid subdir name (contains /)"
+          message: "Invalid subdirectory name: {name}"
+        
+        - exception: OSError
+          condition: "Failed to create directory"
+          message: "Failed to create directory {path}: {error}"
+        
+        - exception: PermissionError
+          condition: "Workspace path not writable"
+          message: "Workspace not writable: {workspace_path}"
+    
+    behavior:
+      preconditions:
+        - "self.workspace_path is set"
+        - "self.workspace_path is writable"
+      
+      postconditions:
+        - "All subdirectories exist"
+        - "All subdirectories are writable"
+        - "No other files/directories created"
+      
+      side_effects:
+        - "Creates directories on filesystem"
+        - "Sets directory permissions to 0o755"
+        - "Logs directory creation to logger.info"
+      
+      idempotency: true
+      description: "Safe to call multiple times if exist_ok=True"
+    
+    implementation_notes:
+      algorithm: |
+        1. Validate subdirs list (not empty, no invalid characters)
+        2. For each subdir in subdirs:
+           a. Construct path = self.workspace_path / subdir
+           b. Create directory: path.mkdir(parents=True, exist_ok=exist_ok)
+           c. Verify path.exists() and path.is_dir()
+           d. Add to result dict
+        3. Return result dict
+      
+      validation:
+        - "Verify all subdirs are valid directory names"
+        - "Verify workspace_path exists and is writable"
+        - "Verify created paths are directories"
+      
+      error_handling:
+        - "Raise ValueError for invalid input"
+        - "Raise OSError for filesystem errors"
+        - "Include full path in error messages"
+      
+      performance:
+        - "Execution time: <10ms per directory"
+        - "Disk I/O: One mkdir per subdir"
+    
+    testing:
+      unit_tests:
+        - "test_create_workspace_structure_success"
+        - "test_create_workspace_structure_empty_list"
+        - "test_create_workspace_structure_invalid_name"
+        - "test_create_workspace_structure_idempotent"
+      
+      integration_tests:
+        - "test_create_workspace_structure_permissions"
+
+  - name: get_shared_framework_path
+    purpose: "Get path to shared framework directory with backward compatibility"
+    visibility: protected
+    owner: BaseAdapter
+    
+    signature:
+      parameters:
+        - name: framework_name
+          type: str
+          required: true
+          description: "Framework identifier (baes, chatdev, ghspec)"
+          constraints:
+            - "Must match config.yaml framework key"
+      
+      returns:
+        type: Path
+        description: "Absolute path to framework directory"
+        example: "Path('/experiments/my-exp/frameworks/baes')"
+        constraints:
+          - "Path must exist"
+          - "Path must be directory"
+      
+      raises:
+        - exception: RuntimeError
+          condition: "Framework not found in shared or workspace location"
+          message: "Framework '{framework_name}' not found in frameworks/ or workspace/{framework_name}_framework/"
+    
+    behavior:
+      preconditions:
+        - "Framework has been set up (via setup_frameworks.py)"
+      
+      postconditions:
+        - "Returns valid framework directory path"
+        - "Path contains framework source code"
+      
+      side_effects:
+        - "Logs warning if using deprecated workspace location"
+      
+      idempotency: true
+      description: "Pure function - no state changes"
+    
+    implementation_notes:
+      algorithm: |
+        1. Try new location: self.experiment_root / 'frameworks' / framework_name
+        2. If exists and is_dir():
+           a. Return path
+        3. Try old location: self.workspace_path / f"{framework_name}_framework"
+        4. If exists and is_dir():
+           a. Log warning about deprecated location
+           b. Return path
+        5. Raise RuntimeError (framework not found)
+      
+      fallback_logic: |
+        # Enables backward compatibility with old experiments
+        # Old: workspace/baes_framework/
+        # New: frameworks/baes/
+        if not new_path.exists():
+            old_path = workspace / f"{name}_framework"
+            if old_path.exists():
+                return old_path  # Fallback for old experiments
+      
+      validation:
+        - "Verify path exists"
+        - "Verify path is directory"
+      
+      error_handling:
+        - "Raise RuntimeError with both checked paths in message"
+        - "Include framework_name for debugging"
+      
+      performance:
+        - "Execution time: <1ms (2 path.exists() checks)"
+        - "No disk I/O except path validation"
+    
+    testing:
+      unit_tests:
+        - "test_get_shared_framework_path_new_location"
+        - "test_get_shared_framework_path_old_location_fallback"
+        - "test_get_shared_framework_path_not_found"
+        - "test_get_shared_framework_path_logs_deprecation_warning"
+
+# Cross-Method Invariants
+invariants:
+  - name: "Framework Path Consistency"
+    description: "All methods use same framework path resolution"
+    rule: "get_shared_framework_path() MUST be single source of truth"
+    validation: "All framework path access goes through get_shared_framework_path()"
+  
+  - name: "Venv Isolation"
+    description: "Each framework has isolated venv"
+    rule: "Venvs MUST NOT share packages across frameworks"
+    validation: "Venv path is frameworks/{name}/.venv (unique per framework)"
+  
+  - name: "Workspace Isolation"
+    description: "Each run has isolated workspace"
+    rule: "Workspace paths MUST contain unique run_id"
+    validation: "self.workspace_path contains UUID"
+  
+  - name: "No Framework in Workspace"
+    description: "Workspace MUST NOT contain framework copy"
+    rule: "create_workspace_structure() MUST reject 'baes', 'chatdev', 'ghspec' as subdirs"
+    validation: "Raise ValueError if subdir matches framework name"
+
+# Usage Examples
+examples:
+  - name: "BAeSAdapter Complete Setup"
+    code: |
+      class BAeSAdapter(BaseAdapter):
+          def start(self):
+              # 1. Get shared framework path (read-only reference)
+              self.framework_dir = self.get_shared_framework_path('baes')
+              # frameworks/baes/
+              
+              # 2. Get Python from shared venv
+              self.python_path = self.get_framework_python('baes')
+              # frameworks/baes/.venv/bin/python
+              
+              # 3. Create workspace directories
+              workspace_dirs = self.create_workspace_structure([
+                  'managed_system',
+                  'database'
+              ])
+              self.managed_system_dir = workspace_dirs['managed_system']
+              self.database_dir = workspace_dirs['database']
+              
+              # 4. Set environment variables
+              os.environ['MANAGED_SYSTEM_PATH'] = str(self.managed_system_dir)
+              
+              logger.info(f"BAeSAdapter started with framework at {self.framework_dir}")
+  
+  - name: "setup_frameworks.py Integration"
+    code: |
+      # In templates/setup_frameworks.py
+      
+      def setup_venv_if_needed(framework_name: str, framework_path: Path, use_venv: bool):
+          if not use_venv:
+              logger.info(f"Skipping venv for {framework_name} (use_venv=false)")
+              return
+          
+          requirements_file = framework_path / "requirements.txt"
+          if not requirements_file.exists():
+              raise RuntimeError(f"requirements.txt not found: {requirements_file}")
+          
+          # Use BaseAdapter method (via adapter instance)
+          adapter = BaseAdapter(
+              experiment_root=experiment_root,
+              workspace_path=temp_workspace,  # Temporary
+              config={},
+              run_id=None
+          )
+          
+          try:
+              venv_path = adapter.setup_shared_venv(
+                  framework_name=framework_name,
+                  requirements_file=requirements_file,
+                  timeout=300
+              )
+              logger.info(f"✓ Venv created: {venv_path}")
+          except TimeoutError:
+              logger.error(f"✗ Venv creation timeout after 300s")
+              raise
+  
+  - name: "Backward Compatibility Check"
+    code: |
+      # During adapter initialization
+      
+      def __init__(self, ...):
+          # Try new location first
+          framework_path = self.get_shared_framework_path('baes')
+          
+          # This automatically falls back to old location if needed:
+          # 1. Checks: frameworks/baes/
+          # 2. Falls back to: workspace/baes_framework/
+          # 3. Logs warning if using old location
+          
+          if framework_path.parent.name == 'workspace':
+              logger.warning(
+                  f"Using deprecated workspace framework location. "
+                  f"Run setup_frameworks.py to migrate to shared location."
+              )
+
+# Testing Requirements
+testing:
+  unit_tests:
+    coverage_target: 90%
+    required_tests:
+      - "All success paths"
+      - "All error conditions"
+      - "Idempotency checks"
+      - "Backward compatibility"
+    
+    mocking:
+      - "Mock filesystem operations (mkdir, exists, is_file)"
+      - "Mock subprocess.run for venv creation"
+      - "Mock timeout behavior"
+  
+  integration_tests:
+    scenarios:
+      - "Full workflow: setup → start → execute"
+      - "Concurrent access to shared venv"
+      - "Old experiment compatibility"
+      - "Error recovery and cleanup"
+    
+    fixtures:
+      - "temp_experiment_root with frameworks/"
+      - "mock_config.yaml with use_venv flags"
+      - "mock_requirements.txt"
+
+# Migration Path
+migration:
+  phase: "Phase 2 Implementation"
+  dependencies:
+    - "data-model.md (defines entities)"
+    - "directory_structure.yaml (defines paths)"
+  
+  implementation_order:
+    1: "get_shared_framework_path() - foundation method"
+    2: "create_workspace_structure() - simple, no dependencies"
+    3: "setup_shared_venv() - complex, needs testing"
+    4: "get_framework_python() - depends on setup_shared_venv"
+  
+  adapter_refactor_order:
+    1: "BAeSAdapter (simplest, good test case)"
+    2: "GHSpecAdapter (no venv, simpler than ChatDev)"
+    3: "ChatDevAdapter (most complex, has patching)"
+
+# Performance Targets
+performance:
+  setup_shared_venv:
+    first_call: "3-5 minutes (pip install)"
+    subsequent_calls: "<1 second (exists check)"
+    disk_usage: "~600MB per framework"
+  
+  get_framework_python:
+    execution_time: "<1ms"
+    disk_io: "None"
+  
+  create_workspace_structure:
+    execution_time: "<10ms per directory"
+    disk_io: "One mkdir per subdirectory"
+  
+  get_shared_framework_path:
+    execution_time: "<1ms"
+    disk_io: "2 path.exists() checks"
+
+# Security Considerations
+security:
+  - name: "Path Traversal Prevention"
+    description: "Prevent ../../ attacks in subdirs parameter"
+    mitigation: "Validate subdir names contain no / or .."
+  
+  - name: "Subprocess Injection"
+    description: "Prevent command injection in venv creation"
+    mitigation: "Use subprocess.run with list args, not shell=True"
+  
+  - name: "Symlink Attacks"
+    description: "Prevent symlink-based attacks on venv"
+    mitigation: "Verify venv_path.is_file() (not is_symlink)"
+  
+  - name: "Disk Space Exhaustion"
+    description: "Prevent filling disk during venv creation"
+    mitigation: "Check available disk space before creation"

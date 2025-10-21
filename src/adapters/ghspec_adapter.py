@@ -38,19 +38,18 @@ class GHSpecAdapter(BaseAdapter):
         
     def start(self) -> None:
         """
-        Clone GitHub Spec-kit repository and setup workspace structure.
+        Initialize GitHub Spec-kit framework and setup workspace structure.
         
-        Phase 2 Implementation:
-        - Clone spec-kit repository from configured URL
-        - Checkout and verify specific commit hash
-        - Setup workspace directory structure for artifacts
+        REFACTORED: Uses shared framework instead of per-run clone.
+        - References shared frameworks/ghspec/ directory (read-only)
+        - Creates per-run workspace structure for artifacts
         - Initialize feature directory (specs/001-baes-experiment/)
         - GHSpec is CLI-based (bash scripts), no services to start
         
         The workspace will have this structure:
+            frameworks/ghspec/           # Shared framework (read-only)
             workspace_path/
-                ghspec_framework/        # Cloned spec-kit repo
-                specs/                   # Artifact storage
+                specs/                   # Artifact storage (per-run)
                     001-baes-experiment/ # Feature directory
                         spec.md          # Generated specification
                         plan.md          # Generated technical plan
@@ -60,27 +59,24 @@ class GHSpecAdapter(BaseAdapter):
         logger.info("Starting GitHub Spec-kit framework",
                    extra={'run_id': self.run_id, 'event': 'framework_start'})
         
-        repo_url = self.config['repo_url']
-        commit_hash = self.config['commit_hash']
-        
-        # Create framework directory for cloned repo
-        self.framework_dir = Path(self.workspace_path) / "ghspec_framework"
-        
-        # Use centralized framework setup method (DRY principle)
-        self.setup_framework_from_repo(
-            framework_name='ghspec',
-            target_dir=self.framework_dir,
-            repo_url=repo_url,
-            commit_hash=commit_hash,
-            timeout_clone=120
-        )
-        
         try:
-            logger.info("GitHub Spec-kit repository cloned and verified",
-                       extra={'run_id': self.run_id,
-                             'metadata': {'commit': commit_hash}})
+            # Reference shared framework (read-only) - NOT per-run clone
+            # setup_frameworks.py already cloned ghspec into frameworks/ghspec/
+            self.framework_dir = self.get_shared_framework_path('ghspec')
             
-            # Setup workspace directory structure for artifacts
+            # Validate framework exists
+            if not self.framework_dir.exists():
+                raise RuntimeError(
+                    f"Shared ghspec framework not found at {self.framework_dir}. "
+                    "Run setup_frameworks.py first."
+                )
+            
+            logger.info("Using shared GitHub Spec-kit framework",
+                       extra={'run_id': self.run_id,
+                             'metadata': {'framework_dir': str(self.framework_dir)}})
+            
+            # Create per-run workspace structure for artifacts
+            # This is writable and isolated per run
             self._setup_workspace_structure()
             
             # GHSpec is CLI-based (bash scripts + direct OpenAI API calls)
@@ -95,16 +91,11 @@ class GHSpecAdapter(BaseAdapter):
                                  'feature_dir': str(self.feature_dir)
                              }})
             
-        except subprocess.CalledProcessError as e:
+        except RuntimeError as e:
             logger.error("Failed to initialize GitHub Spec-kit",
                         extra={'run_id': self.run_id,
-                              'metadata': {'error': str(e),
-                                         'stderr': e.stderr.decode() if e.stderr else ''}})
+                              'metadata': {'error': str(e)}})
             raise RuntimeError("GitHub Spec-kit initialization failed") from e
-        except subprocess.TimeoutExpired as e:
-            logger.error("GitHub Spec-kit initialization timed out",
-                        extra={'run_id': self.run_id})
-            raise RuntimeError("GitHub Spec-kit initialization timed out") from e
     
     def _setup_workspace_structure(self) -> None:
         """

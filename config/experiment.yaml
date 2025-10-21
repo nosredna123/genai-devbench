@@ -29,6 +29,7 @@ frameworks:
     commit_hash: "52edb89997b4312ad27d8c54584d0a6c59940135"  # Has 'refusal' + 'audio' fixes; we patch 'annotations' at runtime (see .copilot/WHY_VITORFOL_FORK.md)
     api_port: 8001
     ui_port: 3001
+    use_venv: true
     api_key_env: "OPENAI_API_KEY_CHATDEV"
     
   ghspec:
@@ -36,6 +37,7 @@ frameworks:
     commit_hash: "89f4b0b38a42996376c0f083d47281a4c9196761"
     api_port: 8002
     ui_port: 3002
+    use_venv: false  # Node.js-based framework, no Python venv needed
     api_key_env: "OPENAI_API_KEY_GHSPEC"
 
 # Directory containing prompt files (step_1.txt through step_6.txt)

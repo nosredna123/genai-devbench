@@ -55,411 +55,51 @@ class ChatDevAdapter(BaseAdapter):
         
     def start(self) -> None:
         """
-        Initialize ChatDev framework environment.
+        Initialize ChatDev framework environment with shared resources.
         
-        Clones repository, sets up environment, starts services.
-        Implements T064: ChatDev Environment Setup.
+        Uses shared framework directory and venv (created during setup).
+        Patches are already applied during setup_frameworks.py.
         """
         logger.info("Starting ChatDev framework",
                    extra={'run_id': self.run_id, 'event': 'framework_start'})
         
-        # Clone repository
-        repo_url = self.config['repo_url']
-        commit_hash = self.config['commit_hash']
-        self.framework_dir = Path(self.workspace_path) / "chatdev_framework"
-        
-        # Use centralized framework setup method (DRY principle)
-        self.setup_framework_from_repo(
-            framework_name='chatdev',
-            target_dir=self.framework_dir,
-            repo_url=repo_url,
-            commit_hash=commit_hash
-        )
-        
         try:
-            logger.info("ChatDev repository cloned and verified",
-                       extra={'run_id': self.run_id, 
-                             'metadata': {'commit': commit_hash}})
+            # Get shared framework path (read-only reference)
+            self.framework_dir = self.get_shared_framework_path('chatdev')
+            logger.info(f"Using shared framework: {self.framework_dir}",
+                       extra={'run_id': self.run_id})
             
-            # T064: Set up virtual environment and install dependencies
-            self._setup_virtual_environment()
+            # Get shared Python executable from venv
+            self.python_path = self.get_framework_python('chatdev')
+            self.venv_path = self.framework_dir / '.venv'  # For compatibility
+            logger.info(f"Using framework Python: {self.python_path}",
+                       extra={'run_id': self.run_id})
             
-            # Apply compatibility patches for OpenAI API changes
-            self._patch_openai_compatibility()
-            self._patch_o1_model_support()
+            # Create workspace directories (ChatDev writes to WareHouse)
+            workspace_dirs = self.create_workspace_structure(['WareHouse'])
+            self.warehouse_dir = workspace_dirs['WareHouse']
             
-            # T065: ChatDev is CLI-based (no persistent services to start)
-            # Just verify that run.py exists
+            # NOTE: Patches (_patch_openai_compatibility, _patch_o1_model_support) 
+            # are now applied during setup_frameworks.py, NOT per-run.
+            # This avoids race conditions when multiple runs execute concurrently.
+            
+            # Verify ChatDev entry point exists
             run_py = self.framework_dir / "run.py"
             if not run_py.exists():
                 raise RuntimeError(f"ChatDev entry point not found: {run_py}")
             
             logger.info("ChatDev framework ready",
-                       extra={'run_id': self.run_id,
-                             'metadata': {'venv': str(self.venv_path),
-                                        'python': str(self.python_path)}})
+                       extra={
+                           'run_id': self.run_id,
+                           'framework_dir': str(self.framework_dir),
+                           'python': str(self.python_path),
+                           'workspace': str(Path(self.workspace_path))
+                       })
             
-        except subprocess.CalledProcessError as e:
+        except RuntimeError as e:
             logger.error("Failed to initialize ChatDev",
-                        extra={'run_id': self.run_id,
-                              'metadata': {'error': str(e), 
-                                         'stderr': e.stderr.decode() if e.stderr else ''}})
+                        extra={'run_id': self.run_id, 'metadata': {'error': str(e)}})
             raise RuntimeError("ChatDev initialization failed") from e
-        except subprocess.TimeoutExpired as e:
-            logger.error("ChatDev initialization timed out",
-                        extra={'run_id': self.run_id})
-            raise RuntimeError("ChatDev initialization timed out") from e
-    
-    def _setup_virtual_environment(self) -> None:
-        """
-        Create virtual environment and install ChatDev dependencies.
-        
-        Implements FR-002.1 steps 2-3: venv creation and dependency installation.
-        """
-        self.venv_path = self.framework_dir / ".venv"
-        
-        logger.info("Creating virtual environment",
-                   extra={'run_id': self.run_id,
-                         'metadata': {'path': str(self.venv_path)}})
-        
-        # Create virtual environment
-        try:
-            subprocess.run(
-                [sys.executable, "-m", "venv", str(self.venv_path)],
-                check=True,
-                capture_output=True,
-                stdin=subprocess.DEVNULL,
-                timeout=120
-            )
-        except subprocess.CalledProcessError as e:
-            logger.error("Failed to create virtual environment",
-                        extra={'run_id': self.run_id,
-                              'metadata': {'error': str(e)}})
-            raise RuntimeError("Virtual environment creation failed") from e
-        
-        # Determine Python and pip paths (platform-independent)
-        if sys.platform == "win32":
-            self.python_path = self.venv_path / "Scripts" / "python.exe"
-            pip_path = self.venv_path / "Scripts" / "pip.exe"
-        else:
-            self.python_path = self.venv_path / "bin" / "python"
-            pip_path = self.venv_path / "bin" / "pip"
-        
-        # Ensure paths are absolute
-        self.python_path = self.python_path.absolute()
-        pip_path = pip_path.absolute()
-        
-        # Verify Python is accessible
-        try:
-            result = subprocess.run(
-                [str(self.python_path), "--version"],
-                capture_output=True,
-                stdin=subprocess.DEVNULL,
-                text=True,
-                timeout=10
-            )
-            python_version = result.stdout.strip()
-            logger.info("Virtual environment created",
-                       extra={'run_id': self.run_id,
-                             'metadata': {'python_version': python_version}})
-        except Exception as e:
-            raise RuntimeError(f"Virtual environment Python not accessible: {e}") from e
-        
-        # Install dependencies from requirements.txt
-        logger.info("Installing ChatDev dependencies",
-                   extra={'run_id': self.run_id,
-                         'event': 'dependency_install_start'})
-        
-        requirements_file = self.framework_dir / "requirements.txt"
-        if not requirements_file.exists():
-            raise RuntimeError(f"Requirements file not found: {requirements_file}")
-        
-        try:
-            # Upgrade pip first and install build tools
-            # Note: setuptools>=67.0.0 required for Python 3.12 compatibility (pkgutil.ImpImporter removed)
-            logger.info("Upgrading pip and installing build tools (setuptools>=67.0.0, wheel)",
-                       extra={'run_id': self.run_id})
-            
-            result = subprocess.run(
-                [str(pip_path), "install", "--upgrade", "pip", "setuptools>=67.0.0", "wheel"],
-                capture_output=True,
-                stdin=subprocess.DEVNULL,
-                text=True,
-                timeout=120,
-                cwd=self.framework_dir
-            )
-            
-            if result.returncode != 0:
-                logger.error("Failed to upgrade pip and install build tools", 
-                           extra={'run_id': self.run_id, 'metadata': {'stderr': result.stderr[:1000]}})
-                raise RuntimeError(f"Failed to upgrade pip/setuptools: {result.stderr}")
-            
-            logger.info("Build tools installed successfully",
-                       extra={'run_id': self.run_id, 
-                             'metadata': {'stdout_tail': result.stdout.split('\n')[-5:]}})
-            
-            # CRITICAL FIX: Pin compatible versions BEFORE installing requirements
-            # - pydantic<2: ChatDev uses pydantic 1.x dataclasses
-            # - httpx<0.28: httpx 0.28+ removed 'proxies' parameter used by openai
-            # - openai<1.40: Newer versions include 'annotations' field that ChatDev doesn't support
-            # - numpy>=1.26.0: Python 3.12 requires numpy 1.26+ (older versions use removed distutils)
-            # - faiss-cpu>=1.8.0: Python 3.12 requires faiss-cpu 1.8.0+ (1.7.4 has no py312 wheel)
-            # - PyYAML>=6.0: Python 3.12 requires PyYAML 6.0+ (older versions have cython build issues)
-            logger.info("Pre-installing Python 3.12 compatible packages",
-                       extra={'run_id': self.run_id})
-            
-            result = subprocess.run(
-                [str(pip_path), "install", "-v", "pydantic<2", "httpx<0.28", "openai<1.40", 
-                 "numpy>=1.26.0", "faiss-cpu>=1.8.0", "PyYAML>=6.0"],
-                capture_output=True,
-                stdin=subprocess.DEVNULL,
-                text=True,
-                timeout=120,
-                cwd=self.framework_dir
-            )
-            
-            if result.returncode != 0:
-                logger.error("Pre-install failed", extra={'run_id': self.run_id,
-                           'metadata': {'stderr': result.stderr[:1000]}})
-                raise RuntimeError(f"Failed to pre-install compatible versions: {result.stderr}")
-            
-            logger.info("Pre-install successful",
-                       extra={'run_id': self.run_id,
-                             'metadata': {'stdout_tail': result.stdout[-500:] if result.stdout else ''}})
-            
-            # Now install requirements.txt WITHOUT incompatible packages (already installed compatible versions)
-            # Filter out these packages from requirements and install the rest
-            logger.info("Installing remaining requirements (skipping already-installed compatible packages)",
-                       extra={'run_id': self.run_id})
-            
-            # Read requirements and filter out incompatible packages
-            with open(requirements_file) as f:
-                requirements = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-            
-            # Filter out packages we've already installed with compatible versions
-            skip_packages = ['numpy', 'faiss-cpu', 'pyyaml']
-            filtered_requirements = [req for req in requirements 
-                                   if not any(req.lower().startswith(pkg) for pkg in skip_packages)]
-            
-            if filtered_requirements:
-                result = subprocess.run(
-                    [str(pip_path), "install"] + filtered_requirements,
-                    capture_output=True,
-                    stdin=subprocess.DEVNULL,
-                    text=True,
-                    timeout=600,
-                    cwd=self.framework_dir
-                )
-                
-                if result.returncode != 0:
-                    logger.error("Requirements install failed", extra={'run_id': self.run_id,
-                               'metadata': {'stderr': result.stderr[:1000]}})
-                    raise RuntimeError(f"Failed to install requirements: {result.stderr}")
-            
-            logger.info("Dependencies install successful",
-                       extra={'run_id': self.run_id})
-            
-            # Verify pydantic version (critical for ChatMessage compatibility)
-            verify_result = subprocess.run(
-                [str(pip_path), "show", "pydantic"],
-                capture_output=True,
-                stdin=subprocess.DEVNULL,
-                text=True,
-                timeout=10,
-                cwd=self.framework_dir
-            )
-            
-            pydantic_version = "unknown"
-            if verify_result.returncode == 0:
-                for line in verify_result.stdout.split('\n'):
-                    if line.startswith('Version:'):
-                        pydantic_version = line.split(':', 1)[1].strip()
-                        break
-            
-            logger.info("ChatDev dependencies installed successfully",
-                       extra={'run_id': self.run_id,
-                             'event': 'dependency_install_complete',
-                             'metadata': {'pydantic_version': pydantic_version}})
-            
-        except subprocess.TimeoutExpired:
-            raise RuntimeError("Dependency installation timed out after 10 minutes")
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Dependency installation failed: {e}") from e
-    
-    def _patch_openai_compatibility(self) -> None:
-        """
-        Apply compatibility patch for OpenAI API changes.
-        
-        OpenAI's API evolves faster than ChatDev's codebase. When new fields are added
-        to API responses (like 'audio' and 'annotations'), ChatDev's dataclasses fail
-        with "unexpected keyword argument" errors.
-        
-        This method applies the same fix pattern that ChatDev maintainers use
-        (see commit 52edb89 for the 'audio' field fix). We add 'annotations' field
-        following the same pattern.
-        
-        NOTE: This is a temporary compatibility layer. Ideally, ChatDev upstream
-        should be updated to handle new API fields, or we should use a fork that
-        already has these fixes.
-        """
-        chat_messages_file = self.framework_dir / "camel" / "messages" / "chat_messages.py"
-        
-        if not chat_messages_file.exists():
-            logger.warning("chat_messages.py not found, skipping compatibility patch",
-                          extra={'run_id': self.run_id,
-                                'metadata': {'expected_path': str(chat_messages_file)}})
-            return
-        
-        content = chat_messages_file.read_text()
-        
-        # Check if already patched
-        if 'annotations: object = None' in content:
-            logger.info("OpenAI compatibility patch already applied",
-                       extra={'run_id': self.run_id})
-            return
-        
-        # Add 'annotations' field after 'audio' field (following commit 52edb89 pattern)
-        old_line = '    audio: object = None'
-        new_lines = '    audio: object = None\n    annotations: object = None  # Compatibility patch for OpenAI API'
-        
-        if old_line in content:
-            patched_content = content.replace(old_line, new_lines)
-            occurrences = content.count(old_line)
-            
-            chat_messages_file.write_text(patched_content)
-            
-            logger.info("Applied OpenAI compatibility patch",
-                       extra={'run_id': self.run_id,
-                             'metadata': {'classes_patched': occurrences,
-                                        'field_added': 'annotations',
-                                        'file': str(chat_messages_file)}})
-        else:
-            logger.warning("Could not apply compatibility patch - 'audio' field not found",
-                          extra={'run_id': self.run_id,
-                                'metadata': {'file': str(chat_messages_file)}})
-    
-    def _patch_o1_model_support(self) -> None:
-        """
-        Add O1 and GPT-5 model support via runtime patching.
-        
-        ChatDev doesn't support these models yet. This method patches multiple files to add:
-        1. Model types to camel/typing.py
-        2. Token limits to model_backend.py and ecl/utils.py  
-        3. Pricing info to chatdev/statistics.py
-        4. CLI argument mapping in run.py
-        
-        Model Specifications:
-        - o1-preview: 128k context, $15/1M input, $60/1M output
-        - o1-mini: 128k context, $3/1M input, $12/1M output
-        - gpt-5-mini: $0.25/1M input, $2.00/1M output (cached: $0.025/1M)
-        
-        Note: O1 models don't support streaming, system messages, or temperature
-        """
-        patches_applied = []
-        
-        # Patch 1: Add O1 and GPT-5 models to ModelType enum in camel/typing.py
-        typing_file = self.framework_dir / "camel" / "typing.py"
-        if typing_file.exists():
-            content = typing_file.read_text()
-            if 'O1_MINI' not in content:
-                # Add after GPT_4O_MINI line
-                old_line = '    GPT_4O_MINI = "gpt-4o-mini"'
-                new_lines = '''    GPT_4O_MINI = "gpt-4o-mini"
-    O1_PREVIEW = "o1-preview"  # O1 model patch
-    O1_MINI = "o1-mini"  # O1 model patch
-    GPT_5_MINI = "gpt-5-mini"  # GPT-5 model patch'''
-                content = content.replace(old_line, new_lines)
-                typing_file.write_text(content)
-                patches_applied.append('camel/typing.py')
-        
-        # Patch 2: Add O1 and GPT-5 token limits to camel/model_backend.py
-        model_backend_file = self.framework_dir / "camel" / "model_backend.py"
-        if model_backend_file.exists():
-            content = model_backend_file.read_text()
-            if '"o1-mini"' not in content:
-                # Add to both num_max_token_map occurrences
-                old_map_entry = '"gpt-4o-mini": 16384, #100000'
-                new_map_entry = '''"gpt-4o-mini": 16384, #100000
-                "o1-preview": 128000,  # O1 model patch
-                "o1-mini": 128000,  # O1 model patch
-                "gpt-5-mini": 128000,  # GPT-5 model patch'''
-                content = content.replace(old_map_entry, new_map_entry)
-                model_backend_file.write_text(content)
-                patches_applied.append('camel/model_backend.py')
-        
-        # Patch 3: Add O1 and GPT-5 token limits to ecl/utils.py  
-        ecl_utils_file = self.framework_dir / "ecl" / "utils.py"
-        if ecl_utils_file.exists():
-            content = ecl_utils_file.read_text()
-            if '"o1-mini"' not in content:
-                old_map_entry = '"gpt-4o-mini": 16384, #100000'
-                new_map_entry = '''"gpt-4o-mini": 16384, #100000
-        "o1-preview": 128000,  # O1 model patch
-        "o1-mini": 128000,  # O1 model patch
-        "gpt-5-mini": 128000,  # GPT-5 model patch'''
-                content = content.replace(old_map_entry, new_map_entry)
-                ecl_utils_file.write_text(content)
-                patches_applied.append('ecl/utils.py')
-        
-        # Patch 4: Add O1 and GPT-5 pricing to chatdev/statistics.py
-        statistics_file = self.framework_dir / "chatdev" / "statistics.py"
-        if statistics_file.exists():
-            content = statistics_file.read_text()
-            if '"o1-mini"' not in content:
-                # Add to prompt_cost_map (input pricing per 1M tokens)
-                old_input = '"gpt-4o-mini": 0.00015,'
-                new_input = '''"gpt-4o-mini": 0.00015,
-        "o1-preview": 0.015,  # O1 model patch: $15/1M input
-        "o1-mini": 0.003,  # O1 model patch: $3/1M input
-        "gpt-5-mini": 0.00025,  # GPT-5 model patch: $0.25/1M input'''
-                content = content.replace(old_input, new_input)
-                
-                # Add to completion_cost_map (output pricing per 1M tokens)
-                old_output = '"gpt-4o-mini": 0.0006,'
-                new_output = '''"gpt-4o-mini": 0.0006,
-        "o1-preview": 0.060,  # O1 model patch: $60/1M output
-        "o1-mini": 0.012,  # O1 model patch: $12/1M output
-        "gpt-5-mini": 0.002,  # GPT-5 model patch: $2.00/1M output'''
-                content = content.replace(old_output, new_output)
-                
-                # Add to model type conversion
-                old_conversion = '                model_type = "gpt-4o-mini"'
-                new_conversion = '''                model_type = "gpt-4o-mini"
-            elif model_type == "O1_PREVIEW":  # O1 model patch
-                model_type = "o1-preview"
-            elif model_type == "O1_MINI":  # O1 model patch
-                model_type = "o1-mini"
-            elif model_type == "GPT_5_MINI":  # GPT-5 model patch
-                model_type = "gpt-5-mini"'''
-                content = content.replace(old_conversion, new_conversion)
-                
-                statistics_file.write_text(content)
-                patches_applied.append('chatdev/statistics.py')
-        
-        # Patch 5: Add O1 and GPT-5 to CLI argument mapping in run.py
-        run_file = self.framework_dir / "run.py"
-        if run_file.exists():
-            content = run_file.read_text()
-            if 'O1_MINI' not in content:
-                # Add to args2type mapping (skip help text to avoid syntax issues)
-                old_mapping = "            'GPT_4O_MINI': ModelType.GPT_4O_MINI,"
-                new_mapping = '''            'GPT_4O_MINI': ModelType.GPT_4O_MINI,
-            'O1_PREVIEW': ModelType.O1_PREVIEW,  # O1 model patch
-            'O1_MINI': ModelType.O1_MINI,  # O1 model patch
-            'GPT_5_MINI': ModelType.GPT_5_MINI,  # GPT-5 model patch'''
-                content = content.replace(old_mapping, new_mapping)
-                
-                run_file.write_text(content)
-                patches_applied.append('run.py')
-        
-        if patches_applied:
-            logger.info("Applied O1/GPT-5 model support patches",
-                       extra={'run_id': self.run_id,
-                             'metadata': {'files_patched': patches_applied,
-                                        'models_added': ['o1-preview', 'o1-mini', 'gpt-5-mini']}})
-        else:
-            logger.info("O1/GPT-5 model patches already applied or files not found",
-                       extra={'run_id': self.run_id})
     
     def _copy_artifacts(self, step_num: int, project_name: str) -> None:
         """

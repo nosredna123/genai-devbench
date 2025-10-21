@@ -48,29 +48,30 @@ class BAeSAdapter(BaseAdapter):
         self.current_step = 0
         
     def start(self) -> None:
+        """Initialize BAEs adapter with shared framework resources."""
         logger.info("Starting BAEs framework",
                    extra={'run_id': self.run_id, 'event': 'framework_start'})
         
-        self.framework_dir = Path(self.workspace_path) / "baes_framework"
-        self.managed_system_dir = Path(self.workspace_path) / "managed_system"
-        self.database_dir = Path(self.workspace_path) / "database"
-        
-        repo_url = self.config['repo_url']
-        commit_hash = self.config['commit_hash']  # Required for reproducibility
-        
-        # Use centralized framework setup method (DRY principle)
-        self.setup_framework_from_repo(
-            framework_name='baes',
-            target_dir=self.framework_dir,
-            repo_url=repo_url,
-            commit_hash=commit_hash
-        )
-        
         try:
-            logger.info("Setting up isolated virtual environment",
-                       extra={'run_id': self.run_id, 'event': 'venv_setup_start'})
-            self._setup_virtual_environment()
+            # Get shared framework path (read-only reference)
+            self.framework_dir = self.get_shared_framework_path('baes')
+            logger.info(f"Using shared framework: {self.framework_dir}",
+                       extra={'run_id': self.run_id})
             
+            # Get shared Python executable from venv
+            self.python_path = self.get_framework_python('baes')
+            logger.info(f"Using framework Python: {self.python_path}",
+                       extra={'run_id': self.run_id})
+            
+            # Create workspace directories (writable, run-specific)
+            workspace_dirs = self.create_workspace_structure([
+                'managed_system',
+                'database'
+            ])
+            self.managed_system_dir = workspace_dirs['managed_system']
+            self.database_dir = workspace_dirs['database']
+            
+            # Set environment variables
             os.environ['BAE_CONTEXT_STORE_PATH'] = str(self.database_dir / "context_store.json")
             os.environ['MANAGED_SYSTEM_PATH'] = str(self.managed_system_dir)
             os.environ['API_PORT'] = str(self.config.get('api_port', 8100))
@@ -89,80 +90,17 @@ class BAeSAdapter(BaseAdapter):
             logger.info("BAEs API key configured for token tracking",
                        extra={'run_id': self.run_id})
             
-            logger.info("BAEs framework ready", extra={'run_id': self.run_id})
+            logger.info("BAEs framework ready",
+                       extra={
+                           'run_id': self.run_id,
+                           'framework_dir': str(self.framework_dir),
+                           'python': str(self.python_path),
+                           'workspace': str(Path(self.workspace_path))
+                       })
             
-        except subprocess.CalledProcessError as e:
+        except RuntimeError as e:
             logger.error("Failed to initialize BAEs framework", extra={'run_id': self.run_id})
             raise RuntimeError(f"BAEs initialization failed: {e}") from e
-        except subprocess.TimeoutExpired as e:
-            logger.error("BAEs initialization timed out", extra={'run_id': self.run_id})
-            raise RuntimeError("BAEs initialization timed out") from e
-    
-    def _setup_virtual_environment(self) -> None:
-        self.venv_path = self.framework_dir / ".venv"
-        
-        logger.info("Creating virtual environment for BAEs",
-                   extra={'run_id': self.run_id})
-        
-        try:
-            subprocess.run(
-                [sys.executable, "-m", "venv", str(self.venv_path)],
-                check=True,
-                capture_output=True,
-                stdin=subprocess.DEVNULL,
-                timeout=120
-            )
-        except subprocess.CalledProcessError as e:
-            logger.error("Failed to create virtual environment", extra={'run_id': self.run_id})
-            raise RuntimeError(f"Virtual environment creation failed: {e}") from e
-        
-        if sys.platform == "win32":
-            self.python_path = self.venv_path / "Scripts" / "python.exe"
-            pip_path = self.venv_path / "Scripts" / "pip.exe"
-        else:
-            self.python_path = self.venv_path / "bin" / "python"
-            pip_path = self.venv_path / "bin" / "pip"
-        
-        self.python_path = self.python_path.absolute()
-        pip_path = pip_path.absolute()
-        
-        requirements_file = (self.framework_dir / "requirements.txt").absolute()
-        if not requirements_file.exists():
-            raise RuntimeError(f"Requirements file not found: {requirements_file}")
-        
-        try:
-            subprocess.run(
-                [str(pip_path), "install", "--upgrade", "pip", "setuptools>=67.0.0", "wheel"],
-                check=True,
-                capture_output=True,
-                stdin=subprocess.DEVNULL,
-                timeout=120,
-                cwd=self.framework_dir
-            )
-            
-            subprocess.run(
-                [str(pip_path), "install", "-r", str(requirements_file)],
-                check=True,
-                capture_output=True,
-                stdin=subprocess.DEVNULL,
-                timeout=300,
-                cwd=self.framework_dir
-            )
-            
-            logger.info("BAEs dependencies installed successfully", extra={'run_id': self.run_id})
-            
-        except subprocess.CalledProcessError as e:
-            stderr_output = e.stderr.decode() if e.stderr else 'No stderr output'
-            logger.error("Failed to install BAEs dependencies",
-                        extra={'run_id': self.run_id,
-                              'metadata': {
-                                  'error': str(e),
-                                  'stderr': stderr_output[:1000]  # First 1000 chars
-                              }})
-            raise RuntimeError(f"BAEs dependency installation failed: {e}\nStderr: {stderr_output[:500]}") from e
-        except subprocess.TimeoutExpired as exc:
-            logger.error("BAEs dependency installation timed out", extra={'run_id': self.run_id})
-            raise RuntimeError("BAEs dependency installation timed out") from exc
     
     @property
     def kernel(self):

@@ -1,0 +1,516 @@
+# Directory Structure Contract
+# Filesystem layout specification for workspace refactor
+# Date: October 21, 2025
+# Related: data-model.md, base_adapter_methods.yaml
+
+version: "1.0"
+framework: genai-devbench
+purpose: "Define canonical directory structure for experiments with shared frameworks"
+
+# Top-Level Structure
+experiment_root:
+  description: "Root directory for a complete experiment"
+  path_pattern: "<experiments_dir>/<experiment_name>/"
+  example: "/home/user/experiments/test-baes-chatdev/"
+  
+  required_items:
+    - name: "config.yaml"
+      type: file
+      purpose: "Experiment configuration"
+      mutability: immutable
+      size_estimate: "~2KB"
+    
+    - name: "main.py"
+      type: file
+      purpose: "Experiment execution entry point"
+      mutability: immutable
+      size_estimate: "~5KB"
+    
+    - name: "frameworks/"
+      type: directory
+      purpose: "Shared framework installations"
+      mutability: read-only-during-runs
+      size_estimate: "~1.3GB (all frameworks)"
+    
+    - name: "runs/"
+      type: directory
+      purpose: "Per-run workspaces and artifacts"
+      mutability: append-only
+      size_estimate: "~6MB per 6-run experiment"
+    
+    - name: "logs/"
+      type: directory
+      purpose: "Experiment-wide logging"
+      mutability: writable
+      size_estimate: "~1MB"
+  
+  optional_items:
+    - name: ".git/"
+      type: directory
+      purpose: "Git version control"
+    
+    - name: "README.md"
+      type: file
+      purpose: "Experiment documentation"
+
+# Shared Frameworks Directory
+frameworks:
+  description: "Shared framework installations (read-only during runs)"
+  path_pattern: "<experiment_root>/frameworks/"
+  purpose: "Single copy of framework code and venv, shared across all runs"
+  
+  constraints:
+    - "MUST exist before any runs start"
+    - "MUST be read-only during run execution"
+    - "MUST contain all frameworks listed in config.yaml"
+    - "MUST NOT be modified after setup"
+  
+  structure:
+    baes:
+      path: "frameworks/baes/"
+      size_estimate: "622MB"
+      contents:
+        - name: ".git/"
+          type: directory
+          purpose: "Git repository metadata"
+          size: "~3MB"
+        
+        - name: ".venv/"
+          type: directory
+          purpose: "Python virtual environment"
+          required: true
+          size: "~619MB"
+          structure:
+            - "bin/"
+            - "  python       # Python interpreter (symlink)"
+            - "  pip          # Package installer"
+            - "  activate     # Activation script"
+            - "lib/"
+            - "  python3.11/"
+            - "    site-packages/"
+            - "      pandas/     # 100MB"
+            - "      streamlit/  # 80MB"
+            - "      selenium/   # 60MB"
+            - "      ... (other packages)"
+            - "pyvenv.cfg     # Venv configuration"
+        
+        - name: "requirements.txt"
+          type: file
+          purpose: "Python dependencies"
+          size: "~1KB"
+        
+        - name: "baes/"
+          type: directory
+          purpose: "BAEs framework source code"
+          size: "~2MB"
+        
+        - name: "README.md"
+          type: file
+          purpose: "Framework documentation"
+      
+      validation:
+        - "frameworks/baes/.venv/bin/python MUST exist"
+        - "frameworks/baes/.venv/bin/python MUST be executable"
+        - "frameworks/baes/requirements.txt MUST exist"
+        - ".git directory MUST be on correct commit hash"
+    
+    chatdev:
+      path: "frameworks/chatdev/"
+      size_estimate: "650MB"
+      contents:
+        - name: ".git/"
+          type: directory
+          size: "~4MB"
+        
+        - name: ".venv/"
+          type: directory
+          purpose: "Python virtual environment"
+          required: true
+          size: "~646MB"
+          notes: "Slightly larger than BAEs (different dependencies)"
+        
+        - name: "requirements.txt"
+          type: file
+          size: "~1KB"
+        
+        - name: "camel/"
+          type: directory
+          purpose: "CAMEL framework (ChatDev dependency)"
+          size: "~2MB"
+          notes: "Contains patched files (typing.py)"
+        
+        - name: "chatdev/"
+          type: directory
+          purpose: "ChatDev framework source"
+          size: "~1MB"
+          notes: "Contains patched files (statistics.py)"
+        
+        - name: "ecl/"
+          type: directory
+          purpose: "ECL library"
+          notes: "Contains patched file (utils.py)"
+        
+        - name: "run.py"
+          type: file
+          purpose: "ChatDev entry point"
+          notes: "Patched for O1/GPT-5 support"
+      
+      patches_applied:
+        description: "5 files modified for O1/GPT-5 compatibility"
+        files:
+          - "camel/typing.py"
+          - "camel/model_backend.py"
+          - "ecl/utils.py"
+          - "chatdev/statistics.py"
+          - "run.py"
+        notes: "Patches applied during setup_frameworks.py, NOT per-run"
+      
+      validation:
+        - "frameworks/chatdev/.venv/bin/python MUST exist"
+        - "Patched files MUST contain expected modifications"
+        - "camel/typing.py MUST have ModelType.O1_PREVIEW"
+    
+    ghspec:
+      path: "frameworks/ghspec/"
+      size_estimate: "50MB"
+      contents:
+        - name: ".git/"
+          type: directory
+          size: "~2MB"
+        
+        - name: "node_modules/"
+          type: directory
+          purpose: "Node.js dependencies"
+          size: "~48MB"
+          notes: "NOT a Python venv"
+        
+        - name: "package.json"
+          type: file
+          purpose: "Node.js dependencies"
+        
+        - name: "src/"
+          type: directory
+          purpose: "GHSpec source code"
+        
+        - name: "README.md"
+          type: file
+      
+      notes:
+        - "NO .venv/ directory (Node.js project)"
+        - "use_venv: false in config.yaml"
+        - "Runs directly from framework directory"
+      
+      validation:
+        - "frameworks/ghspec/node_modules/ MUST exist"
+        - "frameworks/ghspec/package.json MUST exist"
+
+# Runs Directory
+runs:
+  description: "Per-run workspace and artifacts (writable)"
+  path_pattern: "<experiment_root>/runs/<framework_name>/<run_id>/"
+  purpose: "Isolated workspace for each run's generated artifacts"
+  
+  constraints:
+    - "Each run_id MUST be unique (UUID format)"
+    - "Runs MUST NOT contain framework copies"
+    - "Runs MUST be isolated (no cross-run file access)"
+    - "Runs are retained permanently (never deleted)"
+  
+  structure:
+    baes:
+      path_pattern: "runs/baes/<run_id>/"
+      size_estimate: "<1MB per run"
+      
+      contents:
+        - name: "workspace/"
+          type: directory
+          purpose: "Run-specific writable workspace"
+          structure:
+            managed_system:
+              path: "workspace/managed_system/"
+              purpose: "Generated application code"
+              size: "~500KB"
+              mutability: writable
+              contents_example:
+                - "app.py              # Main application"
+                - "models/"
+                - "  user.py           # Data models"
+                - "  product.py"
+                - "tests/"
+                - "  test_app.py       # Generated tests"
+                - "requirements.txt   # App dependencies"
+            
+            database:
+              path: "workspace/database/"
+              purpose: "Run-specific state and context"
+              size: "~50KB"
+              mutability: writable
+              contents_example:
+                - "context_store.json  # Execution context"
+                - "run_metadata.json   # Run information"
+        
+        - name: "metadata.json"
+          type: file
+          purpose: "Run metadata (timestamps, config)"
+          size: "~1KB"
+        
+        - name: "logs/"
+          type: directory
+          purpose: "Run-specific logs"
+          size: "~100KB"
+      
+      validation:
+        - "workspace/managed_system/ MUST exist"
+        - "workspace/database/ MUST exist"
+        - "workspace/ MUST NOT contain 'baes_framework/' directory"
+      
+      environment_variables:
+        - name: "MANAGED_SYSTEM_PATH"
+          value: "<run_workspace>/managed_system"
+          purpose: "Tell BAEs where to write generated code"
+        
+        - name: "BAE_CONTEXT_STORE_PATH"
+          value: "<run_workspace>/database/context_store.json"
+          purpose: "Execution context storage"
+    
+    chatdev:
+      path_pattern: "runs/chatdev/<run_id>/"
+      size_estimate: "<1MB per run"
+      
+      contents:
+        - name: "workspace/"
+          type: directory
+          structure:
+            WareHouse:
+              path: "workspace/WareHouse/"
+              purpose: "ChatDev generated projects"
+              size: "~800KB"
+              mutability: writable
+              contents_example:
+                - "ProjectName_DefaultOrganization_20231021123456/"
+                - "  main.py"
+                - "  manual.md"
+                - "  requirements.txt"
+                - "  ..."
+              notes: "ChatDev creates timestamped subdirectories"
+        
+        - name: "metadata.json"
+          type: file
+          size: "~1KB"
+        
+        - name: "logs/"
+          type: directory
+          size: "~150KB"
+      
+      validation:
+        - "workspace/WareHouse/ MUST exist"
+        - "workspace/ MUST NOT contain 'chatdev_framework/' directory"
+      
+      special_handling:
+        note: "ChatDev writes to framework_dir/WareHouse first, then copies to workspace"
+        workaround: "Create WareHouse symlink from workspace to framework temporary location"
+    
+    ghspec:
+      path_pattern: "runs/ghspec/<run_id>/"
+      size_estimate: "<500KB per run"
+      
+      contents:
+        - name: "workspace/"
+          type: directory
+          purpose: "Empty or minimal outputs"
+          notes: "GHSpec outputs to stdout/files, minimal workspace usage"
+        
+        - name: "metadata.json"
+          type: file
+        
+        - name: "logs/"
+          type: directory
+      
+      validation:
+        - "workspace/ MUST exist (even if empty)"
+        - "workspace/ MUST NOT contain 'ghspec_framework/' directory"
+
+# Disk Usage Summary
+disk_usage:
+  description: "Expected disk usage for typical experiment"
+  
+  per_experiment:
+    - component: "frameworks/baes/"
+      size: "622MB"
+      multiplier: 1
+      total: "622MB"
+    
+    - component: "frameworks/chatdev/"
+      size: "650MB"
+      multiplier: 1
+      total: "650MB"
+    
+    - component: "frameworks/ghspec/"
+      size: "50MB"
+      multiplier: 1
+      total: "50MB"
+    
+    - component: "config + scripts"
+      size: "10MB"
+      multiplier: 1
+      total: "10MB"
+    
+    subtotal_frameworks: "1,332MB"
+  
+  per_run:
+    - component: "BAEs workspace"
+      size: "550KB"
+      multiplier: 2
+      total: "1.1MB"
+    
+    - component: "ChatDev workspace"
+      size: "800KB"
+      multiplier: 2
+      total: "1.6MB"
+    
+    - component: "GHSpec workspace"
+      size: "400KB"
+      multiplier: 2
+      total: "0.8MB"
+    
+    subtotal_per_6_runs: "3.5MB"
+  
+  total_experiment:
+    old_architecture: "3,732MB (622MB × 6 runs)"
+    new_architecture: "1,335MB (622MB shared + 3.5MB runs)"
+    savings: "2,397MB (64% reduction)"
+    savings_per_run: "622MB → 0.6MB (99.8% reduction)"
+
+# Comparison: Old vs New Structure
+comparison:
+  old_structure:
+    description: "Pre-refactor: Framework copied to each run"
+    example: |
+      runs/baes/<run_id>/workspace/
+      ├── baes_framework/          ← Framework copy (622MB)
+      │   ├── .venv/               ← Venv copy
+      │   └── baes/                ← Source copy
+      ├── managed_system/          ← Artifacts (500KB)
+      └── database/                ← State (50KB)
+    
+    problems:
+      - "622MB duplicated per run"
+      - "5-minute venv creation per run"
+      - "Framework and artifacts mixed in workspace"
+  
+  new_structure:
+    description: "Post-refactor: Shared framework, isolated artifacts"
+    example: |
+      frameworks/baes/             ← Shared (622MB, one copy)
+      ├── .venv/
+      └── baes/
+      
+      runs/baes/<run_id>/workspace/
+      ├── managed_system/          ← Only artifacts (500KB)
+      └── database/                ← Only state (50KB)
+    
+    benefits:
+      - "99.8% disk reduction per run"
+      - "Instant run startup (no venv creation)"
+      - "Clear separation: shared vs. run-specific"
+
+# Migration Path
+migration:
+  backward_compatibility:
+    description: "Support both old and new structures simultaneously"
+    
+    fallback_logic: |
+      # In BaseAdapter.get_shared_framework_path()
+      
+      new_path = experiment_root / "frameworks" / framework_name
+      if new_path.exists():
+          return new_path  # Use new shared location
+      
+      old_path = workspace_path / f"{framework_name}_framework"
+      if old_path.exists():
+          logger.warning(f"Using deprecated workspace framework: {old_path}")
+          return old_path  # Fallback for old experiments
+      
+      raise RuntimeError(f"Framework '{framework_name}' not found")
+    
+    transition_period:
+      - "Old experiments: Continue working unchanged"
+      - "New experiments: Use shared frameworks/ directory"
+      - "No migration required: Fallback logic handles both"
+    
+    deprecation_timeline:
+      - "Phase 1: Add shared framework support (this refactor)"
+      - "Phase 2: Mark old structure as deprecated (warnings logged)"
+      - "Phase 3: (Future) Remove old structure support"
+
+# Validation Rules
+validation:
+  at_setup:
+    - "frameworks/ directory MUST exist"
+    - "All frameworks in config.yaml MUST have frameworks/<name>/"
+    - "Python venvs MUST exist if use_venv=true"
+    - "Node.js modules MUST exist for GHSpec"
+  
+  at_run_start:
+    - "Workspace path MUST be writable"
+    - "Workspace MUST NOT contain framework name in subdirs"
+    - "run_id MUST be unique"
+  
+  at_run_end:
+    - "Workspace MUST contain expected subdirectories"
+    - "Artifacts MUST be written to workspace"
+    - "Framework directory MUST be unchanged"
+
+# Security Constraints
+security:
+  file_permissions:
+    frameworks:
+      mode: "0755 (read-execute)"
+      owner: "user"
+      notes: "Read-only to prevent accidental modification"
+    
+    workspace:
+      mode: "0755 (read-write-execute)"
+      owner: "user"
+      notes: "Writable for artifact generation"
+  
+  path_validation:
+    - "MUST validate no ../ in paths"
+    - "MUST validate paths are under experiment_root"
+    - "MUST reject absolute paths in subdirs"
+  
+  isolation:
+    - "Runs MUST NOT access other runs' workspaces"
+    - "Runs MUST NOT modify shared frameworks"
+    - "Venvs MUST be read-only during execution"
+
+# Testing Requirements
+testing:
+  filesystem_tests:
+    - "Test directory creation"
+    - "Test path resolution"
+    - "Test fallback logic for old structure"
+    - "Test workspace isolation"
+  
+  integration_tests:
+    - "Test full setup → run workflow"
+    - "Test concurrent runs with shared venv"
+    - "Test disk usage matches estimates"
+  
+  validation_tests:
+    - "Test all validation rules enforced"
+    - "Test security constraints enforced"
+
+# Documentation References
+references:
+  - name: "data-model.md"
+    purpose: "Entity definitions and relationships"
+  
+  - name: "base_adapter_methods.yaml"
+    purpose: "Method contracts for path resolution"
+  
+  - name: "research.md"
+    purpose: "Venv safety and workspace requirements"
+  
+  - name: "SHARED_FRAMEWORK_VENV_DESIGN.md"
+    purpose: "Original design proposal"

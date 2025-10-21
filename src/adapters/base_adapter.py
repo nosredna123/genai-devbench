@@ -277,6 +277,325 @@ class BaseAdapter(ABC):
             logger.error(error_msg, extra={'run_id': self.run_id})
             raise RuntimeError(error_msg) from e
     
+    def get_shared_framework_path(self, framework_name: str) -> Path:
+        """
+        Get path to shared framework directory with backward compatibility.
+        
+        This method implements a fallback pattern to support both new (shared frameworks/)
+        and old (workspace-local) directory structures, ensuring backward compatibility.
+        
+        Priority order:
+        1. New location: <experiment_root>/frameworks/<framework_name>/
+        2. Old location: <workspace>/workspace/<framework_name>_framework/ (deprecated)
+        
+        Args:
+            framework_name: Framework identifier (baes, chatdev, ghspec)
+            
+        Returns:
+            Path to framework directory (absolute)
+            
+        Raises:
+            RuntimeError: If framework not found in either location
+            
+        Example:
+            >>> adapter.get_shared_framework_path('baes')
+            Path('/experiments/my-exp/frameworks/baes')
+        """
+        # Try new shared location first
+        shared_path = Path('frameworks') / framework_name
+        if shared_path.exists() and shared_path.is_dir():
+            logger.debug(
+                f"Using shared framework: {shared_path}",
+                extra={'run_id': self.run_id, 'framework': framework_name}
+            )
+            return shared_path.resolve()
+        
+        # Fallback to old workspace location (deprecated)
+        workspace_base = Path(self.workspace_path).parent.parent / "workspace"
+        old_path = workspace_base / f"{framework_name}_framework"
+        if old_path.exists() and old_path.is_dir():
+            logger.warning(
+                f"Using deprecated workspace framework location: {old_path}. "
+                f"Run setup_frameworks.py to migrate to shared location.",
+                extra={'run_id': self.run_id, 'framework': framework_name}
+            )
+            return old_path.resolve()
+        
+        # Framework not found in either location
+        error_msg = (
+            f"Framework '{framework_name}' not found. Checked:\n"
+            f"  - Shared location: {shared_path.resolve()}\n"
+            f"  - Old location: {old_path.resolve()}\n"
+            f"Run 'python templates/setup_frameworks.py' to set up frameworks."
+        )
+        logger.error(error_msg, extra={'run_id': self.run_id, 'framework': framework_name})
+        raise RuntimeError(error_msg)
+    
+    def get_framework_python(self, framework_name: str) -> Path:
+        """
+        Get Python executable path from shared virtual environment.
+        
+        This method returns the Python interpreter from the framework's shared venv,
+        which is created during setup and reused across all runs.
+        
+        Args:
+            framework_name: Framework identifier (baes, chatdev, ghspec)
+            
+        Returns:
+            Path to Python executable (absolute)
+            
+        Raises:
+            RuntimeError: If venv doesn't exist or Python not executable
+            
+        Example:
+            >>> adapter.get_framework_python('baes')
+            Path('/experiments/my-exp/frameworks/baes/.venv/bin/python')
+        """
+        framework_path = self.get_shared_framework_path(framework_name)
+        python_path = framework_path / '.venv' / 'bin' / 'python'
+        
+        # Validate Python executable exists
+        if not python_path.exists():
+            error_msg = (
+                f"Python executable not found: {python_path}\n"
+                f"Venv may not be set up. Run 'python templates/setup_frameworks.py'."
+            )
+            logger.error(error_msg, extra={'run_id': self.run_id, 'framework': framework_name})
+            raise RuntimeError(error_msg)
+        
+        # Validate it's a file (not directory or broken symlink)
+        if not python_path.is_file():
+            error_msg = f"Python path exists but is not a file: {python_path}"
+            logger.error(error_msg, extra={'run_id': self.run_id, 'framework': framework_name})
+            raise RuntimeError(error_msg)
+        
+        # Validate it's executable
+        if not os.access(python_path, os.X_OK):
+            error_msg = f"Python executable lacks execute permission: {python_path}"
+            logger.error(error_msg, extra={'run_id': self.run_id, 'framework': framework_name})
+            raise RuntimeError(error_msg)
+        
+        logger.debug(
+            f"Using framework Python: {python_path}",
+            extra={'run_id': self.run_id, 'framework': framework_name}
+        )
+        return python_path.resolve()
+    
+    def create_workspace_structure(self, subdirs: list[str], exist_ok: bool = True) -> Dict[str, Path]:
+        """
+        Create run-specific workspace subdirectories.
+        
+        This method creates isolated directories for run artifacts, ensuring each run
+        writes to its own workspace without interfering with other runs.
+        
+        Args:
+            subdirs: List of subdirectory names to create (e.g., ['managed_system', 'database'])
+            exist_ok: If True, don't error if directories already exist (default: True)
+            
+        Returns:
+            Dictionary mapping subdir names to absolute paths
+            
+        Raises:
+            ValueError: If subdirs is empty or contains invalid names
+            OSError: If directory creation fails
+            PermissionError: If workspace not writable
+            
+        Example:
+            >>> adapter.create_workspace_structure(['managed_system', 'database'])
+            {
+                'managed_system': Path('/runs/baes/uuid/workspace/managed_system'),
+                'database': Path('/runs/baes/uuid/workspace/database')
+            }
+        """
+        # Validate subdirs list
+        if not subdirs:
+            error_msg = "subdirs list cannot be empty"
+            logger.error(error_msg, extra={'run_id': self.run_id})
+            raise ValueError(error_msg)
+        
+        # Validate workspace path is writable
+        workspace_path = Path(self.workspace_path)
+        if not os.access(workspace_path, os.W_OK):
+            error_msg = f"Workspace not writable: {workspace_path}"
+            logger.error(error_msg, extra={'run_id': self.run_id})
+            raise PermissionError(error_msg)
+        
+        result = {}
+        for subdir in subdirs:
+            # Validate subdir name (no path traversal)
+            if '/' in subdir or '\\' in subdir or '..' in subdir:
+                error_msg = f"Invalid subdirectory name (contains path separators): {subdir}"
+                logger.error(error_msg, extra={'run_id': self.run_id})
+                raise ValueError(error_msg)
+            
+            # Prevent framework names as subdirs (would break isolation)
+            if subdir in ['baes', 'chatdev', 'ghspec'] or subdir.endswith('_framework'):
+                error_msg = (
+                    f"Invalid subdirectory name '{subdir}': cannot use framework names. "
+                    f"Workspace should only contain artifacts, not framework copies."
+                )
+                logger.error(error_msg, extra={'run_id': self.run_id})
+                raise ValueError(error_msg)
+            
+            # Create directory
+            dir_path = workspace_path / subdir
+            try:
+                dir_path.mkdir(parents=True, exist_ok=exist_ok)
+                logger.debug(
+                    f"Created workspace directory: {dir_path}",
+                    extra={'run_id': self.run_id, 'subdir': subdir}
+                )
+                result[subdir] = dir_path.resolve()
+            except OSError as e:
+                error_msg = f"Failed to create directory {dir_path}: {e}"
+                logger.error(error_msg, extra={'run_id': self.run_id})
+                raise OSError(error_msg) from e
+        
+        logger.info(
+            f"Workspace structure created: {len(result)} directories",
+            extra={'run_id': self.run_id, 'subdirs': list(result.keys())}
+        )
+        return result
+    
+    def setup_shared_venv(
+        self,
+        framework_name: str,
+        requirements_file: Path,
+        timeout: int = 300
+    ) -> Path:
+        """
+        Create or verify shared virtual environment for a framework.
+        
+        This method is IDEMPOTENT: safe to call multiple times. If venv already exists
+        and is valid, it returns immediately. Otherwise, it creates a fresh venv.
+        
+        This method is typically called by templates/setup_frameworks.py during
+        experiment setup, not by adapters during runtime.
+        
+        Args:
+            framework_name: Framework identifier (baes, chatdev, ghspec)
+            requirements_file: Path to requirements.txt (relative to framework dir)
+            timeout: Maximum seconds for venv creation (default: 300 = 5 minutes)
+            
+        Returns:
+            Path to venv directory (absolute)
+            
+        Raises:
+            RuntimeError: If framework directory doesn't exist
+            RuntimeError: If requirements.txt not found
+            TimeoutError: If venv creation exceeds timeout
+            subprocess.CalledProcessError: If pip install fails
+            OSError: If insufficient disk space
+            
+        Example:
+            >>> adapter.setup_shared_venv('baes', Path('requirements.txt'), timeout=600)
+            Path('/experiments/my-exp/frameworks/baes/.venv')
+        """
+        # Get framework directory
+        try:
+            framework_path = self.get_shared_framework_path(framework_name)
+        except RuntimeError as e:
+            error_msg = f"Cannot setup venv: {e}"
+            logger.error(error_msg, extra={'run_id': self.run_id, 'framework': framework_name})
+            raise RuntimeError(error_msg) from e
+        
+        # Validate requirements file exists
+        if not requirements_file.is_absolute():
+            requirements_file = framework_path / requirements_file
+        
+        if not requirements_file.exists():
+            error_msg = f"Requirements file not found: {requirements_file}"
+            logger.error(error_msg, extra={'run_id': self.run_id, 'framework': framework_name})
+            raise RuntimeError(error_msg)
+        
+        venv_path = framework_path / '.venv'
+        python_path = venv_path / 'bin' / 'python'
+        
+        # Check if venv already exists and is valid
+        if python_path.exists() and os.access(python_path, os.X_OK):
+            logger.info(
+                f"Venv already exists for {framework_name}: {venv_path}",
+                extra={'run_id': self.run_id, 'framework': framework_name}
+            )
+            return venv_path.resolve()
+        
+        # Create venv
+        logger.info(
+            f"Creating venv for {framework_name}: {venv_path}",
+            extra={'run_id': self.run_id, 'framework': framework_name, 'timeout': timeout}
+        )
+        
+        try:
+            # Step 1: Create venv with --clear (remove if partially created)
+            subprocess.run(
+                ['python3', '-m', 'venv', str(venv_path), '--clear'],
+                check=True,
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+                timeout=60  # Venv creation is fast
+            )
+            logger.debug(
+                f"Venv structure created: {venv_path}",
+                extra={'run_id': self.run_id, 'framework': framework_name}
+            )
+            
+            # Step 2: Install requirements with pip
+            logger.info(
+                f"Installing requirements from {requirements_file}",
+                extra={'run_id': self.run_id, 'framework': framework_name}
+            )
+            pip_result = subprocess.run(
+                [
+                    str(python_path), '-m', 'pip', 'install',
+                    '-r', str(requirements_file),
+                    '--timeout', str(timeout)
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                stdin=subprocess.DEVNULL,
+                timeout=timeout
+            )
+            
+            logger.info(
+                f"Venv created successfully for {framework_name}",
+                extra={
+                    'run_id': self.run_id,
+                    'framework': framework_name,
+                    'venv_path': str(venv_path),
+                    'requirements': str(requirements_file)
+                }
+            )
+            return venv_path.resolve()
+            
+        except subprocess.TimeoutExpired as e:
+            # Clean up partial venv
+            if venv_path.exists():
+                shutil.rmtree(venv_path, ignore_errors=True)
+            
+            error_msg = f"Venv creation timeout after {timeout}s for {framework_name}"
+            logger.error(error_msg, extra={'run_id': self.run_id, 'framework': framework_name})
+            raise TimeoutError(error_msg) from e
+            
+        except subprocess.CalledProcessError as e:
+            # Clean up partial venv
+            if venv_path.exists():
+                shutil.rmtree(venv_path, ignore_errors=True)
+            
+            stderr = e.stderr.decode() if isinstance(e.stderr, bytes) else str(e.stderr)
+            error_msg = f"Failed to install requirements for {framework_name}: {stderr}"
+            logger.error(error_msg, extra={'run_id': self.run_id, 'framework': framework_name})
+            raise subprocess.CalledProcessError(e.returncode, e.cmd, e.output, stderr) from e
+            
+        except OSError as e:
+            # Clean up partial venv
+            if venv_path.exists():
+                shutil.rmtree(venv_path, ignore_errors=True)
+            
+            error_msg = f"OS error creating venv for {framework_name}: {e}"
+            logger.error(error_msg, extra={'run_id': self.run_id, 'framework': framework_name})
+            raise OSError(error_msg) from e
+    
     @abstractmethod
     def start(self) -> None:
         """
