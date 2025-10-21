@@ -9,8 +9,14 @@ from src.orchestrator.runner import OrchestratorRunner
 from src.orchestrator.config_loader import load_config
 from src.orchestrator.manifest_manager import find_runs
 from src.utils.logger import get_logger
+from src.utils.isolation import generate_run_id
 
 logger = get_logger(__name__)
+
+
+def _timestamp():
+    """Get current timestamp string."""
+    return datetime.now().strftime("%H:%M:%S")
 
 
 def main():
@@ -64,6 +70,9 @@ def main():
         print(f"  Model:      {model}")
         print(f"  Frameworks: {', '.join(enabled_frameworks)}")
         print(f"  Max runs:   {max_runs} per framework")
+        print(f"  Started:    {_timestamp()}")
+        print("=" * 60)
+        print(f"  💡 Full logs: runs/<framework>/<run_id>/logs/run.log")
         print("=" * 60)
         print()
         
@@ -78,7 +87,7 @@ def main():
             
             logger.info(f"Starting {framework_name} runs")
             
-            print(f"[{idx}/{len(enabled_frameworks)}] Framework: {framework_name.upper()}")
+            print(f"[{idx}/{len(enabled_frameworks)}] Framework: {framework_name.upper()} [{_timestamp()}]")
             
             if existing_count >= max_runs:
                 logger.info(f"{framework_name} already has {existing_count}/{max_runs} runs, skipping")
@@ -99,21 +108,23 @@ def main():
             framework_results = []
             for run_num in range(existing_count + 1, max_runs + 1):
                 run_start = time.time()
-                print(f"      → Run {run_num}/{max_runs}...", end=" ", flush=True)
+                run_id = generate_run_id()
+                print(f"      → Run {run_num}/{max_runs} | ID: {run_id} | {_timestamp()}")
                 
-                logger.info(f"Running {framework_name} - run {run_num}/{max_runs}")
+                logger.info(f"Running {framework_name} - run {run_num}/{max_runs} | Run ID: {run_id}")
                 
                 runner = OrchestratorRunner(
                     framework_name=framework_name,
                     config_path=str(config_path),
-                    experiment_name=experiment_name
+                    experiment_name=experiment_name,
+                    run_id=run_id
                 )
                 
                 result = runner.execute_single_run()
                 framework_results.append(result)
                 
                 run_time = time.time() - run_start
-                print(f"✓ ({run_time:.1f}s)")
+                print(f"      ✓ Completed in {run_time:.1f}s [{_timestamp()}]")
             
             all_results[framework_name] = framework_results
             print()
@@ -124,10 +135,11 @@ def main():
         
         # Print summary
         print("=" * 60)
-        print(f"  ✅ Experiment Complete!")
+        print("  ✅ Experiment Complete!")
         print("=" * 60)
-        print(f"  Total time:   {total_time:.1f}s ({total_time/60:.1f} minutes)")
-        print(f"  Results dir:  {Path('runs').absolute()}")
+        print(f"  Finished:   {_timestamp()}")
+        print(f"  Duration:   {total_time:.1f}s ({total_time/60:.1f} minutes)")
+        print(f"  Results:    {Path('runs').absolute()}")
         print("=" * 60)
         print()
         

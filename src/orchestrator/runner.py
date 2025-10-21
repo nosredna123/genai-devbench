@@ -47,7 +47,8 @@ class OrchestratorRunner:
         self,
         framework_name: str,
         config_path: str = "config/experiment.yaml",
-        experiment_name: Optional[str] = None
+        experiment_name: Optional[str] = None,
+        run_id: Optional[str] = None
     ):
         """
         Initialize orchestrator runner.
@@ -56,6 +57,7 @@ class OrchestratorRunner:
             framework_name: Name of framework (baes, chatdev, ghspec)
             config_path: Path to experiment configuration
             experiment_name: Name of experiment (optional, for multi-experiment support)
+            run_id: Pre-generated run ID (optional, will generate if not provided)
         """
         self.framework_name = framework_name
         self.config_path = config_path
@@ -66,7 +68,7 @@ class OrchestratorRunner:
         self.validator = None
         self.archiver = None
         self.workspace_path = None
-        self.run_id = None
+        self.run_id = run_id  # Use provided run_id or generate later
         self.step_timeout_occurred = False
         self.hitl_log_path = None
         
@@ -239,9 +241,10 @@ class OrchestratorRunner:
             # Set deterministic seeds for reproducibility (T037)
             set_deterministic_seeds(self.config['random_seed'])
             
-            # Generate run ID and create isolated workspace
+            # Generate run ID if not provided, and create isolated workspace
             from src.utils.isolation import generate_run_id
-            self.run_id = generate_run_id()
+            if self.run_id is None:
+                self.run_id = generate_run_id()
             run_dir, workspace_dir = create_isolated_workspace(
                 self.framework_name,
                 self.run_id,
