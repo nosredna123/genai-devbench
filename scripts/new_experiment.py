@@ -144,6 +144,51 @@ def validate_frameworks(frameworks: List[str]) -> None:
 # Configuration Generation
 # =============================================================================
 
+def load_base_config() -> Dict[str, Any]:
+    """
+    Load complete base configuration from config/experiment.yaml.
+    
+    This ensures ALL configuration (frameworks, timeouts, pricing, metrics, etc.)
+    is loaded dynamically from the single source of truth, avoiding hardcoded
+    values that can become stale.
+    
+    Returns:
+        Complete base configuration dictionary
+        
+    Raises:
+        ExperimentCreationError: If base config cannot be loaded
+    """
+    base_config_path = Path(__file__).parent.parent / "config" / "experiment.yaml"
+    
+    if not base_config_path.exists():
+        raise ExperimentCreationError(
+            f"Base experiment config not found: {base_config_path}"
+        )
+    
+    try:
+        with open(base_config_path, 'r', encoding='utf-8') as f:
+            base_config = yaml.safe_load(f)
+        
+        # Validate required sections
+        required_sections = ['frameworks', 'stopping_rule', 'timeouts']
+        for section in required_sections:
+            if section not in base_config:
+                raise ExperimentCreationError(
+                    f"Base experiment config missing required section: '{section}'"
+                )
+        
+        return base_config
+        
+    except yaml.YAMLError as e:
+        raise ExperimentCreationError(
+            f"Failed to parse base experiment config: {e}"
+        )
+    except Exception as e:
+        raise ExperimentCreationError(
+            f"Failed to load base experiment config: {e}"
+        )
+
+
 def load_template_config(template_path: Path) -> Dict[str, Any]:
     """
     Load configuration from template experiment.
@@ -207,88 +252,34 @@ def generate_config(
             config['frameworks'][fw_name]['enabled'] = fw_name in frameworks
     
     else:
-        # Generate from scratch
-        # Set min_runs intelligently: min(5, max_runs) to avoid validation errors
-        min_runs = min(5, max_runs)
+        # Generate from scratch using base config as template
+        base_config = load_base_config()
         
-        config = {
-            'random_seed': 42,
-            'model': model,
-            'prompts_dir': 'config/prompts',
-            'hitl_path': 'config/hitl/expanded_spec.txt',
-            'stopping_rule': {
-                'min_runs': min_runs,
-                'max_runs': max_runs,
-                'confidence_level': 0.95,
-                'max_half_width_pct': 10,
-                'metrics': ['TOK_IN', 'T_WALL_seconds', 'COST_USD']
-            },
-            'timeouts': {
-                'step_timeout_seconds': 600,
-                'health_check_interval_seconds': 5,
-                'api_retry_attempts': 3
-            },
-            'frameworks': {
-                'baes': {
-                    'enabled': 'baes' in frameworks,
-                    'repo_url': 'https://github.com/gesad-lab/baes_demo',
-                    'commit_hash': '1dd573633a98b8baa636c200bc1684cec7a8179f',
-                    'api_port': 8100,
-                    'ui_port': 8600,
-                    'max_retries': 3,
-                    'auto_restart_servers': False,
-                    'use_venv': True,
-                    'api_key_env': 'OPENAI_API_KEY_BAES'
-                },
-                'chatdev': {
-                    'enabled': 'chatdev' in frameworks,
-                    'repo_url': 'https://github.com/OpenBMB/ChatDev.git',
-                    'commit_hash': '52edb89997b4312ad27d8c54584d0a6c59940135',
-                    'api_port': 8001,
-                    'ui_port': 3001,
-                    'api_key_env': 'OPENAI_API_KEY_CHATDEV'
-                },
-                'ghspec': {
-                    'enabled': 'ghspec' in frameworks,
-                    'repo_url': 'https://github.com/github/spec-kit.git',
-                    'commit_hash': '89f4b0b38a42996376c0f083d47281a4c9196761',
-                    'api_port': 8002,
-                    'ui_port': 3002,
-                    'api_key_env': 'OPENAI_API_KEY_GHSPEC'
-                }
-            },
-            'metrics': {
-                'enabled': [
-                    'functional_correctness',
-                    'design_quality',
-                    'code_maintainability',
-                    'api_calls'
-                ],
-                'config': {}
-            },
-            'pricing': {
-                'gpt-4o': {
-                    'input': 0.0025,
-                    'output': 0.010
-                },
-                'gpt-4o-mini': {
-                    'input': 0.000150,
-                    'output': 0.000600
-                },
-                'gpt-4-turbo': {
-                    'input': 0.01,
-                    'output': 0.03
-                },
-                'gpt-4': {
-                    'input': 0.03,
-                    'output': 0.06
-                },
-                'gpt-3.5-turbo': {
-                    'input': 0.0005,
-                    'output': 0.0015
-                }
-            }
-        }
+        # Start with a copy of the base config
+        config = base_config.copy()
+        
+        # Override with user-specified values
+        config['model'] = model
+        
+        # Update stopping rule with new max_runs
+        if 'stopping_rule' not in config:
+            config['stopping_rule'] = {}
+        config['stopping_rule']['max_runs'] = max_runs
+        
+        # Set min_runs intelligently if not already set
+        if 'min_runs' not in config['stopping_rule']:
+            config['stopping_rule']['min_runs'] = min(5, max_runs)
+        
+        # Update framework enabled status based on requested frameworks
+        if 'frameworks' in config:
+            for fw_name in config['frameworks']:
+                config['frameworks'][fw_name]['enabled'] = fw_name in frameworks
+        
+        # Ensure required paths are set (use base config defaults)
+        if 'prompts_dir' not in config:
+            config['prompts_dir'] = 'config/prompts'
+        if 'hitl_path' not in config:
+            config['hitl_path'] = 'config/hitl/expanded_spec.txt'
     
     return config
 
