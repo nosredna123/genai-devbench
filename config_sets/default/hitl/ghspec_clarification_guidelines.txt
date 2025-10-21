@@ -1,0 +1,143 @@
+# GHSpec HITL Clarification Guidelines
+
+**Purpose**: Meta-level guidelines for handling ambiguous requirements during specification generation
+
+**Why GHSpec Needs Different HITL Than ChatDev/BAEs**:
+- ChatDev/BAEs receive a complete specification upfront (`expanded_spec.txt`)
+- GHSpec **generates** the specification incrementally through phases (specify → plan → tasks)
+- When GHSpec's AI encounters unclear requirements during specification generation, it needs guidelines on:
+  - What assumptions to make
+  - What details to include/exclude
+  - When to mark something as needing clarification vs. using reasonable defaults
+
+**Usage**: When GHSpec adapter detects clarification requests during specification/planning phases 
+(e.g., `[NEEDS CLARIFICATION: ...]`), respond with these guidelines to maintain reproducibility.
+
+---
+
+## Expanded Feature Requirements
+
+Thank you for seeking clarification. Here is additional context to help you complete the specification:
+
+### User Experience Priorities
+
+- **Primary Users**: The target users are developers and technical teams who will interact with this feature daily
+- **Experience Level**: Assume users have basic technical competency but may not be domain experts
+- **Accessibility**: The feature should work across common platforms (web browsers, modern mobile devices)
+- **Performance**: Users expect responsive interactions (< 2 second response time for most operations)
+
+### Data Handling
+
+- **Data Persistence**: Unless explicitly stated as ephemeral, assume data should be persisted to a database
+- **Data Validation**: Apply industry-standard validation rules:
+  - Email addresses: RFC 5322 format
+  - Passwords: Minimum 8 characters, include uppercase, lowercase, and number
+  - URLs: Valid HTTP/HTTPS format
+  - Dates: ISO 8601 format
+  - Numbers: Validate ranges and precision as appropriate for the use case
+
+- **Data Privacy**: 
+  - Never log sensitive data (passwords, tokens, PII)
+  - Assume GDPR/CCPA compliance requirements
+  - Support data deletion/export if user data is involved
+
+### Security Assumptions
+
+- **Authentication**: If the feature involves user accounts, assume token-based authentication (JWT or similar)
+- **Authorization**: Apply principle of least privilege - users can only access their own data unless explicitly sharing
+- **Input Sanitization**: All user inputs must be sanitized to prevent injection attacks
+- **Rate Limiting**: Apply reasonable rate limits (e.g., 100 requests/minute per user) for API endpoints
+- **HTTPS**: Assume all production traffic uses HTTPS
+
+### Error Handling
+
+- **User-Facing Errors**: Return clear, actionable error messages (e.g., "Email already registered" not "Database constraint violation")
+- **Logging**: Log all errors with sufficient context for debugging (timestamp, user ID if applicable, stack trace)
+- **Graceful Degradation**: If optional features fail, core functionality should continue working
+- **Retry Logic**: For transient failures (network, external APIs), implement exponential backoff (3 attempts)
+
+### Integration Points
+
+- **External APIs**: If integrating with external services, assume:
+  - Services may be temporarily unavailable (handle with retries and fallbacks)
+  - API keys/credentials stored securely (environment variables, not hardcoded)
+  - Rate limits exist (implement request throttling)
+
+- **Email**: If sending emails:
+  - Use transactional email service (SendGrid, AWS SES, etc.)
+  - Include unsubscribe links where legally required
+  - Handle bounces and failures gracefully
+
+- **File Uploads**: If accepting files:
+  - Maximum size: 10MB per file (unless spec states otherwise)
+  - Allowed types: Common formats (PDF, JPG, PNG, DOC, TXT) unless restricted
+  - Virus scanning required for production
+  - Store in object storage (S3, Azure Blob) not filesystem
+
+### Scalability & Performance
+
+- **Expected Load**: Design for 1000 concurrent users initially, with ability to scale horizontally
+- **Database**: Use indexes for frequently queried fields
+- **Caching**: Cache frequently accessed, rarely changing data (e.g., user profiles, configuration)
+- **Async Operations**: Long-running tasks (>5 seconds) should be asynchronous with progress indicators
+
+### Testing Requirements
+
+- **Unit Tests**: Aim for 80%+ code coverage
+- **Integration Tests**: Test critical user flows end-to-end
+- **Test Data**: Use factories/fixtures for test data, never production data
+- **CI/CD**: Tests must run in CI pipeline and pass before deployment
+
+### Deployment Assumptions
+
+- **Environment**: Support development, staging, and production environments
+- **Configuration**: Environment-specific settings via environment variables
+- **Migrations**: Database schema changes via versioned migrations (Alembic, Flyway, etc.)
+- **Rollback**: Ability to rollback to previous version if deployment fails
+
+### Documentation
+
+- **API Documentation**: Auto-generated from code (Swagger/OpenAPI for REST APIs)
+- **README**: Include setup instructions, configuration options, common troubleshooting
+- **Inline Comments**: Explain complex business logic, not obvious code
+
+### Non-Functional Requirements
+
+- **Browser Compatibility**: Last 2 versions of Chrome, Firefox, Safari, Edge (if web UI)
+- **Mobile**: Responsive design for tablets and phones (if web UI)
+- **Internationalization**: Initially English only, but structure code to support future localization
+- **Monitoring**: Log key metrics (request count, error rate, latency) for observability
+
+### Reasonable Defaults
+
+When specification doesn't explicitly state details, use these defaults:
+
+- **Pagination**: 20 items per page, max 100
+- **Timeouts**: 30 seconds for API requests, 5 minutes for background jobs
+- **Session Duration**: 24 hours for authenticated sessions
+- **Password Reset**: Tokens expire after 1 hour
+- **File Names**: Sanitize to alphanumeric + underscores + hyphens
+- **Timestamps**: Store in UTC, display in user's timezone
+- **Soft Deletes**: Use soft deletes for user data (mark as deleted, don't actually remove)
+
+---
+
+## Clarification Policy
+
+**When to Mark [NEEDS CLARIFICATION]**:
+- Feature scope is fundamentally ambiguous (affects what gets built)
+- Multiple reasonable interpretations with significantly different implementations
+- Security/privacy implications unclear
+- User experience critically depends on unclear detail
+
+**When to Make Assumptions**:
+- Minor details that don't affect core functionality
+- Industry-standard practices can be applied
+- Reasonable defaults exist
+- Details can be refined in later iterations
+
+**Document Assumptions**: Always list assumptions in the specification's "Assumptions" section so they can be validated later.
+
+---
+
+This expanded specification should resolve most clarifications. Proceed with reasonable assumptions for any remaining minor details, and document them in the specification.

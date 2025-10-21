@@ -1,0 +1,9 @@
+Create a minimal "Hello World" REST API.
+
+Requirements:
+- Use Python 3.11+ with FastAPI framework
+- Single endpoint: GET /hello that returns {"message": "Hello, World!"}
+- Include basic error handling
+- Add a simple health check endpoint: GET /health
+
+The API should be ready to run with uvicorn.

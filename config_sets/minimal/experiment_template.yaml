@@ -1,0 +1,35 @@
+# Experiment Template for 'minimal' Config Set
+# This file is used as the base for generated config.yaml
+
+# Steps configuration (all enabled by default)
+steps:
+  - id: 1
+    enabled: true
+    name: "Hello World API"
+    prompt_file: "prompts/01_hello_world.txt"
+
+# Timeouts (can be overridden by researcher post-generation)
+timeouts:
+  step_timeout_seconds: 300
+  health_check_interval_seconds: 5
+  api_retry_attempts: 3
+
+# Stopping rule configuration
+stopping_rule:
+  min_runs: 3
+  max_runs: 20
+  confidence_level: 0.95
+  max_half_width_pct: 15
+  metrics:
+    - TOK_IN
+    - T_WALL_seconds
+
+# Statistical analysis configuration
+analysis:
+  bootstrap_samples: 5000
+  significance_level: 0.05
+  confidence_level: 0.95
+  effect_size_thresholds:
+    negligible: 0.147
+    small: 0.330
+    medium: 0.474
