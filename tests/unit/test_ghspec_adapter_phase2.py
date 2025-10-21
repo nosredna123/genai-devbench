@@ -129,8 +129,8 @@ class TestGHSpecAdapterPhase2:
             stderr=b'fatal: repository not found'
         )
         
-        # Verify RuntimeError is raised
-        with pytest.raises(RuntimeError, match="GitHub Spec-kit initialization failed"):
+        # Verify RuntimeError is raised (error message now comes from base adapter)
+        with pytest.raises(RuntimeError, match="Failed to setup ghspec repository"):
             adapter.start()
     
     @patch('subprocess.run')
@@ -142,8 +142,8 @@ class TestGHSpecAdapterPhase2:
             timeout=120
         )
         
-        # Verify RuntimeError is raised
-        with pytest.raises(RuntimeError, match="GitHub Spec-kit initialization timed out"):
+        # Verify RuntimeError is raised (error message now comes from base adapter)
+        with pytest.raises(RuntimeError, match="ghspec repository setup timed out"):
             adapter.start()
     
     def test_workspace_structure_idempotent(self, adapter, temp_workspace):
