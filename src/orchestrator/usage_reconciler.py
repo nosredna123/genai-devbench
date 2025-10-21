@@ -53,7 +53,8 @@ class UsageReconciler:
     def _fetch_usage_from_openai(
         self,
         start_timestamp: int,
-        end_timestamp: int
+        end_timestamp: int,
+        framework: Optional[str] = None
     ) -> tuple[int, int, int, int]:
         """
         Fetch usage data from OpenAI Usage API.
@@ -61,13 +62,23 @@ class UsageReconciler:
         Args:
             start_timestamp: Unix timestamp for start of window
             end_timestamp: Unix timestamp for end of window
+            framework: Framework name (baes, chatdev, ghspec) - if provided, uses framework-specific API key
             
         Returns:
             Tuple of (input_tokens, output_tokens, api_calls, cached_tokens)
         """
-        api_key = os.getenv('OPEN_AI_KEY_ADM')
+        # Select API key based on framework
+        if framework:
+            key_var = f'OPENAI_API_KEY_{framework.upper()}'
+            api_key = os.getenv(key_var)
+            if not api_key:
+                logger.warning(f"{key_var} not found, falling back to OPEN_AI_KEY_ADM")
+                api_key = os.getenv('OPEN_AI_KEY_ADM')
+        else:
+            api_key = os.getenv('OPEN_AI_KEY_ADM')
+        
         if not api_key:
-            logger.warning("OPEN_AI_KEY_ADM not found in environment")
+            logger.warning("No API key found for reconciliation")
             return 0, 0, 0, 0
         
         url = "https://api.openai.com/v1/organization/usage/completions"
@@ -352,7 +363,8 @@ class UsageReconciler:
             try:
                 tokens_in, tokens_out, api_calls, cached_tokens = self._fetch_usage_from_openai(
                     start_timestamp=start_timestamp,
-                    end_timestamp=end_timestamp
+                    end_timestamp=end_timestamp,
+                    framework=framework
                 )
                 
                 # Update step
