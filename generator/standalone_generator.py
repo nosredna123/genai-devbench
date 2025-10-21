@@ -438,7 +438,7 @@ if __name__ == '__main__':
         print("  ✓ .env.example")
     
     def _generate_config_yaml(self, config: Dict[str, Any], output_dir: Path) -> None:
-        """Generate standalone config.yaml with complete configuration."""
+        """Generate standalone config.yaml with complete configuration and explanatory comments."""
         # Load the full experiment.yaml from generator to get all pricing and metrics definitions
         experiment_yaml_path = self.project_root / 'config' / 'experiment.yaml'
         if experiment_yaml_path.exists():
@@ -457,11 +457,22 @@ if __name__ == '__main__':
         full_config['prompts_dir'] = 'config/prompts'
         full_config['hitl_path'] = 'config/hitl/expanded_spec.txt'
         
-        # Update frameworks - set enabled status from config
+        # Update frameworks - merge config into full_config
         if 'frameworks' in config:
+            # Ensure frameworks dict exists in full_config
+            if 'frameworks' not in full_config:
+                full_config['frameworks'] = {}
+            
             for fw_name, fw_config in config['frameworks'].items():
-                if fw_name in full_config.get('frameworks', {}):
-                    full_config['frameworks'][fw_name]['enabled'] = fw_config.get('enabled', False)
+                # If framework doesn't exist in full_config, add it entirely
+                if fw_name not in full_config['frameworks']:
+                    full_config['frameworks'][fw_name] = fw_config.copy()
+                else:
+                    # Framework exists - merge the config
+                    if not isinstance(full_config['frameworks'][fw_name], dict):
+                        full_config['frameworks'][fw_name] = {}
+                    # Update/merge all fields from fw_config into full_config
+                    full_config['frameworks'][fw_name].update(fw_config)
         
         # Update stopping rule
         if 'stopping_rule' in config:
@@ -471,9 +482,38 @@ if __name__ == '__main__':
         if 'timeouts' in config:
             full_config['timeouts'] = config['timeouts']
         
-        # Write complete config
+        # Write complete config with header comments
         config_path = output_dir / 'config.yaml'
         with open(config_path, 'w', encoding='utf-8') as f:
+            # Write header with explanatory comments
+            f.write("# ============================================================\n")
+            f.write("# Experiment Configuration\n")
+            f.write("# ============================================================\n")
+            f.write("# This file configures your experiment run.\n")
+            f.write("#\n")
+            f.write("# Key sections:\n")
+            f.write("#   - experiment_name: Unique identifier for this experiment\n")
+            f.write("#   - model: OpenAI model to use (gpt-4o, gpt-4o-mini, etc.)\n")
+            f.write("#   - random_seed: For reproducibility (keeps runs deterministic)\n")
+            f.write("#   - stopping_rule: Controls when execution stops\n")
+            f.write("#       * max_runs: Maximum runs per framework (hard limit)\n")
+            f.write("#       * min_runs: Minimum before checking convergence\n")
+            f.write("#       * confidence_level: Statistical confidence (0.95 = 95%)\n")
+            f.write("#       * metrics: Which metrics to monitor for convergence\n")
+            f.write("#   - timeouts: Prevents infinite hangs (step timeout, health checks)\n")
+            f.write("#   - frameworks: Which AI dev tools to benchmark (enabled: true/false)\n")
+            f.write("#   - metrics: Quality measurements to compute\n")
+            f.write("#       * functional_correctness: CRUD endpoints validation\n")
+            f.write("#       * design_quality: Architecture and design patterns\n")
+            f.write("#       * code_maintainability: Code complexity and readability\n")
+            f.write("#       * api_calls: Token usage and API efficiency\n")
+            f.write("#   - analysis: Convergence detection and statistical analysis settings\n")
+            f.write("#   - visualizations: Chart generation configuration\n")
+            f.write("#   - report: Markdown report generation settings\n")
+            f.write("#   - pricing: Cost per 1K tokens for each model\n")
+            f.write("# ============================================================\n\n")
+            
+            # Write actual config using standard YAML dump
             yaml.dump(full_config, f, default_flow_style=False, sort_keys=False, indent=2)
         
         print("  ✓ config.yaml")
