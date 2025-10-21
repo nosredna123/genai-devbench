@@ -322,6 +322,11 @@ class OrchestratorRunner:
                 prompt_path = Path(f"config/prompts/step_{step_num}.txt")
                 with open(prompt_path, 'r', encoding='utf-8') as f:
                     command_text = f.read().strip()
+                
+                # Print step start to console for user visibility
+                from datetime import datetime as dt
+                timestamp = dt.now().strftime("%H:%M:%S")
+                print(f"        ⋯ Step {step_num}/6 | {timestamp}", flush=True)
                     
                 step_start_time = datetime.utcnow()
                 step_status = "success"
@@ -419,6 +424,9 @@ class OrchestratorRunner:
             zdi = self.validator.stop_downtime_monitoring()
             
             # Run final validation
+            timestamp = dt.now().strftime("%H:%M:%S")
+            print(f"        ⋯ Validation | {timestamp}", flush=True)
+            
             logger.info("Running final validation",
                        extra={'run_id': self.run_id, 'event': 'validation_start'})
                        
@@ -476,8 +484,11 @@ class OrchestratorRunner:
             
             # Track run end time for summary
             run_end_time = datetime.utcnow()
-                
+            
             # Create archive (including logs directory)
+            timestamp = dt.now().strftime("%H:%M:%S")
+            print(f"        ⋯ Archiving | {timestamp}", flush=True)
+            
             logs_dir = Path(run_dir) / "logs"
             self.archiver.save_commit_info(framework_config['commit_hash'])
             archive_path = self.archiver.create_archive(
