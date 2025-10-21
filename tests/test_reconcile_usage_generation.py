@@ -11,12 +11,19 @@ import re
 import tempfile
 from pathlib import Path
 from generator.standalone_generator import StandaloneGenerator
+from src.config_sets.loader import ConfigSetLoader
 
 
 def test_reconcile_script_uses_env_var_for_min_age():
     """Test that reconcile_usage.sh reads min_age from environment variable."""
     
     with tempfile.TemporaryDirectory() as tmpdir:
+        # Load default config set
+        project_root = Path(__file__).parent.parent
+        config_sets_dir = project_root / "config_sets"
+        loader = ConfigSetLoader(config_sets_dir)
+        config_set = loader.load("default")
+        
         # Generate a test experiment
         generator = StandaloneGenerator()
         config = {
@@ -25,7 +32,7 @@ def test_reconcile_script_uses_env_var_for_min_age():
             "frameworks": {"baes": {"enabled": True}},
             "max_runs": 1
         }
-        generator.generate("test_reconcile", config, Path(tmpdir))
+        generator.generate("test_reconcile", config, Path(tmpdir), config_set)
         
         script_path = Path(tmpdir) / "reconcile_usage.sh"
         assert script_path.exists(), "reconcile_usage.sh should be generated"
@@ -51,6 +58,12 @@ def test_reconcile_script_loads_standalone_manifest():
     """Test that reconcile_usage.sh loads from runs/manifest.json (standalone path)."""
     
     with tempfile.TemporaryDirectory() as tmpdir:
+        # Load default config set
+        project_root = Path(__file__).parent.parent
+        config_sets_dir = project_root / "config_sets"
+        loader = ConfigSetLoader(config_sets_dir)
+        config_set = loader.load("default")
+        
         generator = StandaloneGenerator()
         config = {
             "experiment_name": "test_manifest",
@@ -58,7 +71,7 @@ def test_reconcile_script_loads_standalone_manifest():
             "frameworks": {"baes": {"enabled": True}},
             "max_runs": 1
         }
-        generator.generate("test_manifest", config, Path(tmpdir))
+        generator.generate("test_manifest", config, Path(tmpdir), config_set)
         
         script_path = Path(tmpdir) / "reconcile_usage.sh"
         
@@ -77,6 +90,12 @@ def test_reconcile_script_imports_os():
     """Test that the Python code in reconcile_usage.sh imports os module."""
     
     with tempfile.TemporaryDirectory() as tmpdir:
+        # Load default config set
+        project_root = Path(__file__).parent.parent
+        config_sets_dir = project_root / "config_sets"
+        loader = ConfigSetLoader(config_sets_dir)
+        config_set = loader.load("default")
+        
         generator = StandaloneGenerator()
         config = {
             "experiment_name": "test_imports",
@@ -84,7 +103,7 @@ def test_reconcile_script_imports_os():
             "frameworks": {"baes": {"enabled": True}},
             "max_runs": 1
         }
-        generator.generate("test_imports", config, Path(tmpdir))
+        generator.generate("test_imports", config, Path(tmpdir), config_set)
         
         script_path = Path(tmpdir) / "reconcile_usage.sh"
         
@@ -99,6 +118,12 @@ def test_reconcile_script_consistent_timing():
     """Test that --list and reconciliation use same timing logic."""
     
     with tempfile.TemporaryDirectory() as tmpdir:
+        # Load default config set
+        project_root = Path(__file__).parent.parent
+        config_sets_dir = project_root / "config_sets"
+        loader = ConfigSetLoader(config_sets_dir)
+        config_set = loader.load("default")
+        
         generator = StandaloneGenerator()
         config = {
             "experiment_name": "test_timing",
@@ -106,7 +131,7 @@ def test_reconcile_script_consistent_timing():
             "frameworks": {"baes": {"enabled": True}},
             "max_runs": 1
         }
-        generator.generate("test_timing", config, Path(tmpdir))
+        generator.generate("test_timing", config, Path(tmpdir), config_set)
         
         script_path = Path(tmpdir) / "reconcile_usage.sh"
         
