@@ -26,22 +26,15 @@ logger = get_logger(__name__, component="adapter")
 
 
 class BAeSAdapter(BaseAdapter):
-    """Adapter for Business Autonomous Entities (BAEs) framework."""
+    """Adapter for Business Autonomous Entities (BAEs) framework.
     
-    COMMAND_MAPPING = {
-        "Create a Student/Course/Teacher CRUD application with Python, FastAPI, and SQLite.":
-            ["add student entity", "add course entity", "add teacher entity"],
-        "Add enrollment relationship between Student and Course entities.":
-            ["add course to student entity"],
-        "Add teacher assignment relationship to Course entity.":
-            ["add teacher to course entity"],
-        "Implement comprehensive data validation and error handling.":
-            ["add validation to all entities"],
-        "Add pagination and filtering to all list endpoints.":
-            ["add pagination and filtering to all list endpoints"],
-        "Add comprehensive user interface for all CRUD operations.":
-            ["add comprehensive user interface"]
-    }
+    Uses the BAEs non-interactive CLI (bae_noninteractive.py) to execute
+    natural language requests. This approach:
+    - Avoids hardcoded command mappings
+    - Uses the official BAEs CLI interface
+    - Handles any natural language request dynamically
+    - Future-proof against internal API changes
+    """
     
     def __init__(self, config: Dict[str, Any], run_id: str, workspace_path: str):
         super().__init__(config, run_id, workspace_path)
@@ -200,7 +193,7 @@ class BAeSAdapter(BaseAdapter):
         return None
     
     def _execute_kernel_request(self, request: str, start_servers: bool = False) -> dict:
-        """Execute a BAEs kernel request using the wrapper script in the venv.
+        """Execute a BAEs kernel request using the non-interactive CLI.
         
         Args:
             request: Natural language request
@@ -209,18 +202,22 @@ class BAeSAdapter(BaseAdapter):
         Returns:
             Dictionary with 'success' and 'result' or 'error'
         """
-        wrapper_script = Path(__file__).parent / "baes_kernel_wrapper.py"
+        cli_script = self.framework_dir / "bae_noninteractive.py"
         context_store_path = str(self.database_dir / "context_store.json")
         venv_python = (self.venv_path / "bin" / "python").absolute()
         
+        # Build command for non-interactive CLI
         cmd = [
             str(venv_python),
-            str(wrapper_script.absolute()),
-            str(self.framework_dir.absolute()),
-            context_store_path,
-            request,
-            str(start_servers).lower()
+            str(cli_script.absolute()),
+            "--request", request,
+            "--context-store", context_store_path,
+            "--output-json",
+            "--quiet"  # Suppress progress messages, only output JSON
         ]
+        
+        if start_servers:
+            cmd.append("--start-servers")
         
         try:
             result = subprocess.run(
@@ -233,38 +230,33 @@ class BAeSAdapter(BaseAdapter):
             )
             
             if result.returncode != 0:
+                # Try to parse error from JSON output
+                try:
+                    error_data = json.loads(result.stdout)
+                    return {
+                        'success': False,
+                        'error': error_data.get('error', result.stderr or 'Unknown error')
+                    }
+                except json.JSONDecodeError:
+                    return {
+                        'success': False,
+                        'error': f"CLI execution failed: {result.stderr or result.stdout}"
+                    }
+            
+            # Parse JSON output from CLI
+            try:
+                output = json.loads(result.stdout)
+                return output
+            except json.JSONDecodeError as e:
                 return {
                     'success': False,
-                    'error': f"Wrapper script failed: {result.stderr}"
+                    'error': f'Failed to parse CLI output: {e}\nOutput: {result.stdout}'
                 }
-            
-            # Parse JSON output
-            # BAEs framework outputs formatted console text (ANSI codes, emojis, progress bars)
-            # followed by JSON on the last line. Extract JSON from end of output.
-            stdout = result.stdout.strip()
-            
-            # Try to extract JSON from last line first (most common case)
-            lines = stdout.split('\n')
-            for line in reversed(lines):
-                line = line.strip()
-                if line.startswith('{') and line.endswith('}'):
-                    try:
-                        return json.loads(line)
-                    except json.JSONDecodeError:
-                        continue  # Try next line
-            
-            # Fallback: try parsing entire output (backward compatibility)
-            return json.loads(stdout)
             
         except subprocess.TimeoutExpired:
             return {
                 'success': False,
                 'error': 'Request execution timed out after 5 minutes'
-            }
-        except json.JSONDecodeError as e:
-            return {
-                'success': False,
-                'error': f'Failed to parse wrapper output: {e}\nOutput: {result.stdout}'
             }
         except Exception as e:
             return {
@@ -281,52 +273,37 @@ class BAeSAdapter(BaseAdapter):
                    extra={'run_id': self.run_id, 'step': step_num, 'event': 'step_start'})
         
         try:
-            requests_list = self._translate_command_to_requests(command_text)
-            
-            if not requests_list:
-                error_msg = (
-                    f"Command not found in COMMAND_MAPPING: '{command_text[:100]}...' "
-                    f"This indicates a configuration error. "
-                    f"Available commands: {list(self.COMMAND_MAPPING.keys())}"
-                )
-                logger.error(error_msg, extra={'run_id': self.run_id, 'step': step_num})
-                raise ValueError(error_msg)
-            
-            all_success = True
-            
+            # Execute the natural language request directly via CLI
+            # No need for command mapping - BAEs handles any request
             logger.info(
-                f"Executing {len(requests_list)} BAEs request(s) for step {step_num}",
+                f"Executing BAEs request for step {step_num}: {command_text}",
                 extra={
                     'run_id': self.run_id,
                     'step': step_num,
-                    'event': 'step_requests_start',
+                    'event': 'step_request_start',
                     'metadata': {
-                        'request_count': len(requests_list),
-                        'requests_preview': requests_list[:3]  # First 3 for debugging
+                        'request': command_text[:200]  # Log first 200 chars
                     }
                 }
             )
             
-            for idx, request in enumerate(requests_list):
-                logger.info(f"Executing BAEs request {idx+1}/{len(requests_list)}: {request}",
-                           extra={'run_id': self.run_id, 'step': step_num})
-                
-                start_servers = (step_num == 1 and idx == 0)
-                
-                result = self._execute_kernel_request(
-                    request=request,
-                    start_servers=start_servers
-                )
-                
-                if not result.get('success', False):
-                    all_success = False
-                    error_msg = result.get('error', 'Unknown error')
-                    logger.error(f"BAEs request failed: {request}",
-                               extra={'run_id': self.run_id, 'step': step_num,
-                                     'metadata': {'error': error_msg}})
-                    break
-                
-                logger.info(f"BAEs request {idx+1}/{len(requests_list)} completed successfully",
+            # For step 1, start servers; for subsequent steps, assume servers are running
+            start_servers = (step_num == 1)
+            
+            result = self._execute_kernel_request(
+                request=command_text,
+                start_servers=start_servers
+            )
+            
+            all_success = result.get('success', False)
+            
+            if not all_success:
+                error_msg = result.get('error', 'Unknown error')
+                logger.error(f"BAEs request failed: {command_text[:100]}",
+                           extra={'run_id': self.run_id, 'step': step_num,
+                                 'metadata': {'error': error_msg}})
+            else:
+                logger.info(f"BAEs request completed successfully",
                            extra={'run_id': self.run_id, 'step': step_num})
             
             duration = time.time() - start_time  # Precise duration as float
@@ -350,8 +327,7 @@ class BAeSAdapter(BaseAdapter):
                         'event': 'zero_api_calls',
                         'metadata': {
                             'duration': duration,
-                            'request_count': len(requests_list),
-                            'requests': requests_list,
+                            'request': command_text,
                             'note': 'BAeS framework may not have called OpenAI API, or calls happened outside time window'
                         }
                     }
@@ -392,17 +368,6 @@ class BAeSAdapter(BaseAdapter):
                 'end_timestamp': end_timestamp,
                 'retry_count': 0
             }
-    
-    def _translate_command_to_requests(self, command_text: str) -> List[str]:
-        if command_text in self.COMMAND_MAPPING:
-            return self.COMMAND_MAPPING[command_text]
-        
-        command_lower = command_text.lower()
-        for key, value in self.COMMAND_MAPPING.items():
-            if key.lower() in command_lower or command_lower in key.lower():
-                return value
-        
-        return []
     
     def stop(self) -> None:
         logger.info("Stopping BAEs framework", extra={'run_id': self.run_id})
