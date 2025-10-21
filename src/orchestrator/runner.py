@@ -25,6 +25,7 @@ from src.adapters.baes_adapter import BAeSAdapter
 from src.adapters.chatdev_adapter import ChatDevAdapter
 from src.adapters.ghspec_adapter import GHSpecAdapter
 from src.analysis.stopping_rule import check_convergence, get_convergence_summary
+from src.config import get_enabled_steps
 
 logger = get_logger(__name__, component="orchestrator")
 
@@ -312,21 +313,38 @@ class OrchestratorRunner:
             step_summaries = []
             errors_and_warnings = []
             
-            # Execute 6 steps sequentially
-            # TODO: #3 The number of steps must be loaded from config
-            for step_num in range(1, 7):
-                # Set logging context for this step
-                log_context.set_step_context(step_num)
+            # Get enabled steps from config (in declaration order)
+            try:
+                enabled_steps = get_enabled_steps(self.config, Path.cwd())
+                total_steps = len(enabled_steps)
+                logger.info(f"Loaded {total_steps} enabled steps from configuration",
+                           extra={'run_id': self.run_id, 'event': 'steps_loaded'})
+            except Exception as e:
+                logger.error(f"Failed to load steps configuration: {e}",
+                           extra={'run_id': self.run_id, 'event': 'steps_load_error'})
+                raise
+            
+            # Execute steps sequentially in declaration order
+            for step_index, step_config in enumerate(enabled_steps, start=1):
+                # Set logging context for this step (use original step ID)
+                log_context.set_step_context(step_config.id)
                 
                 # Load step prompt
-                prompt_path = Path(f"config/prompts/step_{step_num}.txt")
+                prompt_path = Path(step_config.prompt_file)
+                if not prompt_path.exists():
+                    error_msg = f"Prompt file not found: {step_config.prompt_file}"
+                    logger.error(error_msg,
+                               extra={'run_id': self.run_id, 'step': step_config.id,
+                                     'event': 'prompt_not_found'})
+                    raise FileNotFoundError(error_msg)
+                
                 with open(prompt_path, 'r', encoding='utf-8') as f:
                     command_text = f.read().strip()
                 
                 # Print step start to console for user visibility
                 from datetime import datetime as dt
                 timestamp = dt.now().strftime("%H:%M:%S")
-                print(f"        ⋯ Step {step_num}/6 | {timestamp}", flush=True)
+                print(f"        ⋯ Step {step_config.id} ({step_config.name}) | {step_index}/{total_steps} | {timestamp}", flush=True)
                     
                 step_start_time = datetime.utcnow()
                 step_status = "success"
@@ -334,13 +352,13 @@ class OrchestratorRunner:
                 retries = 0
                 
                 try:
-                    # Execute step with timeout and retry
-                    result = self._execute_step_with_retry(step_num, command_text)
+                    # Execute step with timeout and retry (use original step ID)
+                    result = self._execute_step_with_retry(step_config.id, command_text)
                     retries = result.get('retry_count', 0)
                     
-                    # Record metrics
+                    # Record metrics (use original step ID)
                     self.metrics_collector.record_step(
-                        step_num=step_num,
+                        step_num=step_config.id,
                         command=command_text,
                         duration_seconds=result.get('duration_seconds', 0),
                         success=result.get('success', True),
@@ -355,7 +373,7 @@ class OrchestratorRunner:
                     )
                     
                     logger.info("Step completed successfully",
-                               extra={'run_id': self.run_id, 'step': step_num,
+                               extra={'run_id': self.run_id, 'step': step_config.id,
                                      'event': 'step_complete'})
                     
                     # Add a sleep time between steps to avoid overlap usage data
@@ -367,10 +385,10 @@ class OrchestratorRunner:
                     errors_and_warnings.append({
                         'timestamp': datetime.utcnow().isoformat() + 'Z',
                         'level': 'TIMEOUT',
-                        'message': f"Step {step_num}: {step_error}"
+                        'message': f"Step {step_config.id} ({step_config.name}): {step_error}"
                     })
                     logger.error("Step timed out",
-                               extra={'run_id': self.run_id, 'step': step_num,
+                               extra={'run_id': self.run_id, 'step': step_config.id,
                                      'metadata': {'error': step_error}})
                     raise
                 except Exception as e:
@@ -379,10 +397,10 @@ class OrchestratorRunner:
                     errors_and_warnings.append({
                         'timestamp': datetime.utcnow().isoformat() + 'Z',
                         'level': 'ERROR',
-                        'message': f"Step {step_num}: {step_error}"
+                        'message': f"Step {step_config.id} ({step_config.name}): {step_error}"
                     })
                     logger.error("Step failed permanently",
-                               extra={'run_id': self.run_id, 'step': step_num,
+                               extra={'run_id': self.run_id, 'step': step_config.id,
                                      'metadata': {'error': step_error}})
                     raise
                 finally:
@@ -390,9 +408,10 @@ class OrchestratorRunner:
                     step_end_time = datetime.utcnow()
                     step_duration = (step_end_time - step_start_time).total_seconds()
                     
-                    # Build step summary
+                    # Build step summary (preserve original step ID)
                     step_summary = {
-                        'step_num': step_num,
+                        'step_num': step_config.id,
+                        'step_name': step_config.name,
                         'status': step_status,
                         'duration_seconds': step_duration,
                         'retries': retries,

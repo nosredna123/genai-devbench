@@ -6,7 +6,7 @@ steps:
   - id: 1
     enabled: true
     name: "Hello World API"
-    prompt_file: "prompts/01_hello_world.txt"
+    prompt_file: "config/prompts/01_hello_world.txt"
 
 # Timeouts (can be overridden by researcher post-generation)
 timeouts:
