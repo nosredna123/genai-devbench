@@ -60,6 +60,7 @@ class BAeSAdapter(BaseAdapter):
             
             # Get shared Python executable from venv
             self.python_path = self.get_framework_python('baes')
+            self.venv_path = self.framework_dir / '.venv'  # Set venv_path for _execute_kernel_request
             logger.info(f"Using framework Python: {self.python_path}",
                        extra={'run_id': self.run_id})
             
