@@ -1031,34 +1031,81 @@ def get_run_age(run_id, framework):
         return None
 
 try:
-    results = reconciler.reconcile_all_pending()
+    # First, get list of pending runs to show total count
+    manifest_path = Path("runs/manifest.json")
+    if not manifest_path.exists():
+        print("✅ No runs found in this experiment.")
+        sys.exit(0)
     
-    if not results:
+    with open(manifest_path, 'r') as f:
+        manifest = json.load(f)
+    
+    all_runs = manifest.get("runs", [])
+    if not all_runs:
+        print("✅ No runs found in this experiment.")
+        sys.exit(0)
+    
+    # Filter runs that need reconciliation
+    pending_runs = []
+    for run_entry in all_runs:
+        run_id = run_entry['run_id']
+        framework = run_entry['framework']
+        
+        # Check metrics to see if already verified
+        metrics_file = Path('runs') / framework / run_id / 'metrics.json'
+        if metrics_file.exists():
+            with open(metrics_file) as f:
+                metrics = json.load(f)
+            
+            reconciliation = metrics.get('usage_api_reconciliation', {{}})
+            status = reconciliation.get('verification_status', 'pending')
+            
+            if status != 'verified':
+                pending_runs.append((framework, run_id, run_entry))
+    
+    if not pending_runs:
         print("✅ No runs need reconciliation")
         print()
+        print(f"Checked {{len(all_runs)}} run(s):")
+        print()
         print("All runs are either:")
-        print("  - Already verified")
-        print("  - Too recent (< 30 minutes old)")
-        print("  - Outside reconciliation window")
+        print("  - Already verified ✅")
+        print("  - Too recent (< 30 minutes old) 🕐")
+        print("  - Outside reconciliation window ⏰")
         print()
-        print("Run './reconcile_usage.sh --list --verbose' to see all runs")
-    else:
-        print(f"Processing {{len(results)}} run(s)...")
-        print()
+        print("💡 Tips:")
+        print("   - Use './reconcile_usage.sh --list --verbose' to see all runs")
+        print("   - Wait 30-60 minutes after run completion for Usage API data")
+        sys.exit(0)
+    
+    # Process each run and show progress in real-time
+    print(f"Processing {{len(pending_runs)}} run(s)...")
+    print()
+    
+    verified_count = 0
+    pending_count = 0
+    data_not_available_count = 0
+    
+    for idx, (framework, run_id, run_entry) in enumerate(pending_runs, 1):
+        short_id = run_id[:8] if len(run_id) > 8 else run_id
         
-        verified_count = 0
-        pending_count = 0
-        data_not_available_count = 0
+        # Get age
+        start_time_str = run_entry.get('start_time')
+        age_seconds = None
+        if start_time_str:
+            start_time_dt = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+            start_timestamp = start_time_dt.timestamp()
+            age_seconds = time.time() - start_timestamp
+        age_str = format_age(age_seconds) if age_seconds else "?"
         
-        for idx, report in enumerate(results, 1):
-            framework = report['framework']
-            run_id = report['run_id']
-            status = report['status']
-            short_id = run_id[:8] if len(run_id) > 8 else run_id
+        # Show what we're processing
+        print(f"[{{idx}}/{{len(pending_runs)}}] Processing {{framework}}/{{short_id}}... (age: {{age_str}})")
+        
+        # Reconcile this specific run
+        try:
+            report = reconciler.reconcile_run(run_id, framework)
             
-            # Get age
-            age_seconds = get_run_age(run_id, framework)
-            age_str = format_age(age_seconds) if age_seconds else "?"
+            status = report['status']
             
             # Status icon and counter
             if status == 'verified':
@@ -1071,29 +1118,32 @@ try:
                 status_icon = "⏳"
                 pending_count += 1
             
-            # Progress indicator
-            print(f"[{{idx}}/{{len(results)}}] {{status_icon}} {{framework}}/{{short_id}}... (age: {{age_str}})")
-            print(f"   Tokens: {{report['total_tokens_in']:,}} in / {{report['total_tokens_out']:,}} out")
+            # Show result
+            print(f"   {{status_icon}} Tokens: {{report['total_tokens_in']:,}} in / {{report['total_tokens_out']:,}} out")
             print(f"   Status: {{status}}")
             
             msg = report.get('verification_message', '')
             if msg:
                 print(f"   {{msg}}")
             print()
-        
-        print("─" * 60)
-        print(f"Summary: {{verified_count}} verified, {{pending_count}} pending")
+            
+        except Exception as e:
+            print(f"   ❌ Error: {{e}}")
+            print()
+    
+    print("─" * 60)
+    print(f"Summary: {{verified_count}} verified, {{pending_count}} pending")
+    if data_not_available_count > 0:
+        print(f"         {{data_not_available_count}} waiting for Usage API data")
+    print()
+    
+    if pending_count > 0 or data_not_available_count > 0:
+        print("⏳ Some runs are pending verification.")
+        print("   Run this script again later to confirm data stability.")
         if data_not_available_count > 0:
-            print(f"         {{data_not_available_count}} waiting for Usage API data")
-        print()
-        
-        if pending_count > 0 or data_not_available_count > 0:
-            print("⏳ Some runs are pending verification.")
-            print("   Run this script again later to confirm data stability.")
-            if data_not_available_count > 0:
-                print()
-                print("💡 Tip: Usage API data typically available after 30-60 minutes")
-        
+            print()
+            print("💡 Tip: Usage API data typically available after 30-60 minutes")
+    
 except Exception as e:
     print(f"❌ Error: {{e}}")
     import traceback
