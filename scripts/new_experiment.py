@@ -266,9 +266,10 @@ def generate_config(
             config['stopping_rule'] = {}
         config['stopping_rule']['max_runs'] = max_runs
         
-        # Set min_runs intelligently if not already set
-        if 'min_runs' not in config['stopping_rule']:
-            config['stopping_rule']['min_runs'] = min(5, max_runs)
+        # Always update min_runs to ensure it's <= max_runs
+        # Use the smaller of: current min_runs, 5, or max_runs
+        current_min = config['stopping_rule'].get('min_runs', 5)
+        config['stopping_rule']['min_runs'] = min(current_min, 5, max_runs)
         
         # Update framework enabled status based on requested frameworks
         if 'frameworks' in config:

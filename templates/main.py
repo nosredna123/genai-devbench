@@ -25,6 +25,7 @@ def main():
         # Load configuration
         config_path = Path('config.yaml')
         if not config_path.exists():
+            print("❌ ERROR: config.yaml not found", file=sys.stderr)
             logger.error("config.yaml not found")
             return 1
         
@@ -155,11 +156,15 @@ def main():
         return 0
         
     except KeyboardInterrupt:
+        print("\n❌ Experiment interrupted by user", file=sys.stderr)
         logger.warning("Experiment interrupted by user")
         return 130
         
     except Exception as e:
+        print(f"\n❌ EXPERIMENT FAILED: {e}", file=sys.stderr)
         logger.exception("Experiment failed")
+        import traceback
+        traceback.print_exc()
         return 1
 
 
