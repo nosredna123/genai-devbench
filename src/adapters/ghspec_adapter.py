@@ -32,6 +32,8 @@ class GHSpecAdapter(BaseAdapter):
         super().__init__(config, run_id, workspace_path)
         self.framework_dir = None
         self.hitl_text = None
+        # Get project root for resolving template paths
+        self.project_root = Path(__file__).parent.parent.parent
         
     def start(self) -> None:
         """
@@ -320,8 +322,8 @@ class GHSpecAdapter(BaseAdapter):
                    extra={'run_id': self.run_id, 'step': self.current_step,
                          'metadata': {'phase': phase}})
         
-        # Load prompt template
-        template_path = Path(f"docs/ghspec/prompts/{phase}_template.md")
+        # Load prompt template (resolve relative to project root)
+        template_path = self.project_root / "docs" / "ghspec" / "prompts" / f"{phase}_template.md"
         system_prompt, user_prompt_template = self._load_prompt_template(template_path)
         
         # Build complete user prompt with context
@@ -632,8 +634,8 @@ class GHSpecAdapter(BaseAdapter):
         spec_content = self.spec_md_path.read_text(encoding='utf-8')
         plan_content = self.plan_md_path.read_text(encoding='utf-8')
         
-        # Load implement template
-        template_path = Path("docs/ghspec/prompts/implement_template.md")
+        # Load implement template (resolve relative to project root)
+        template_path = self.project_root / "docs" / "ghspec" / "prompts" / "implement_template.md"
         system_prompt, user_prompt_template = self._load_prompt_template(template_path)
         
         total_hitl_count = 0
@@ -1005,8 +1007,8 @@ class GHSpecAdapter(BaseAdapter):
         # Load spec for context
         spec_content = self.spec_md_path.read_text(encoding='utf-8')
         
-        # Load bugfix template
-        template_path = Path("docs/ghspec/prompts/bugfix_template.md")
+        # Load bugfix template (resolve relative to project root)
+        template_path = self.project_root / "docs" / "ghspec" / "prompts" / "bugfix_template.md"
         system_prompt, user_prompt_template = self._load_prompt_template(template_path)
         
         total_hitl_count = 0

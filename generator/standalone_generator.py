@@ -85,6 +85,10 @@ class StandaloneGenerator:
         print("⚙️  Copying configuration files...")
         self._copy_config_files(artifacts['config_files'], output_dir)
         
+        # Step 4.5: Copy documentation files
+        print("📚 Copying documentation files...")
+        self._copy_docs_files(artifacts['docs_files'], output_dir)
+        
         # Step 5: Generate template files
         print("📝 Generating template files...")
         self._copy_template_files(output_dir)
@@ -174,6 +178,26 @@ class StandaloneGenerator:
                 shutil.copy2(source_file, dest_file)
                 
                 print(f"  ✓ config/{relative_path}")
+    
+    def _copy_docs_files(
+        self,
+        docs_files: Dict[str, list[Path]],
+        output_dir: Path
+    ) -> None:
+        """Copy documentation files (e.g., framework-specific prompts)."""
+        for framework, files in docs_files.items():
+            for source_file in files:
+                # Determine destination path
+                relative_path = source_file.relative_to(self.project_root / 'docs')
+                dest_file = output_dir / 'docs' / relative_path
+                
+                # Ensure parent directory exists
+                dest_file.parent.mkdir(parents=True, exist_ok=True)
+                
+                # Copy file
+                shutil.copy2(source_file, dest_file)
+                
+                print(f"  ✓ docs/{relative_path}")
     
     def _copy_template_files(self, output_dir: Path) -> None:
         """Copy template files (main.py, setup_frameworks.py)."""

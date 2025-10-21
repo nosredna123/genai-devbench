@@ -146,6 +146,27 @@ class ArtifactCollector:
         
         return [f for f in files if f.exists()]
     
+    def collect_docs_files(self) -> Dict[str, List[Path]]:
+        """
+        Collect documentation files needed for frameworks.
+        
+        Returns:
+            Dictionary with framework-specific docs paths
+        """
+        docs_dir = self.project_root / 'docs'
+        artifacts = {}
+        
+        # Collect framework-specific documentation
+        for framework in self.enabled_frameworks:
+            framework_docs_dir = docs_dir / framework
+            if framework_docs_dir.exists():
+                artifacts[framework] = []
+                for file_path in framework_docs_dir.rglob('*'):
+                    if file_path.is_file():
+                        artifacts[framework].append(file_path)
+        
+        return artifacts
+    
     def collect_config_files(self) -> Dict[str, List[Path]]:
         """
         Collect configuration files.
@@ -233,5 +254,6 @@ class ArtifactCollector:
         return {
             'source_files': self.collect_source_files(),
             'config_files': self.collect_config_files(),
+            'docs_files': self.collect_docs_files(),
             'dependencies': self.collect_dependencies(),
         }
