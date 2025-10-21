@@ -19,6 +19,7 @@ from generator.artifact_collector import ArtifactCollector
 from generator.import_rewriter import ImportRewriter
 from generator.script_generator import ScriptGenerator
 from generator.dependency_analyzer import DependencyAnalyzer
+from src.config_sets.models import ConfigSet
 
 
 class StandaloneGenerator:
@@ -38,7 +39,8 @@ class StandaloneGenerator:
         self, 
         name: str, 
         config: Dict[str, Any], 
-        output_dir: Path
+        output_dir: Path,
+        config_set: ConfigSet
     ) -> None:
         """
         Generate complete standalone experiment project.
@@ -47,9 +49,11 @@ class StandaloneGenerator:
             name: Experiment name
             config: Experiment configuration dictionary
             output_dir: Output directory for generated project
+            config_set: ConfigSet object containing prompts, HITL, and metadata
         """
         print(f"🚀 Generating standalone experiment: {name}")
         print(f"📁 Output directory: {output_dir}")
+        print(f"📦 Config set: {config_set.name} ({config_set.get_step_count()} steps)")
         print()
         
         # Ensure experiment_name is in config
@@ -81,9 +85,9 @@ class StandaloneGenerator:
         print("📄 Copying source files...")
         self._copy_source_files(artifacts['source_files'], output_dir)
         
-        # Step 4: Copy configuration files
-        print("⚙️  Copying configuration files...")
-        self._copy_config_files(artifacts['config_files'], output_dir)
+        # Step 4: Copy configuration files from config set
+        print("⚙️  Copying configuration files from config set...")
+        self._copy_config_set_files(config_set, output_dir)
         
         # Step 4.5: Copy documentation files
         print("📚 Copying documentation files...")
@@ -99,7 +103,7 @@ class StandaloneGenerator:
         
         # Step 7: Generate configuration
         print("⚙️  Generating configuration...")
-        self._generate_config_yaml(config, output_dir)
+        self._generate_config_yaml(config, output_dir, config_set)
         
         # Step 8: Generate requirements.txt
         print("📋 Generating requirements.txt...")
@@ -159,25 +163,40 @@ class StandaloneGenerator:
                 
                 print(f"  ✓ {relative_path}")
     
-    def _copy_config_files(
+    def _copy_config_set_files(
         self, 
-        config_files: Dict[str, list[Path]], 
+        config_set: ConfigSet, 
         output_dir: Path
     ) -> None:
-        """Copy configuration files (no modification needed)."""
-        for category, files in config_files.items():
-            for source_file in files:
-                # Determine destination path
-                relative_path = source_file.relative_to(self.project_root / 'config')
-                dest_file = output_dir / 'config' / relative_path
-                
-                # Ensure parent directory exists
-                dest_file.parent.mkdir(parents=True, exist_ok=True)
-                
-                # Copy file
-                shutil.copy2(source_file, dest_file)
-                
-                print(f"  ✓ config/{relative_path}")
+        """
+        Copy ALL files from config set to experiment (always copy all, no filtering).
+        
+        Args:
+            config_set: ConfigSet object with paths to prompts and HITL files
+            output_dir: Destination directory for generated experiment
+        """
+        # Copy ALL prompt files (no filtering based on enabled steps)
+        prompts_dest = output_dir / 'config' / 'prompts'
+        prompts_dest.mkdir(parents=True, exist_ok=True)
+        
+        for step_metadata in config_set.available_steps:
+            # prompt_file already contains "prompts/" prefix, remove it
+            prompt_filename = Path(step_metadata.prompt_file).name
+            prompt_source = config_set.prompts_dir / prompt_filename
+            prompt_dest = prompts_dest / prompt_filename
+            
+            shutil.copy2(prompt_source, prompt_dest)
+            print(f"  ✓ config/prompts/{prompt_filename}")
+        
+        # Copy ALL HITL files
+        hitl_dest = output_dir / 'config' / 'hitl'
+        hitl_dest.mkdir(parents=True, exist_ok=True)
+        
+        for hitl_file in config_set.hitl_dir.glob('*'):
+            if hitl_file.is_file():
+                dest_file = hitl_dest / hitl_file.name
+                shutil.copy2(hitl_file, dest_file)
+                print(f"  ✓ config/hitl/{hitl_file.name}")
     
     def _copy_docs_files(
         self,
@@ -437,16 +456,24 @@ if __name__ == '__main__':
         (output_dir / '.env.example').write_text(env_example, encoding='utf-8')
         print("  ✓ .env.example")
     
-    def _generate_config_yaml(self, config: Dict[str, Any], output_dir: Path) -> None:
-        """Generate standalone config.yaml with complete configuration and explanatory comments."""
-        # Load the full experiment.yaml from generator to get all pricing and metrics definitions
-        experiment_yaml_path = self.project_root / 'config' / 'experiment.yaml'
-        if experiment_yaml_path.exists():
-            with open(experiment_yaml_path, 'r', encoding='utf-8') as f:
-                full_config = yaml.safe_load(f)
-        else:
-            # Fallback to provided config if experiment.yaml doesn't exist
-            full_config = config.copy()
+    def _generate_config_yaml(
+        self, 
+        config: Dict[str, Any], 
+        output_dir: Path,
+        config_set: ConfigSet
+    ) -> None:
+        """
+        Generate standalone config.yaml from config set template.
+        
+        Args:
+            config: Experiment configuration dictionary
+            output_dir: Output directory for generated project
+            config_set: ConfigSet object with template and metadata
+        """
+        # Load the template from config set
+        template_path = config_set.template_path
+        with open(template_path, 'r', encoding='utf-8') as f:
+            full_config = yaml.safe_load(f)
         
         # Override with experiment-specific settings
         full_config['experiment_name'] = config.get('experiment_name')
@@ -489,9 +516,15 @@ if __name__ == '__main__':
             f.write("# ============================================================\n")
             f.write("# Experiment Configuration\n")
             f.write("# ============================================================\n")
+            f.write(f"# Generated from config set: {config_set.name} (v{config_set.version})\n")
+            f.write(f"# Description: {config_set.description}\n")
+            f.write("#\n")
             f.write("# This file configures your experiment run.\n")
             f.write("#\n")
             f.write("# Key sections:\n")
+            f.write("#   - steps: Configure which steps to run (enable/disable)\n")
+            f.write("#       * All prompt files are copied, you control execution here\n")
+            f.write("#       * Steps execute in declaration order (not sorted by ID)\n")
             f.write("#   - experiment_name: Unique identifier for this experiment\n")
             f.write("#   - model: OpenAI model to use (gpt-4o, gpt-4o-mini, etc.)\n")
             f.write("#   - random_seed: For reproducibility (keeps runs deterministic)\n")

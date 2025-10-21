@@ -38,6 +38,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Generator imports (new)
 from generator.standalone_generator import StandaloneGenerator
 
+# Config sets imports
+from src.config_sets import ConfigSetLoader
+
 # Utility imports
 from src.utils.logger import get_logger
 
@@ -573,6 +576,7 @@ def create_experiment(
     max_runs: int,
     template_path: Optional[Path] = None,
     experiments_base_dir: Optional[Path] = None,
+    config_set: str = 'default',
     force: bool = False
 ) -> None:
     """
@@ -580,11 +584,12 @@ def create_experiment(
     
     Steps:
     1. Validate inputs
-    2. Generate configuration
-    3. Create directory structure
-    4. Write config.yaml
-    5. Generate README.md
-    6. Register in .experiments.json
+    2. Load config set
+    3. Generate configuration
+    4. Create directory structure
+    5. Write config.yaml
+    6. Generate README.md
+    7. Register in .experiments.json
     
     Args:
         name: Experiment name
@@ -593,6 +598,7 @@ def create_experiment(
         max_runs: Maximum runs per framework
         template_path: Optional template experiment directory
         experiments_base_dir: Optional base directory (defaults to parent of generator)
+        config_set: Config set name to use (default: 'default')
         force: If True, overwrite existing directory without asking
         
     Raises:
@@ -604,6 +610,17 @@ def create_experiment(
     validate_frameworks(frameworks)
     
     logger.info(f"Creating standalone experiment: {name}")
+    logger.info(f"Using config set: {config_set}")
+    
+    # Load config set
+    generator_root = Path(__file__).parent.parent
+    loader = ConfigSetLoader(generator_root / 'config_sets')
+    
+    try:
+        config_set_obj = loader.load(config_set)
+        logger.info(f"Loaded config set '{config_set}' ({config_set_obj.get_step_count()} steps)")
+    except Exception as e:
+        raise ExperimentCreationError(f"Failed to load config set '{config_set}': {e}")
     
     # Load template config if provided
     template_config = None
@@ -620,7 +637,6 @@ def create_experiment(
         output_dir = experiments_base_dir / name
     else:
         # Default: create in parent directory of the generator project
-        generator_root = Path(__file__).parent.parent
         output_dir = generator_root.parent / name
     
     # Check if already exists
@@ -726,7 +742,7 @@ def create_experiment(
                 
                 try:
                     generator = StandaloneGenerator()
-                    generator.generate(name, config, temp_dir)
+                    generator.generate(name, config, temp_dir, config_set_obj)
                     
                     # Merge from temp to existing
                     _merge_experiment_updates(temp_dir, output_dir)
@@ -769,7 +785,7 @@ def create_experiment(
     # Generate standalone experiment using the new generator
     try:
         generator = StandaloneGenerator()
-        generator.generate(name, config, output_dir)
+        generator.generate(name, config, output_dir, config_set_obj)
     except Exception as e:
         # Clean up on failure
         if output_dir.exists():
@@ -860,6 +876,18 @@ Examples:
     )
     
     parser.add_argument(
+        '--config-set',
+        default='default',
+        help='Config set name to use (default: default). Use --list-config-sets to see available options'
+    )
+    
+    parser.add_argument(
+        '--list-config-sets',
+        action='store_true',
+        help='List available config sets and exit'
+    )
+    
+    parser.add_argument(
         '--experiments-dir',
         type=Path,
         help='Custom base directory for experiments (default: parent directory of generator)'
@@ -879,6 +907,24 @@ def main():
     args = parse_args()
     
     try:
+        # Handle --list-config-sets
+        if args.list_config_sets:
+            project_root = Path(__file__).parent.parent
+            loader = ConfigSetLoader(project_root / 'config_sets')
+            available = loader.list_available()
+            
+            print("Available config sets:")
+            print()
+            for name in sorted(available):
+                details = loader.get_details(name)
+                print(f"  {name}")
+                print(f"    Description: {details['description']}")
+                print(f"    Version: {details['version']}")
+                print(f"    Steps: {details['steps_count']}")
+                print()
+            
+            return
+        
         # Interactive mode if no arguments
         if not any([args.name, args.model, args.frameworks, args.runs]):
             params = interactive_wizard()
@@ -919,6 +965,7 @@ def main():
                 'max_runs': args.runs,
                 'template_path': template_path,
                 'experiments_base_dir': args.experiments_dir,
+                'config_set': args.config_set,
                 'force': args.force
             }
         
