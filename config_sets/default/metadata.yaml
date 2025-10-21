@@ -1,7 +1,7 @@
 # Config Set Metadata
 # This file defines a curated experiment scenario template
 
-name: "minimal"
+name: "default"
 version: "1.0.0"
 description: "Minimal hello world API for testing and validation"
 

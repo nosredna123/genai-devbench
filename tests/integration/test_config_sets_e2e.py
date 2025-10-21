@@ -33,10 +33,10 @@ class TestEndToEndWorkflow:
         
         config_set_names = loader.list_available()
         
-        # Should have at least default and minimal
+        # Should have at least default and baes_chatdev_ghspec
         assert len(config_set_names) >= 2
         assert "default" in config_set_names
-        assert "minimal" in config_set_names
+        assert "baes_chatdev_ghspec" in config_set_names
     
     def test_load_default_config_set(self):
         """Test loading the default config set."""
@@ -46,19 +46,19 @@ class TestEndToEndWorkflow:
         config_set = loader.load("default")
         
         assert config_set.name == "default"
-        assert len(config_set.available_steps) == 6  # Default has 6 steps
-        assert all(step.id in range(1, 7) for step in config_set.available_steps)
+        assert len(config_set.available_steps) == 1  # Default has 1 step (hello world)
+        assert config_set.available_steps[0].id == 1
     
-    def test_load_minimal_config_set(self):
-        """Test loading the minimal config set."""
+    def test_load_baes_chatdev_ghspec_config_set(self):
+        """Test loading the baes_chatdev_ghspec config set."""
         config_sets_dir = Path(__file__).parent.parent.parent / "config_sets"
         loader = ConfigSetLoader(config_sets_dir)
         
-        config_set = loader.load("minimal")
+        config_set = loader.load("baes_chatdev_ghspec")
         
-        assert config_set.name == "minimal"
-        assert len(config_set.available_steps) == 1  # Minimal has 1 step
-        assert config_set.available_steps[0].id == 1
+        assert config_set.name == "baes_chatdev_ghspec"
+        assert len(config_set.available_steps) == 6  # baes_chatdev_ghspec has 6 steps
+        assert all(step.id in range(1, 7) for step in config_set.available_steps)
     
     def test_generate_experiment_structure(self, temp_workspace):
         """Test generating experiment creates correct structure."""
@@ -415,7 +415,7 @@ class TestDeclarationOrderExecution:
 
 class TestMinimalEndToEnd:
     """
-    Simple end-to-end integration test using minimal config set.
+    Simple end-to-end integration test using default (minimal) config set.
     
     Tests the complete generation flow: load config set → generate experiment → verify structure.
     This validates that cost calculation, report generation, and statistical analysis 
@@ -424,7 +424,7 @@ class TestMinimalEndToEnd:
     
     def test_generate_minimal_experiment_end_to_end(self, temp_workspace):
         """
-        Test complete experiment generation from minimal config set.
+        Test complete experiment generation from default (minimal) config set.
         
         This test verifies:
         1. Config set loads correctly
@@ -436,12 +436,12 @@ class TestMinimalEndToEnd:
         """
         from generator.standalone_generator import StandaloneGenerator
         
-        # Load minimal config set
+        # Load default config set (which is now the minimal one - 1 step)
         config_sets_dir = Path(__file__).parent.parent.parent / "config_sets"
         loader = ConfigSetLoader(config_sets_dir)
-        config_set = loader.load("minimal")
+        config_set = loader.load("default")
         
-        assert config_set.name == "minimal"
+        assert config_set.name == "default"
         assert len(config_set.available_steps) == 1
         
         # Generate experiment configuration

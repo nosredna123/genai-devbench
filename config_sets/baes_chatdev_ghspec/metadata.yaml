@@ -1,7 +1,7 @@
 # Config Set Metadata
 # This file defines a curated experiment scenario template
 
-name: "default"
+name: "baes_chatdev_ghspec"
 version: "1.0.0"
 description: "Traditional 6-step CRUD application (Student/Course/Teacher)"
 
