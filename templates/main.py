@@ -76,57 +76,66 @@ def main():
         print("=" * 60)
         print()
         
-        # Run each framework
+        # Initialize run tracking for all frameworks
         all_results = {}
-        start_time = time.time()
+        framework_run_counts = {}
         
-        for idx, framework_name in enumerate(enabled_frameworks, 1):
-            # Check how many runs already exist for this framework
+        for framework_name in enabled_frameworks:
             existing_runs = find_runs(framework=framework_name)
-            existing_count = len(existing_runs)
-            
-            logger.info(f"Starting {framework_name} runs")
-            
-            print(f"[{idx}/{len(enabled_frameworks)}] Framework: {framework_name.upper()} [{_timestamp()}]")
-            
-            if existing_count >= max_runs:
-                logger.info(f"{framework_name} already has {existing_count}/{max_runs} runs, skipping")
-                print(f"      ✓ Already completed ({existing_count}/{max_runs} runs)\n")
-                all_results[framework_name] = []
-                continue
-            
-            # Calculate how many more runs are needed
-            runs_needed = max_runs - existing_count
-            logger.info(f"{framework_name}: {existing_count} existing runs, {runs_needed} more needed")
-            
-            if existing_count > 0:
-                print(f"      Progress: {existing_count}/{max_runs} runs complete")
-                print(f"      Executing: {runs_needed} remaining runs")
+            framework_run_counts[framework_name] = len(existing_runs)
+            all_results[framework_name] = []
+        
+        # Display initial status
+        print("Initial status:")
+        for framework_name in enabled_frameworks:
+            count = framework_run_counts[framework_name]
+            if count >= max_runs:
+                print(f"  • {framework_name.upper()}: ✓ Already completed ({count}/{max_runs} runs)")
             else:
-                print(f"      Executing: {runs_needed} runs")
+                print(f"  • {framework_name.upper()}: {count}/{max_runs} runs")
+        print()
+        
+        # Execute runs in round-robin fashion (framework with fewest runs goes first)
+        start_time = time.time()
+        total_runs_needed = sum(max_runs - framework_run_counts[fw] for fw in enabled_frameworks)
+        completed_runs = 0
+        
+        logger.info(f"Starting interleaved execution: {total_runs_needed} total runs needed")
+        
+        while completed_runs < total_runs_needed:
+            # Find framework with fewest runs that still needs more
+            next_framework = min(
+                (fw for fw in enabled_frameworks if framework_run_counts[fw] < max_runs),
+                key=lambda fw: framework_run_counts[fw]
+            )
             
-            framework_results = []
-            for run_num in range(existing_count + 1, max_runs + 1):
-                run_start = time.time()
-                run_id = generate_run_id()
-                print(f"      → Run {run_num}/{max_runs} | ID: {run_id} | {_timestamp()}")
-                
-                logger.info(f"Running {framework_name} - run {run_num}/{max_runs} | Run ID: {run_id}")
-                
-                runner = OrchestratorRunner(
-                    framework_name=framework_name,
-                    config_path=str(config_path),
-                    experiment_name=experiment_name,
-                    run_id=run_id
-                )
-                
-                result = runner.execute_single_run()
-                framework_results.append(result)
-                
-                run_time = time.time() - run_start
-                print(f"      ✓ Completed in {run_time:.1f}s [{_timestamp()}]")
+            # Execute one run for the selected framework
+            current_count = framework_run_counts[next_framework]
+            run_num = current_count + 1
             
-            all_results[framework_name] = framework_results
+            run_start = time.time()
+            run_id = generate_run_id()
+            
+            print(f"[{completed_runs + 1}/{total_runs_needed}] {next_framework.upper()} - Run {run_num}/{max_runs} | ID: {run_id} | {_timestamp()}")
+            
+            logger.info(f"Running {next_framework} - run {run_num}/{max_runs} | Run ID: {run_id}")
+            
+            runner = OrchestratorRunner(
+                framework_name=next_framework,
+                config_path=str(config_path),
+                experiment_name=experiment_name,
+                run_id=run_id
+            )
+            
+            result = runner.execute_single_run()
+            all_results[next_framework].append(result)
+            
+            # Update run count
+            framework_run_counts[next_framework] += 1
+            completed_runs += 1
+            
+            run_time = time.time() - run_start
+            print(f"      ✓ Completed in {run_time:.1f}s [{_timestamp()}]")
             print()
         
         total_time = time.time() - start_time
