@@ -25,7 +25,7 @@ from src.adapters.baes_adapter import BAeSAdapter
 from src.adapters.chatdev_adapter import ChatDevAdapter
 from src.adapters.ghspec_adapter import GHSpecAdapter
 from src.analysis.stopping_rule import check_convergence, get_convergence_summary
-from src.config import get_enabled_steps
+from src.config.step_config import get_enabled_steps
 
 logger = get_logger(__name__, component="orchestrator")
 

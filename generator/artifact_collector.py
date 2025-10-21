@@ -60,6 +60,7 @@ class ArtifactCollector:
             'analysis': self._collect_analysis_files(),
             'orchestrator': self._collect_orchestrator_files(),
             'utils': self._collect_util_files(),
+            'config': self._collect_config_module_files(),
         }
         
         return artifacts
@@ -143,6 +144,19 @@ class ArtifactCollector:
         ]
         
         # Note: experiment_registry.py will be excluded (removed in cleanup phase)
+        
+        return [f for f in files if f.exists()]
+    
+    def _collect_config_module_files(self) -> List[Path]:
+        """Collect config module files (step_config.py for configurable steps)."""
+        config_dir = self.project_root / 'src' / 'config'
+        
+        # Config module files needed for runtime
+        files = [
+            config_dir / 'step_config.py',
+            config_dir / 'exceptions.py',
+            config_dir / '__init__.py',
+        ]
         
         return [f for f in files if f.exists()]
     

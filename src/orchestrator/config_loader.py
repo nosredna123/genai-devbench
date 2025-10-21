@@ -196,13 +196,8 @@ def validate_paths(config: Dict[str, Any]) -> None:
             f"Prompts directory does not exist: {config['prompts_dir']}"
         )
     
-    # Validate prompt files (step_1.txt through step_6.txt)
-    for i in range(1, 7):
-        prompt_file = prompts_dir / f"step_{i}.txt"
-        if not prompt_file.exists():
-            raise ConfigValidationError(
-                f"Prompt file missing: {prompt_file}"
-            )
+    # Note: Step-specific prompt file validation is now handled by the runner
+    # based on the 'steps' configuration in config.yaml
     
     # Validate HITL path
     hitl_path = Path(config['hitl_path'])
