@@ -5,6 +5,7 @@ from pathlib import Path
 
 from src.orchestrator.runner import OrchestratorRunner
 from src.orchestrator.config_loader import load_config
+from src.orchestrator.manifest_manager import find_runs
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -71,10 +72,25 @@ def main():
         # Run each framework
         all_results = {}
         for framework_name in enabled_frameworks:
-            logger.info(f"Starting {framework_name} runs")
-            framework_results = []
+            # Check how many runs already exist for this framework
+            existing_runs = find_runs(framework=framework_name)
+            existing_count = len(existing_runs)
             
-            for run_num in range(1, max_runs + 1):
+            logger.info(f"Starting {framework_name} runs")
+            
+            if existing_count >= max_runs:
+                logger.info(f"{framework_name} already has {existing_count}/{max_runs} runs, skipping")
+                print(f"  {framework_name}: Already completed ({existing_count}/{max_runs} runs)")
+                all_results[framework_name] = []
+                continue
+            
+            # Calculate how many more runs are needed
+            runs_needed = max_runs - existing_count
+            logger.info(f"{framework_name}: {existing_count} existing runs, {runs_needed} more needed")
+            print(f"  {framework_name}: Running {runs_needed} more runs ({existing_count}/{max_runs} complete)")
+            
+            framework_results = []
+            for run_num in range(existing_count + 1, max_runs + 1):
                 logger.info(f"Running {framework_name} - run {run_num}/{max_runs}")
                 
                 runner = OrchestratorRunner(
