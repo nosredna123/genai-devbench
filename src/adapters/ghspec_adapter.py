@@ -1175,13 +1175,20 @@ class GHSpecAdapter(BaseAdapter):
         - Workspace structure is set up
         
         Returns:
-            True if healthy, False otherwise
+            True if healthy
+            
+        Raises:
+            RuntimeError: If health check fails with details
         """
         if not self.framework_dir or not self.framework_dir.exists():
-            return False
+            raise RuntimeError(
+                f"GHSpec framework directory not found or not initialized: {self.framework_dir}"
+            )
         
         if not hasattr(self, 'specs_dir') or not self.specs_dir.exists():
-            return False
+            raise RuntimeError(
+                f"GHSpec workspace structure not set up: specs_dir missing or not found"
+            )
             
         return True
             
@@ -1198,12 +1205,27 @@ class GHSpecAdapter(BaseAdapter):
             
         Returns:
             Fixed clarification guidelines text
+            
+        Raises:
+            RuntimeError: If HITL file is missing or empty
         """
         if self.hitl_text is None:
             # Load GHSpec-specific clarification guidelines
             hitl_path = Path("config/hitl/ghspec_clarification_guidelines.txt")
+            if not hitl_path.exists():
+                raise RuntimeError(
+                    f"GHSpec HITL guidelines file not found: {hitl_path}. "
+                    "This file is required for deterministic HITL responses."
+                )
+            
             with open(hitl_path, 'r', encoding='utf-8') as f:
                 self.hitl_text = f.read().strip()
+            
+            if not self.hitl_text:
+                raise RuntimeError(
+                    f"GHSpec HITL guidelines file is empty: {hitl_path}. "
+                    "File must contain clarification guidelines."
+                )
                 
         logger.info("HITL intervention",
                    extra={'run_id': self.run_id, 'step': self.current_step,

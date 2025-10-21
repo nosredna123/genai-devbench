@@ -115,9 +115,9 @@ class TestHealthCheck:
     """Test health check functionality."""
     
     def test_health_check_fails_without_kernel(self, adapter):
-        """Health check should fail if kernel not initialized."""
-        result = adapter.health_check()
-        assert result is False
+        """Health check should raise RuntimeError if kernel not initialized."""
+        with pytest.raises(RuntimeError, match="BAEs kernel not initialized"):
+            adapter.health_check()
     
     def test_should_check_endpoints_early_steps(self, adapter):
         """Should not check endpoints during early steps."""
@@ -157,23 +157,23 @@ class TestHealthCheck:
             assert any('8600' in call for call in calls)  # UI port
     
     def test_check_http_endpoints_api_failure(self, adapter):
-        """Test HTTP endpoint check with API failure."""
+        """Test HTTP endpoint check raises on API failure."""
         with patch('requests.get') as mock_get:
             mock_response = Mock()
             mock_response.status_code = 500
             mock_get.return_value = mock_response
             
-            result = adapter._check_http_endpoints()
-            assert result is False
+            with pytest.raises(RuntimeError, match="BAEs API endpoint returned status 500"):
+                adapter._check_http_endpoints()
     
     def test_check_http_endpoints_connection_error(self, adapter):
-        """Test HTTP endpoint check with connection error."""
+        """Test HTTP endpoint check raises on connection error."""
         import requests
         with patch('requests.get') as mock_get:
             mock_get.side_effect = requests.RequestException("Connection refused")
             
-            result = adapter._check_http_endpoints()
-            assert result is False
+            with pytest.raises(RuntimeError, match="BAEs API endpoint not responding"):
+                adapter._check_http_endpoints()
 
 
 class TestHITLHandling:
@@ -214,16 +214,20 @@ class TestHITLHandling:
         finally:
             os.chdir(original_cwd)
     
-    def test_handle_hitl_default_when_file_missing(self, adapter):
-        """HITL should use default response when file doesn't exist."""
-        # Reset cached value
-        adapter.hitl_text = None
-        result = adapter.handle_hitl("test query")
+    def test_handle_hitl_raises_when_file_missing(self, adapter, tmp_path, monkeypatch):
+        """HITL should raise RuntimeError when file doesn't exist."""
+        # Change to tmp directory where file won't exist
+        import os
+        original_cwd = os.getcwd()
+        os.chdir(tmp_path)
         
-        # Should contain default HITL text (either from real file or fallback)
-        # The assertion should be flexible since real file might exist
-        assert isinstance(result, str)
-        assert len(result) > 0
+        try:
+            # Reset cached value
+            adapter.hitl_text = None
+            with pytest.raises(RuntimeError, match="HITL specification file not found"):
+                adapter.handle_hitl("test query")
+        finally:
+            os.chdir(original_cwd)
 
 
 class TestKernelProperty:

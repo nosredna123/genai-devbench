@@ -56,7 +56,7 @@ class BAeSAdapter(BaseAdapter):
         self.database_dir = Path(self.workspace_path) / "database"
         
         repo_url = self.config['repo_url']
-        commit_hash = self.config.get('commit_hash', 'HEAD')
+        commit_hash = self.config['commit_hash']  # Required for reproducibility
         
         try:
             if repo_url.startswith('file://'):
@@ -99,14 +99,17 @@ class BAeSAdapter(BaseAdapter):
             os.environ['UI_PORT'] = str(self.config.get('ui_port', 8600))
             os.environ['BAE_MAX_RETRIES'] = str(self.config.get('max_retries', 3))
             
+            # REQUIRED: BAEs must have dedicated API key for proper token attribution
             baes_api_key = os.getenv('OPENAI_API_KEY_BAES')
-            if baes_api_key:
-                os.environ['OPENAI_API_KEY'] = baes_api_key
-                logger.info("BAEs API key configured for token tracking",
-                           extra={'run_id': self.run_id})
-            else:
-                logger.warning("OPENAI_API_KEY_BAES not set - using default key",
-                             extra={'run_id': self.run_id})
+            if not baes_api_key:
+                raise RuntimeError(
+                    "OPENAI_API_KEY_BAES environment variable is required. "
+                    "Each framework must use a dedicated API key for accurate token tracking."
+                )
+            
+            os.environ['OPENAI_API_KEY'] = baes_api_key
+            logger.info("BAEs API key configured for token tracking",
+                       extra={'run_id': self.run_id})
             
             logger.info("BAEs framework ready", extra={'run_id': self.run_id})
             
@@ -372,15 +375,12 @@ class BAeSAdapter(BaseAdapter):
     def stop(self) -> None:
         logger.info("Stopping BAEs framework", extra={'run_id': self.run_id})
         
+        # Deprecated kernel cleanup (kept for compatibility but not used with CLI)
         if hasattr(self, '_kernel') and self._kernel:
-            try:
-                if hasattr(self._kernel, '_managed_system_manager'):
-                    mgr = self._kernel._managed_system_manager
-                    if mgr and hasattr(mgr, 'stop_servers'):
-                        mgr.stop_servers()
-            except Exception as e:
-                logger.warning(f"Error stopping servers via kernel: {e}",
-                             extra={'run_id': self.run_id})
+            if hasattr(self._kernel, '_managed_system_manager'):
+                mgr = self._kernel._managed_system_manager
+                if mgr and hasattr(mgr, 'stop_servers'):
+                    mgr.stop_servers()
         
         self._ensure_servers_stopped()
         self._archive_managed_system()
@@ -388,57 +388,69 @@ class BAeSAdapter(BaseAdapter):
         logger.info("BAEs framework stopped", extra={'run_id': self.run_id})
     
     def _ensure_servers_stopped(self) -> None:
+        """Force kill any processes on BAEs ports.
+        
+        Uses lsof + kill to ensure ports are freed. May raise if commands fail.
+        """
         api_port = self.config.get('api_port', 8100)
         ui_port = self.config.get('ui_port', 8600)
         
         for port in [api_port, ui_port]:
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                    if sock.connect_ex(("localhost", port)) == 0:
-                        subprocess.run(
-                            f"lsof -ti:{port} | xargs kill -9",
-                            shell=True,
-                            timeout=10,
-                            stderr=subprocess.DEVNULL,
-                            check=False
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                if sock.connect_ex(("localhost", port)) == 0:
+                    # Port is in use - kill the process
+                    result = subprocess.run(
+                        f"lsof -ti:{port} | xargs kill -9",
+                        shell=True,
+                        timeout=10,
+                        stderr=subprocess.PIPE,
+                        check=False  # Don't raise if no process found
+                    )
+                    if result.returncode != 0 and result.stderr:
+                        logger.warning(
+                            f"Failed to kill process on port {port}: {result.stderr.decode()}",
+                            extra={'run_id': self.run_id}
                         )
-                        time.sleep(1)
-            except Exception:
-                pass
+                    time.sleep(1)
     
     def _archive_managed_system(self) -> None:
+        """Archive managed system directory for reproducibility.
+        
+        Raises:
+            RuntimeError: If archiving fails
+        """
         if self.managed_system_dir and self.managed_system_dir.exists():
             archive_path = Path(self.workspace_path) / "managed_system.tar.gz"
             
-            try:
-                with tarfile.open(archive_path, "w:gz") as tar:
-                    tar.add(self.managed_system_dir, arcname="managed_system")
-                
-                logger.info(f"Archived managed system to {archive_path}", extra={'run_id': self.run_id})
-            except Exception as e:
-                logger.warning(f"Failed to archive managed system: {e}", extra={'run_id': self.run_id})
+            with tarfile.open(archive_path, "w:gz") as tar:
+                tar.add(self.managed_system_dir, arcname="managed_system")
+            
+            logger.info(f"Archived managed system to {archive_path}", extra={'run_id': self.run_id})
     
     def health_check(self) -> bool:
-        try:
-            if not hasattr(self, '_kernel') or not self._kernel:
-                return False
+        """Check BAEs framework health.
+        
+        Returns:
+            True if healthy
             
-            context_store = self._kernel.context_store
-            if not context_store:
-                return False
-            
-            supported_entities = self._kernel.bae_registry.get_supported_entities()
-            if not supported_entities:
-                return False
-            
-            if self._should_check_endpoints():
-                if not self._check_http_endpoints():
-                    return False
-            
-            return True
-            
-        except Exception:
-            return False
+        Raises:
+            RuntimeError: If health check fails with details
+        """
+        if not hasattr(self, '_kernel') or not self._kernel:
+            raise RuntimeError("BAEs kernel not initialized")
+        
+        context_store = self._kernel.context_store
+        if not context_store:
+            raise RuntimeError("BAEs context store not available")
+        
+        supported_entities = self._kernel.bae_registry.get_supported_entities()
+        if not supported_entities:
+            raise RuntimeError("BAEs registry has no supported entities")
+        
+        if self._should_check_endpoints():
+            self._check_http_endpoints()  # Will raise if endpoints fail
+        
+        return True
     
     def _should_check_endpoints(self) -> bool:
         return (hasattr(self, 'current_step') and 
@@ -447,40 +459,71 @@ class BAeSAdapter(BaseAdapter):
                 self.managed_system_dir.exists())
     
     def _check_http_endpoints(self) -> bool:
+        """Check if BAEs API and UI endpoints are responding.
+        
+        Returns:
+            True if both endpoints are healthy
+            
+        Raises:
+            RuntimeError: If endpoints are not responding
+        """
         import requests
         
         api_port = self.config.get('api_port', 8100)
         ui_port = self.config.get('ui_port', 8600)
         
+        # Check API endpoint
         try:
             response = requests.get(f"http://localhost:{api_port}/docs", timeout=5)
             if response.status_code != 200:
-                return False
-        except requests.RequestException:
-            return False
+                raise RuntimeError(
+                    f"BAEs API endpoint returned status {response.status_code} "
+                    f"(expected 200) at http://localhost:{api_port}/docs"
+                )
+        except requests.RequestException as e:
+            raise RuntimeError(f"BAEs API endpoint not responding at http://localhost:{api_port}/docs: {e}") from e
         
+        # Check UI endpoint
         try:
             response = requests.get(f"http://localhost:{ui_port}/", timeout=5)
             if response.status_code != 200:
-                return False
-        except requests.RequestException:
-            return False
+                raise RuntimeError(
+                    f"BAEs UI endpoint returned status {response.status_code} "
+                    f"(expected 200) at http://localhost:{ui_port}/"
+                )
+        except requests.RequestException as e:
+            raise RuntimeError(f"BAEs UI endpoint not responding at http://localhost:{ui_port}/: {e}") from e
         
         return True
     
     def handle_hitl(self, query: str) -> str:
+        """Return HITL response for deterministic execution.
+        
+        Args:
+            query: Framework's clarification question
+            
+        Returns:
+            Clarification text from config/hitl/expanded_spec.txt
+            
+        Raises:
+            RuntimeError: If HITL file is missing
+        """
         if self.hitl_text is None:
             hitl_path = Path("config/hitl/expanded_spec.txt")
-            if hitl_path.exists():
-                with open(hitl_path, 'r', encoding='utf-8') as f:
-                    self.hitl_text = f.read().strip()
-            else:
-                self.hitl_text = """Create a complete CRUD system with:
-- Student entity: name, email, enrollment_date
-- Course entity: code, title, credits
-- Teacher entity: name, email, department
-- Full CRUD operations for all entities
-- FastAPI backend, Streamlit UI, SQLite database""".strip()
+            if not hitl_path.exists():
+                raise RuntimeError(
+                    f"HITL specification file not found: {hitl_path}. "
+                    "This file is required for deterministic HITL responses."
+                )
+            
+            with open(hitl_path, 'r', encoding='utf-8') as f:
+                self.hitl_text = f.read().strip()
+            
+            if not self.hitl_text:
+                raise RuntimeError(
+                    f"HITL specification file is empty: {hitl_path}. "
+                    "File must contain clarification text."
+                )
         
         logger.info("HITL intervention", extra={'run_id': self.run_id, 'step': self.current_step})
         

@@ -560,17 +560,19 @@ class ChatDevAdapter(BaseAdapter):
                          'event': 'step_start', 
                          'metadata': {'framework': 'chatdev', 'task': command_text[:100]}})
         
-        # Get API key from environment
+        # Get API key from environment - REQUIRED
         api_key_env = self.config.get('api_key_env', 'OPENAI_API_KEY_CHATDEV')
         api_key = os.getenv(api_key_env)
         
-        logger.info("API key retrieval", extra={'run_id': self.run_id, 
-                   'metadata': {'env_var': api_key_env, 
-                               'key_found': bool(api_key),
-                               'key_length': len(api_key) if api_key else 0}})
-        
         if not api_key:
-            raise RuntimeError(f"API key not found in environment: {api_key_env}")
+            raise RuntimeError(
+                f"API key not found in environment: {api_key_env}. "
+                "Each framework must use a dedicated API key for accurate token tracking."
+            )
+        
+        logger.info("API key retrieved", extra={'run_id': self.run_id, 
+                   'metadata': {'env_var': api_key_env, 
+                               'key_length': len(api_key)}})
         
         # Generate unique project name per step
         project_name = f"BAEs_Step{step_num}_{self.run_id[:8]}"
@@ -842,42 +844,37 @@ class ChatDevAdapter(BaseAdapter):
         2. Python environment is accessible
         
         Returns:
-            True if healthy, False otherwise
+            True if healthy
+            
+        Raises:
+            RuntimeError: If health check fails with details
         """
-        try:
-            # Verify run.py exists
-            run_py = self.framework_dir / "run.py"
-            if not run_py.exists():
-                logger.warning("Health check failed: run.py not found",
-                             extra={'run_id': self.run_id})
-                return False
-            
-            # Verify Python environment is accessible
-            if not self.python_path or not Path(self.python_path).exists():
-                logger.warning("Health check failed: Python not accessible",
-                             extra={'run_id': self.run_id})
-                return False
-            
-            # Quick Python version check
-            result = subprocess.run(
-                [str(self.python_path), "--version"],
-                capture_output=True,
-                stdin=subprocess.DEVNULL,
-                timeout=5
+        # Verify run.py exists
+        run_py = self.framework_dir / "run.py"
+        if not run_py.exists():
+            raise RuntimeError(f"ChatDev entry point not found: {run_py}")
+        
+        # Verify Python environment is accessible
+        if not self.python_path or not Path(self.python_path).exists():
+            raise RuntimeError(
+                f"ChatDev Python environment not accessible: {self.python_path}"
             )
-            
-            if result.returncode != 0:
-                logger.warning("Health check failed: Python check failed",
-                             extra={'run_id': self.run_id})
-                return False
-            
-            return True
-            
-        except Exception as e:
-            logger.warning("Health check exception",
-                         extra={'run_id': self.run_id,
-                               'metadata': {'error': str(e)}})
-            return False
+        
+        # Quick Python version check
+        result = subprocess.run(
+            [str(self.python_path), "--version"],
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            timeout=5
+        )
+        
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"ChatDev Python check failed with exit code {result.returncode}: "
+                f"{result.stderr.decode() if result.stderr else 'No error output'}"
+            )
+        
+        return True
             
     def handle_hitl(self, query: str) -> str:
         """
@@ -887,13 +884,28 @@ class ChatDevAdapter(BaseAdapter):
             query: Framework's clarification question
             
         Returns:
-            Fixed clarification text
+            Fixed clarification text from config/hitl/expanded_spec.txt
+            
+        Raises:
+            RuntimeError: If HITL file is missing or empty
         """
         if self.hitl_text is None:
             # Load HITL text from config (should be done once)
             hitl_path = Path("config/hitl/expanded_spec.txt")
+            if not hitl_path.exists():
+                raise RuntimeError(
+                    f"HITL specification file not found: {hitl_path}. "
+                    "This file is required for deterministic HITL responses."
+                )
+            
             with open(hitl_path, 'r', encoding='utf-8') as f:
                 self.hitl_text = f.read().strip()
+            
+            if not self.hitl_text:
+                raise RuntimeError(
+                    f"HITL specification file is empty: {hitl_path}. "
+                    "File must contain clarification text."
+                )
                 
         logger.info("HITL intervention",
                    extra={'run_id': self.run_id, 'step': self.current_step,
