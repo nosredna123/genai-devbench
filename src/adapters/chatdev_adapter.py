@@ -68,29 +68,15 @@ class ChatDevAdapter(BaseAdapter):
         commit_hash = self.config['commit_hash']
         self.framework_dir = Path(self.workspace_path) / "chatdev_framework"
         
+        # Use centralized framework setup method (DRY principle)
+        self.setup_framework_from_repo(
+            framework_name='chatdev',
+            target_dir=self.framework_dir,
+            repo_url=repo_url,
+            commit_hash=commit_hash
+        )
+        
         try:
-            # Clone repository
-            subprocess.run(
-                ['git', 'clone', repo_url, str(self.framework_dir)],
-                check=True,
-                capture_output=True,
-                stdin=subprocess.DEVNULL,
-                timeout=300
-            )
-            
-            # Checkout specific commit
-            subprocess.run(
-                ['git', 'checkout', commit_hash],
-                cwd=self.framework_dir,
-                check=True,
-                capture_output=True,
-                stdin=subprocess.DEVNULL,
-                timeout=60
-            )
-            
-            # Verify commit hash matches config (T038 - reproducibility)
-            self.verify_commit_hash(self.framework_dir, commit_hash)
-            
             logger.info("ChatDev repository cloned and verified",
                        extra={'run_id': self.run_id, 
                              'metadata': {'commit': commit_hash}})

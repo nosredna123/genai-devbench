@@ -8,6 +8,7 @@ import subprocess
 import time
 import os
 import re
+import shutil
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 import requests
@@ -65,33 +66,16 @@ class GHSpecAdapter(BaseAdapter):
         # Create framework directory for cloned repo
         self.framework_dir = Path(self.workspace_path) / "ghspec_framework"
         
+        # Use centralized framework setup method (DRY principle)
+        self.setup_framework_from_repo(
+            framework_name='ghspec',
+            target_dir=self.framework_dir,
+            repo_url=repo_url,
+            commit_hash=commit_hash,
+            timeout_clone=120
+        )
+        
         try:
-            # Clone repository
-            logger.info("Cloning GitHub Spec-kit repository",
-                       extra={'run_id': self.run_id,
-                             'metadata': {'repo': repo_url, 'commit': commit_hash}})
-            
-            subprocess.run(
-                ['git', 'clone', repo_url, str(self.framework_dir)],
-                check=True,
-                capture_output=True,
-                stdin=subprocess.DEVNULL,
-                timeout=120
-            )
-            
-            # Checkout specific commit
-            subprocess.run(
-                ['git', 'checkout', commit_hash],
-                cwd=self.framework_dir,
-                check=True,
-                capture_output=True,
-                stdin=subprocess.DEVNULL,
-                timeout=60
-            )
-            
-            # Verify commit hash matches config (reproducibility requirement)
-            self.verify_commit_hash(self.framework_dir, commit_hash)
-            
             logger.info("GitHub Spec-kit repository cloned and verified",
                        extra={'run_id': self.run_id,
                              'metadata': {'commit': commit_hash}})

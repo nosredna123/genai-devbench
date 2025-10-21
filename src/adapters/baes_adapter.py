@@ -58,37 +58,15 @@ class BAeSAdapter(BaseAdapter):
         repo_url = self.config['repo_url']
         commit_hash = self.config['commit_hash']  # Required for reproducibility
         
+        # Use centralized framework setup method (DRY principle)
+        self.setup_framework_from_repo(
+            framework_name='baes',
+            target_dir=self.framework_dir,
+            repo_url=repo_url,
+            commit_hash=commit_hash
+        )
+        
         try:
-            if repo_url.startswith('file://'):
-                local_path = repo_url[7:]
-                logger.info(f"Copying local BAEs repository from {local_path}",
-                           extra={'run_id': self.run_id})
-                shutil.copytree(local_path, self.framework_dir, symlinks=False)
-            else:
-                logger.info(f"Cloning BAEs repository from {repo_url}",
-                           extra={'run_id': self.run_id})
-                subprocess.run(
-                    ['git', 'clone', repo_url, str(self.framework_dir)],
-                    check=True,
-                    capture_output=True,
-                    stdin=subprocess.DEVNULL,
-                    timeout=300
-                )
-            
-            if commit_hash != 'HEAD':
-                logger.info(f"Checking out commit {commit_hash}",
-                           extra={'run_id': self.run_id})
-                subprocess.run(
-                    ['git', 'checkout', commit_hash],
-                    cwd=self.framework_dir,
-                    check=True,
-                    capture_output=True,
-                    stdin=subprocess.DEVNULL,
-                    timeout=60
-                )
-            
-            self.verify_commit_hash(self.framework_dir, commit_hash)
-            
             logger.info("Setting up isolated virtual environment",
                        extra={'run_id': self.run_id, 'event': 'venv_setup_start'})
             self._setup_virtual_environment()
