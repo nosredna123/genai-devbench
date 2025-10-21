@@ -301,17 +301,23 @@ class BaseAdapter(ABC):
             >>> adapter.get_shared_framework_path('baes')
             Path('/experiments/my-exp/frameworks/baes')
         """
+        # Compute experiment root from workspace path
+        # workspace_path: /exp-root/runs/framework/run-id/workspace
+        # experiment_root: /exp-root (go up 4 levels)
+        workspace = Path(self.workspace_path).resolve()
+        experiment_root = workspace.parent.parent.parent.parent
+        
         # Try new shared location first
-        shared_path = Path('frameworks') / framework_name
+        shared_path = experiment_root / 'frameworks' / framework_name
         if shared_path.exists() and shared_path.is_dir():
             logger.debug(
                 f"Using shared framework: {shared_path}",
                 extra={'run_id': self.run_id, 'framework': framework_name}
             )
-            return shared_path.resolve()
+            return shared_path
         
         # Fallback to old workspace location (deprecated)
-        workspace_base = Path(self.workspace_path).parent.parent / "workspace"
+        workspace_base = experiment_root / "workspace"
         old_path = workspace_base / f"{framework_name}_framework"
         if old_path.exists() and old_path.is_dir():
             logger.warning(
@@ -324,9 +330,9 @@ class BaseAdapter(ABC):
         # Framework not found in either location
         error_msg = (
             f"Framework '{framework_name}' not found. Checked:\n"
-            f"  - Shared location: {shared_path.resolve()}\n"
-            f"  - Old location: {old_path.resolve()}\n"
-            f"Run 'python templates/setup_frameworks.py' to set up frameworks."
+            f"  - Shared location: {shared_path}\n"
+            f"  - Old location: {old_path}\n"
+            f"Run 'python templates/setup_frameworks.py' or './setup.sh' to set up frameworks."
         )
         logger.error(error_msg, extra={'run_id': self.run_id, 'framework': framework_name})
         raise RuntimeError(error_msg)

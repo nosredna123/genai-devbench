@@ -199,10 +199,11 @@ def patch_chatdev_if_needed(framework_path: Path):
         content = backend_file.read_text()
         
         if 'o1-preview' not in content:
-            # Add O1/GPT-5 models to supported list
+            # Add O1/GPT-5 models to token limit dictionaries
+            # These are dictionaries, so we need to add individual key-value pairs
             content = content.replace(
-                '"gpt-4o-mini"',
-                '"gpt-4o-mini", "o1-preview", "o1-mini", "gpt-5"'
+                '"gpt-4o-mini": 16384',
+                '"gpt-4o-mini": 16384,\n                "o1-preview": 16384,\n                "o1-mini": 16384,\n                "gpt-5": 16384'
             )
             backend_file.write_text(content)
             print(f"    ✓ Patched camel/model_backend.py")
