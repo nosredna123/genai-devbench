@@ -506,6 +506,16 @@ if __name__ == '__main__':
                     # Update/merge all fields from fw_config into full_config
                     full_config['frameworks'][fw_name].update(fw_config)
         
+        # Convert repo_url to file:// paths pointing to local frameworks directory
+        # This avoids cloning the repository for every run (huge performance improvement!)
+        # The frameworks are already cloned in <experiment>/frameworks/ by setup.sh
+        if 'frameworks' in full_config:
+            for fw_name in full_config['frameworks']:
+                # Use absolute path to frameworks directory
+                # At runtime, this will be resolved relative to where the experiment runs
+                frameworks_abs_path = (output_dir / 'frameworks' / fw_name).absolute()
+                full_config['frameworks'][fw_name]['repo_url'] = f'file://{frameworks_abs_path}'
+        
         # Update stopping rule
         if 'stopping_rule' in config:
             full_config['stopping_rule'] = config['stopping_rule']
