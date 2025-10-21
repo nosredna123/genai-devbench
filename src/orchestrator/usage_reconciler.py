@@ -59,26 +59,24 @@ class UsageReconciler:
         """
         Fetch usage data from OpenAI Usage API.
         
+        Uses OPEN_AI_KEY_ADM (which has api.usage.read permission) to query the Usage API.
+        Attribution to specific frameworks is achieved through time window isolation,
+        not API key filtering (api_key_id is null in OpenAI responses).
+        
         Args:
             start_timestamp: Unix timestamp for start of window
             end_timestamp: Unix timestamp for end of window
-            framework: Framework name (baes, chatdev, ghspec) - if provided, uses framework-specific API key
+            framework: Framework name (baes, chatdev, ghspec) - for logging only
             
         Returns:
             Tuple of (input_tokens, output_tokens, api_calls, cached_tokens)
         """
-        # Select API key based on framework
-        if framework:
-            key_var = f'OPENAI_API_KEY_{framework.upper()}'
-            api_key = os.getenv(key_var)
-            if not api_key:
-                logger.warning(f"{key_var} not found, falling back to OPEN_AI_KEY_ADM")
-                api_key = os.getenv('OPEN_AI_KEY_ADM')
-        else:
-            api_key = os.getenv('OPEN_AI_KEY_ADM')
-        
+        # Use OPEN_AI_KEY_ADM for authorization (it has api.usage.read permission)
+        # Framework-specific keys (OPENAI_API_KEY_{FRAMEWORK}) are used during generation,
+        # but the admin key is needed to QUERY usage data
+        api_key = os.getenv('OPEN_AI_KEY_ADM')
         if not api_key:
-            logger.warning("No API key found for reconciliation")
+            logger.warning("OPEN_AI_KEY_ADM not found in environment")
             return 0, 0, 0, 0
         
         url = "https://api.openai.com/v1/organization/usage/completions"
