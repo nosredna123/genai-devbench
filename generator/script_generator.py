@@ -100,7 +100,6 @@ fi
 
 # Clone framework repositories
 echo ""
-echo "Setting up framework repositories..."
 python -m src.setup_frameworks
 
 echo ""

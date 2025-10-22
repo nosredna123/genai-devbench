@@ -400,7 +400,6 @@ def main():
     try:
         config = load_config()
         
-        print("Setting up framework repositories...")
         print()
         
         for name, fw_config in config['frameworks'].items():

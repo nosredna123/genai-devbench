@@ -273,7 +273,6 @@ else
 fi
 
 # Clone framework repositories
-echo "Setting up framework repositories..."
 python -m src.setup_frameworks
 
 echo ""
