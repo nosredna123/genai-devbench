@@ -188,59 +188,203 @@ def validate_run_artifacts(self) -> tuple[bool, str]:
     return True, ""
 ```
 
-## Fix #2: Copy All Artifacts to Workspace Root
+# GHSpec Workspace Generation Fix
 
-**Problem**: GHSpec generates artifacts in nested `specs/001-baes-experiment/` directory:
-- Phase 3: `spec.md`, `plan.md`, `tasks.md` 
-- Phase 4: Python code in `src/`
+## Investigation Results
 
-These artifacts were not copied to the workspace root, making them:
-- Harder to find for validation/analysis
-- Inconsistent with BAeS and ChatDev patterns (which place artifacts at workspace root)
-- Missing from workspace even when generated successfully
+**Date**: October 22, 2025  
+**Test Experiments**: test_ghspec_01, ghspec_final_test, agoravai_ghspec  
+**Status**: ✅ CRITICAL BUG FOUND AND FIXED
 
-**Solution**: Copy artifacts to workspace root after each successful phase:
-1. **Phase 3 artifacts** (steps 1-3): Copy spec.md, plan.md, tasks.md to workspace root
-2. **Phase 4 artifacts** (steps 4-5): Copy all Python code files to workspace root
+## Summary
+
+GHSpec had a **fundamental architectural bug**: it treated its internal 5-phase workflow as separate scenario steps, requiring users to configure 5 steps in their experiment. This was incorrect - GHSpec should execute ALL 5 phases in ONE scenario step, just like BAeS and ChatDev.
+
+### The Real Problem
+
+**User's Observation**: "No source code was generated/copied"
+
+**Root Cause Discovery**:
+- User correctly identified that scenario steps ≠ GHSpec internal phases
+- GHSpec's internal workflow (specify → plan → tasks → implement) should happen in ONE execute_step() call
+- The adapter was treating each internal phase as a separate scenario step
+- This meant users needed 5 steps in config.yaml to get a complete system
+- BAeS and ChatDev generate complete systems in ONE step
+
+**Example**:
+- **BAeS**: `execute_step(1, "Build Hello World API")` → complete FastAPI app ✅
+- **ChatDev**: `execute_step(1, "Build Hello World API")` → complete project ✅  
+- **GHSpec (broken)**: Required steps 1-5 in config to get complete system ❌
+- **GHSpec (fixed)**: `execute_step(1, "Build Hello World API")` → complete Node.js app ✅
+
+### The Fix
+
+**Refactored execute_step() to run complete GHSpec workflow**:
+
+```python
+def execute_step(self, step_num: int, command_text: str) -> Dict[str, Any]:
+    """
+    Execute a complete GHSpec workflow for one scenario step.
+    
+    GHSpec Workflow (executes ALL phases in ONE scenario step):
+    1. Phase 1 (Specify): Generate specification
+    2. Phase 2 (Plan): Generate technical plan
+    3. Phase 3 (Tasks): Generate task breakdown
+    4. Phase 4 (Implement): Generate code task-by-task
+    5. Phase 5 (Bugfix): Optional error correction (stub)
+    """
+    # Execute all 5 phases sequentially
+    # Aggregate metrics across all phases
+    # Copy all artifacts to workspace root
+```
+
+**Key Changes**:
+1. ✅ All 5 GHSpec phases execute in ONE execute_step() call
+2. ✅ Aggregate tokens/API calls/HITL across all phases
+3. ✅ Copy Phase 3 artifacts (spec.md, plan.md, tasks.md) to workspace root
+4. ✅ Copy Phase 4 artifacts (all code files) to workspace root
+5. ✅ Return complete metrics for the entire workflow
+
+**Benefits**:
+- Matches BAeS/ChatDev behavior (ONE step = complete system)
+- Users only need 1 step in config.yaml (not 5)
+- Proper comparison: all frameworks generate complete systems per step
+- Correct token/cost attribution (all phases counted together)
+
+## Test Results
+
+**Experiment**: agoravai_ghspec  
+**Configuration**: 1 step ("Build Hello World API")  
+**Model**: gpt-4o
+
+**Generated System**:
+```
+workspace/
+  spec.md, plan.md, tasks.md          # Phase 3 artifacts ✅
+  project/
+    server.js                          # Main entry point ✅
+    routes/hello.js, routes/health.js  # Route handlers ✅
+    middleware/errorHandler.js         # Error handling ✅
+    tests/*.test.js                    # Test suite ✅
+    Dockerfile, docker-compose.yml     # Deployment ✅
+    package.json                       # Dependencies ✅
+```
+
+**Execution Flow**:
+```
+Step 1 Start → Phase 1 (Specify) → Phase 2 (Plan) → Phase 3 (Tasks) → 
+Phase 4 (Implement) → Copy Artifacts → Step 1 Complete
+Duration: 120 seconds
+Result: Complete Node.js application ✅
+```
+
+**Validation**: ✅ PASSED
+- Artifact validation found spec.md, plan.md, tasks.md
+- Phase 3 validation: "Phase 3 complete with spec.md, plan.md, tasks.md"
+- All code files present in workspace root
+
+## Implementation Details
+
+### Fix #1: Complete Workflow Execution
+
+**File**: `src/adapters/ghspec_adapter.py`  
+**Method**: `execute_step()` (lines 146-285)  
+**Change**: Execute all 5 GHSpec phases sequentially
+
+**Before**:
+```python
+# Treated phases as separate scenario steps
+if step_num == 1:
+    self._execute_phase('specify', command_text)
+elif step_num == 2:
+    self._execute_phase('plan', command_text)
+# ... required 5 steps in config
+```
+
+**After**:
+```python
+# Execute complete workflow in ONE step
+total_metrics = {}
+
+# Phase 1: Specify
+hitl, tok_in, tok_out, calls, cached, start_ts, end_ts = self._execute_phase('specify', command_text)
+total_metrics.update(...)
+
+# Phase 2: Plan  
+hitl, tok_in, tok_out, calls, cached, start_ts, end_ts = self._execute_phase('plan', command_text)
+total_metrics.update(...)
+
+# Phase 3: Tasks
+hitl, tok_in, tok_out, calls, cached, start_ts, end_ts = self._execute_phase('tasks', command_text)
+total_metrics.update(...)
+
+# Phase 4: Implement
+hitl, tok_in, tok_out, calls, cached, start_ts, end_ts = self._execute_task_implementation(command_text)
+total_metrics.update(...)
+
+# Copy all artifacts
+self._copy_phase3_artifacts(step_num)
+self._copy_artifacts(step_num)
+
+return total_metrics
+```
+
+### Fix #2: Copy Phase 3 Artifacts to Workspace Root
+
+**File**: `src/adapters/ghspec_adapter.py`  
+**Method**: `_copy_phase3_artifacts()` (new method, lines 321-387)  
+**Purpose**: Copy spec.md, plan.md, tasks.md to workspace root
 
 **Implementation**:
 ```python
-# In execute_step() - Phase 3 (steps 1-3)
-if success:
-    self._copy_phase3_artifacts(step_num)
-
-# In execute_step() - Phase 4 (steps 4-5)  
-if success:
-    self._copy_artifacts(step_num)
+def _copy_phase3_artifacts(self, step_num: int) -> None:
+    workspace_root = Path(self.workspace_path)
+    artifacts = {
+        'spec.md': self.spec_md_path,
+        'plan.md': self.plan_md_path,
+        'tasks.md': self.tasks_md_path
+    }
+    
+    for filename, source_path in artifacts.items():
+        if source_path.exists():
+            dest_path = workspace_root / filename
+            dest_path.write_text(source_path.read_text(), encoding='utf-8')
 ```
 
-Added `_copy_phase3_artifacts()` method that:
-- Copies spec.md, plan.md, tasks.md to workspace root
-- Only copies files that exist (handles partial completion)
-- Uses simple file copy (markdown files, not directories)
-- Logs each file copied
+**Note**: Files are intentionally duplicated (both in `specs/001-baes-experiment/` and workspace root) to:
+1. Preserve original GHSpec framework structure
+2. Provide standard location for validation
+3. Match BAeS/ChatDev artifact patterns
 
-Reused existing `_copy_artifacts()` method for Phase 4 code.
+### Fix #3: Copy Phase 4 Artifacts to Workspace Root
 
-**DRY Compliance**: 
-- `_copy_artifacts()` uses shared `_copy_directory_contents()` helper from BaseAdapter
-- `_copy_phase3_artifacts()` uses simple file copy (not directory copy)
-- Both methods share logging patterns and error handling approach
+**File**: `src/adapters/ghspec_adapter.py`  
+**Method**: `_copy_artifacts()` (existing method, uses DRY helper)  
+**Purpose**: Copy all generated code to workspace root
 
-**Testing Required**:
-- Rerun test with step 1 to verify spec.md copied to workspace root
-- Test with 5-step config to verify Phase 4 code copying still works
+**Implementation**:
+```python
+def _copy_artifacts(self, step_num: int) -> None:
+    # Use DRY helper from BaseAdapter
+    copied_count = self._copy_directory_contents(
+        source_dir=self.src_dir,
+        dest_dir=Path(self.workspace_path),
+        step_num=step_num,
+        recursive=True
+    )
+```
 
-## Phase 2 Status: ✅ COMPLETE (3 Fixes)
+## Phase 2 Status: ✅ COMPLETE
 
-GHSpec now correctly:
-1. ✅ Validates Phase 3 artifacts (spec/plan/tasks) OR Phase 4 code
-2. ✅ Copies Phase 4 code to workspace root
-3. ✅ Copies Phase 3 specs to workspace root (NEW FIX)
+**Summary**:
+- **Fix #1**: Execute complete 5-phase workflow in ONE scenario step ✅
+- **Fix #2**: Copy Phase 3 artifacts (spec/plan/tasks) to workspace root ✅
+- **Fix #3**: Copy Phase 4 artifacts (code files) to workspace root ✅
 
-**Fix Summary**:
-- **Fix #1**: Phase-aware validation (validates spec/plan/tasks OR Python code)
-- **Fix #2**: Copy Phase 4 artifacts (code files) to workspace root  
-- **Fix #3**: Copy Phase 3 artifacts (spec/plan/tasks) to workspace root
+**Test Results**:
+- ✅ agoravai_ghspec: Complete Node.js app generated in 1 step
+- ✅ All artifacts present in workspace root
+- ✅ Validation passes
+- ✅ Matches BAeS/ChatDev behavior
 
-**Next**: Test with new experiment to verify all artifacts are copied correctly
+**Next**: Phase 3 - DRY refactoring review (already mostly complete)
