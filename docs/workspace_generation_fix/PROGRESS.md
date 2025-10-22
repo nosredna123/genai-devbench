@@ -169,6 +169,71 @@
 - ✅ ChatDev imports work
 - ✅ ChatDev executes successfully (runs 40s vs 5s immediate failure)
 
+#### ✅ Fix #5: OpenAI API Compatibility - Filter Unsupported Fields
+**File**: `templates/setup_frameworks.py`  
+**Lines**: 293-330 (new patch added)  
+**Change**: Add patch to filter out unsupported OpenAI response fields
+
+**Problem**:
+- OpenAI API 1.47.1 returns `annotations` field in ChatCompletion messages
+- ChatDev's `ChatMessage` class doesn't accept `annotations` parameter
+- Error: `TypeError: ChatMessage.__init__() got an unexpected keyword argument 'annotations'`
+- Occurred at `camel/agents/chat_agent.py` line 244 when creating ChatMessage from API response
+
+**Root Cause Analysis** (from test09 logs):
+```
+File "camel/agents/chat_agent.py", line 244, in <listcomp>
+    ChatMessage(role_name=self.role_name, role_type=self.role_type,
+                meta_dict=dict(), **dict(choice.message))
+TypeError: ChatMessage.__init__() got an unexpected keyword argument 'annotations'
+```
+
+**Solution** (Patch #4 in `patch_chatdev_if_needed`):
+1. Add `filter_message_dict()` helper function to filter OpenAI response fields
+2. Only pass supported fields: `role`, `content`, `refusal`, `audio`, `function_call`, `tool_calls`
+3. Apply filter in both code paths (new API and old API)
+4. Patch is idempotent - safe to run multiple times
+
+**Code Changes**:
+```python
+def filter_message_dict(msg_dict):
+    """Filter out unsupported fields from OpenAI message dict."""
+    supported_fields = {'role', 'content', 'refusal', 'audio', 'function_call', 'tool_calls'}
+    return {k: v for k, v in msg_dict.items() if k in supported_fields}
+
+# Applied at line 244:
+ChatMessage(role_name=self.role_name, role_type=self.role_type,
+            meta_dict=dict(), **filter_message_dict(dict(choice.message)))
+```
+
+**Validation Results** (test_chatdev_01 experiment):
+- ✅ ChatMessage creation succeeds without TypeError
+- ✅ ChatDev completes full code generation (93.3s duration)
+- ✅ Files created in workspace/ (main.py with FastAPI code)
+- ✅ Exit code: 0 (success)
+- ✅ Generated valid Python code implementing Hello World REST API
+
+**Generated Code Sample**:
+```python
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+
+@app.get("/hello")
+async def hello_endpoint():
+    return {"message": "Hello, World!"}
+```
+
+## Phase 1: ChatDev Fix - ✅ COMPLETE
+
+All 5 fixes implemented and validated:
+1. ✅ Fix #1: Copy artifacts to workspace/
+2. ✅ Fix #2: httpx 0.27.2 downgrade  
+3. ✅ Fix #3: PYTHONPATH for imports
+4. ✅ Fix #4: Preserve venv symlink
+5. ✅ Fix #5: Filter OpenAI annotations field
+
+**Result**: ChatDev now successfully generates code without errors!
+
 ### Testing Required
 
 1. **Create test experiment**: `test_chatdev_fix`

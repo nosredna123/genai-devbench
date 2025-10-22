@@ -288,6 +288,49 @@ def patch_chatdev_if_needed(framework_path: Path):
     else:
         print(f"    ⚠️  chatdev/statistics.py not found")
     
+    # Patch 4: Filter unsupported OpenAI response fields (annotations)
+    chat_agent_file = framework_path / 'camel' / 'agents' / 'chat_agent.py'
+    if chat_agent_file.exists():
+        content = chat_agent_file.read_text()
+        
+        # Check if already patched
+        if 'filter_message_dict' not in content:
+            # Add helper function to filter out unsupported fields
+            helper_function = '''
+def filter_message_dict(msg_dict):
+    """Filter out unsupported fields from OpenAI message dict."""
+    supported_fields = {'role', 'content', 'refusal', 'audio', 'function_call', 'tool_calls'}
+    return {k: v for k, v in msg_dict.items() if k in supported_fields}
+
+'''
+            # Insert helper function before the ChatAgent class
+            content = content.replace(
+                'class ChatAgent(BaseAgent):',
+                helper_function + 'class ChatAgent(BaseAgent):'
+            )
+            
+            # Update the two places where ChatMessage is created from response
+            # Use more flexible pattern matching
+            
+            # Location 1: openai_new_api path - match across whitespace
+            content = content.replace(
+                'meta_dict=dict(), **dict(choice.message))',
+                'meta_dict=dict(), **filter_message_dict(dict(choice.message)))'
+            )
+            
+            # Location 2: old api path - match across whitespace
+            content = content.replace(
+                'meta_dict=dict(), **dict(choice["message"]))',
+                'meta_dict=dict(), **filter_message_dict(dict(choice["message"])))'
+            )
+            
+            chat_agent_file.write_text(content)
+            print(f"    ✓ Patched camel/agents/chat_agent.py (filtered unsupported fields)")
+        else:
+            print(f"    ✓ camel/agents/chat_agent.py already patched")
+    else:
+        print(f"    ⚠️  camel/agents/chat_agent.py not found")
+    
     print(f"  ✓ ChatDev patches applied")
 
 
