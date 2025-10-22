@@ -104,10 +104,10 @@ class ChatDevAdapter(BaseAdapter):
     
     def _copy_artifacts(self, step_num: int, project_name: str) -> None:
         """
-        Copy ChatDev's WareHouse output to permanent run directory.
+        Copy ChatDev's WareHouse output to workspace directory.
         
-        This preserves the generated code for reproducibility, debugging, and analysis.
-        Without this, artifacts are lost when the temp workspace is cleaned up.
+        This ensures validation can find the generated code.
+        Aligns with BAeS pattern of writing directly to workspace.
         
         Args:
             step_num: Step number that was executed
@@ -121,12 +121,6 @@ class ChatDevAdapter(BaseAdapter):
                                'metadata': {'expected_path': str(warehouse_path)}})
             return
         
-        # Create artifacts directory in run directory (parent of workspace)
-        # Structure: runs/chatdev/<run-id>/artifacts/
-        run_dir = Path(self.workspace_path).parent
-        artifacts_dir = run_dir / "artifacts"
-        artifacts_dir.mkdir(exist_ok=True)
-        
         # Find the project directory (ChatDev may add timestamp suffix)
         project_dirs = list(warehouse_path.glob(f"{project_name}*"))
         
@@ -137,22 +131,30 @@ class ChatDevAdapter(BaseAdapter):
                                           'warehouse_path': str(warehouse_path)}})
             return
         
+        # Copy to workspace directory (where validation expects files)
+        workspace_dir = Path(self.workspace_path)
+        
         # Copy each matching project directory
         for project_dir in project_dirs:
-            dest_path = artifacts_dir / project_dir.name
-            
             try:
-                if dest_path.exists():
-                    shutil.rmtree(dest_path)  # Remove old copy if exists
+                # Copy contents of project_dir into workspace
+                # (not the project_dir itself, to avoid nested structure)
+                for item in project_dir.iterdir():
+                    dest = workspace_dir / item.name
+                    if item.is_file():
+                        shutil.copy2(item, dest)
+                    elif item.is_dir():
+                        if dest.exists():
+                            shutil.rmtree(dest)
+                        shutil.copytree(item, dest)
                 
-                shutil.copytree(project_dir, dest_path)
-                
-                logger.info("Copied ChatDev artifacts",
+                file_count = len(list(workspace_dir.rglob('*')))
+                logger.info("Copied ChatDev artifacts to workspace",
                           extra={'run_id': self.run_id, 'step': step_num,
                                 'metadata': {
                                     'source': str(project_dir),
-                                    'destination': str(dest_path),
-                                    'size_bytes': sum(f.stat().st_size for f in dest_path.rglob('*') if f.is_file())
+                                    'destination': str(workspace_dir),
+                                    'files_copied': file_count
                                 }})
             except Exception as e:
                 logger.error("Failed to copy ChatDev artifacts",
@@ -160,7 +162,7 @@ class ChatDevAdapter(BaseAdapter):
                                  'metadata': {
                                      'error': str(e),
                                      'source': str(project_dir),
-                                     'destination': str(dest_path)
+                                     'destination': str(workspace_dir)
                                  }})
             
     def execute_step(self, step_num: int, command_text: str) -> Dict[str, Any]:
