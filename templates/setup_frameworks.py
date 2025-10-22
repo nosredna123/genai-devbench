@@ -291,6 +291,43 @@ def patch_chatdev_if_needed(framework_path: Path):
     print(f"  ✓ ChatDev patches applied")
 
 
+def fix_chatdev_dependencies(framework_path: Path):
+    """
+    Fix ChatDev dependency compatibility issues.
+    
+    OpenAI 1.47.1 has compatibility issues with httpx >= 0.28.0.
+    Downgrade to httpx 0.27.2 which is compatible.
+    
+    Args:
+        framework_path: Path to chatdev framework directory
+    """
+    print(f"  Fixing dependency compatibility...")
+    
+    venv_path = framework_path / '.venv'
+    python_path = venv_path / 'bin' / 'python'
+    
+    if not python_path.exists():
+        print(f"    ⚠️  Python not found in venv, skipping dependency fix")
+        return
+    
+    try:
+        # Downgrade httpx to compatible version (0.27.2 works with openai 1.47.1)
+        subprocess.run(
+            [str(python_path), '-m', 'pip', 'install', 'httpx==0.27.2'],
+            check=True,
+            capture_output=True,
+            timeout=60
+        )
+        print(f"    ✓ Downgraded httpx to 0.27.2 for compatibility")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"    ⚠️  Failed to fix dependencies:")
+        if e.stderr:
+            print(f"       {e.stderr.decode('utf-8')}")
+    except subprocess.TimeoutExpired:
+        print(f"    ⚠️  Dependency fix timed out")
+
+
 def main():
     """Main entry point."""
     try:
@@ -334,6 +371,7 @@ def main():
             # Apply ChatDev-specific patches
             if name == 'chatdev':
                 patch_chatdev_if_needed(framework_path)
+                fix_chatdev_dependencies(framework_path)
             
             print()
         
