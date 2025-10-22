@@ -89,6 +89,47 @@ def clone_framework(name: str, repo_url: str, commit_hash: str):
             sys.exit(1)
 
 
+def get_compatible_python():
+    """
+    Find a compatible Python version for ChatDev (3.9-3.11).
+    
+    ChatDev dependencies have compatibility issues with Python 3.12+.
+    Returns the path to a compatible Python executable.
+    """
+    # Try to find Python 3.11 or 3.10 first (most compatible)
+    for version in ['3.11', '3.10', '3.9']:
+        for cmd in [f'python{version}', f'/usr/bin/python{version}']:
+            try:
+                result = subprocess.run(
+                    [cmd, '--version'],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if result.returncode == 0:
+                    print(f"  Using {cmd} for venv (ChatDev compatible)")
+                    return cmd
+            except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+                continue
+    
+    # Fall back to python3 (but warn if it's 3.12+)
+    try:
+        result = subprocess.run(
+            ['python3', '-c', 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5
+        )
+        version = result.stdout.strip()
+        if version >= '3.12':
+            print(f"  ⚠️  Warning: Using Python {version} which may have compatibility issues")
+            print(f"     ChatDev works best with Python 3.9-3.11")
+        return 'python3'
+    except Exception:
+        return 'python3'
+
+
 def setup_venv_if_needed(name: str, framework_path: Path, use_venv: bool):
     """
     Create virtual environment for framework if needed.
@@ -115,22 +156,25 @@ def setup_venv_if_needed(name: str, framework_path: Path, use_venv: bool):
         print(f"  ✓ Venv already exists")
         return
     
+    # Get compatible Python version (especially important for ChatDev)
+    python_cmd = get_compatible_python() if name == 'chatdev' else 'python3'
+    
     print(f"  Creating virtual environment...")
     try:
         # Create venv
         subprocess.run(
-            ['python3', '-m', 'venv', str(venv_path), '--clear'],
+            [python_cmd, '-m', 'venv', str(venv_path), '--clear'],
             check=True,
             capture_output=True,
             timeout=60
         )
         
-        # Upgrade pip and setuptools first (critical for Python 3.12+ compatibility)
-        print(f"  Upgrading pip and setuptools...")
+        # Upgrade pip, setuptools, and wheel first (critical for Python 3.12+ compatibility)
+        print(f"  Upgrading pip, setuptools, and wheel...")
         subprocess.run(
             [
                 str(python_path), '-m', 'pip', 'install',
-                '--upgrade', 'pip', 'setuptools',
+                '--upgrade', 'pip', 'setuptools>=65.5.0', 'wheel',
                 '--timeout', '120'
             ],
             check=True,
@@ -138,11 +182,12 @@ def setup_venv_if_needed(name: str, framework_path: Path, use_venv: bool):
             timeout=120
         )
         
-        # Install requirements
+        # Install requirements with PEP 517 for better Python 3.12+ compatibility
         print(f"  Installing dependencies (this may take 3-5 minutes)...")
         subprocess.run(
             [
                 str(python_path), '-m', 'pip', 'install',
+                '--use-pep517',
                 '-r', str(requirements_file),
                 '--timeout', '300'
             ],
