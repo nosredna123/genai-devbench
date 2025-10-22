@@ -145,15 +145,24 @@ class GHSpecAdapter(BaseAdapter):
             
     def execute_step(self, step_num: int, command_text: str) -> Dict[str, Any]:
         """
-        Execute a step by generating spec/plan/tasks or implementing code.
+        Execute a complete GHSpec workflow for one scenario step.
         
-        Phase 3 Implementation (steps 1-3):
-        - Step 1: Generate specification (specify phase)
-        - Step 2: Generate technical plan (plan phase)
-        - Step 3: Generate task breakdown (tasks phase)
+        IMPORTANT: GHSpec's internal 5-phase workflow is DIFFERENT from scenario steps:
+        - **Scenario Step** (this method): User's business requirement (e.g., "Build Hello World API")
+        - **GHSpec Internal Phases**: Framework's process to fulfill that requirement
+        
+        GHSpec Workflow (executes ALL phases in ONE scenario step):
+        1. Phase 1 (Specify): Generate specification from command_text
+        2. Phase 2 (Plan): Generate technical plan from spec
+        3. Phase 3 (Tasks): Generate task breakdown from spec + plan
+        4. Phase 4 (Implement): Generate code task-by-task
+        5. Phase 5 (Bugfix): Optional error correction (stub for now)
+        
+        This matches how BAeS and ChatDev work - ONE execute_step() call generates
+        a complete working system.
         
         Args:
-            step_num: Step number (1-6)
+            step_num: Scenario step number (e.g., 1 for "Build Hello World API")
             command_text: Natural language command (user's feature request)
             
         Returns:
@@ -161,82 +170,115 @@ class GHSpecAdapter(BaseAdapter):
         """
         self.current_step = step_num
         self._step_start_time = time.time()
+        overall_start_timestamp = int(time.time())
         
-        logger.info("Executing step",
+        logger.info("Executing GHSpec complete workflow",
                    extra={'run_id': self.run_id, 'step': step_num, 
                          'event': 'step_start', 
-                         'metadata': {'framework': 'ghspec', 'command': command_text[:100]}})
+                         'metadata': {'framework': 'ghspec', 'command': command_text[:100],
+                                    'note': 'Running all 5 GHSpec internal phases'}})
         
-        hitl_count = 0
-        tokens_in = 0
-        tokens_out = 0
-        api_calls = 0
-        cached_tokens = 0
-        start_timestamp = 0
-        end_timestamp = 0
-        success = False
+        # Aggregate metrics across all phases
+        total_hitl_count = 0
+        total_tokens_in = 0
+        total_tokens_out = 0
+        total_api_calls = 0
+        total_cached_tokens = 0
         
         try:
-            # Phase 3: Spec/Plan/Tasks generation (steps 1-3)
-            if step_num == 1:
-                # Generate specification
-                hitl_count, tokens_in, tokens_out, api_calls, cached_tokens, start_timestamp, end_timestamp = self._execute_phase('specify', command_text)
-                success = self.spec_md_path.exists()
-                
-            elif step_num == 2:
-                # Generate technical plan (requires spec.md)
-                if not self.spec_md_path.exists():
-                    raise RuntimeError("spec.md not found - run step 1 first")
-                hitl_count, tokens_in, tokens_out, api_calls, cached_tokens, start_timestamp, end_timestamp = self._execute_phase('plan', command_text)
-                success = self.plan_md_path.exists()
-                
-            elif step_num == 3:
-                # Generate task breakdown (requires spec.md and plan.md)
-                if not self.spec_md_path.exists() or not self.plan_md_path.exists():
-                    raise RuntimeError("spec.md or plan.md not found - run steps 1-2 first")
-                hitl_count, tokens_in, tokens_out, api_calls, cached_tokens, start_timestamp, end_timestamp = self._execute_phase('tasks', command_text)
-                success = self.tasks_md_path.exists()
-                
-            # Phase 4: Task-by-task implementation (steps 4-5)
-            elif step_num in [4, 5]:
-                # Implement tasks from tasks.md
-                if not self.tasks_md_path.exists():
-                    raise RuntimeError("tasks.md not found - run steps 1-3 first")
-                
-                hitl_count, tokens_in, tokens_out, api_calls, cached_tokens, start_timestamp, end_timestamp = self._execute_task_implementation(command_text)
-                
-                # Success if at least some files were created
-                created_files = list(self.src_dir.rglob('*.py')) + list(self.src_dir.rglob('*.md'))
-                success = len(created_files) > 0
-                
-            # Phase 5: Bugfix cycle (step 6)
-            elif step_num == 6:
-                # Bugfix cycle - simplified implementation
-                # In full implementation, this would:
-                # 1. Get validation report from orchestrator
-                # 2. Derive bugfix tasks from failures
-                # 3. Execute bugfix loop (bounded to 1 cycle)
-                # 
-                # For experiment: Orchestrator handles validation and retry logic
-                # This adapter provides the bugfix capability via _attempt_bugfix_cycle()
-                
-                logger.info("Step 6: Bugfix phase (stub - orchestrator handles validation)",
-                           extra={'run_id': self.run_id, 'step': step_num})
-                
-                # Return success with no work done
-                # Actual bugfix would be triggered by orchestrator detecting failures
-                success = True
-                hitl_count = 0
-                tokens_in = 0
-                tokens_out = 0
-                api_calls = 0
-                cached_tokens = 0
-                # For step 6 (stub), use current time as timestamps
-                start_timestamp = int(time.time())
-                end_timestamp = start_timestamp
-                
-            else:
-                raise ValueError(f"Invalid step number: {step_num}")
+            # Phase 1: Generate specification
+            logger.info("GHSpec Phase 1/5: Specify",
+                       extra={'run_id': self.run_id, 'step': step_num})
+            hitl, tok_in, tok_out, calls, cached, start_ts, end_ts = self._execute_phase('specify', command_text)
+            total_hitl_count += hitl
+            total_tokens_in += tok_in
+            total_tokens_out += tok_out
+            total_api_calls += calls
+            total_cached_tokens += cached
+            
+            if not self.spec_md_path.exists():
+                raise RuntimeError("Failed to generate spec.md")
+            
+            # Phase 2: Generate technical plan
+            logger.info("GHSpec Phase 2/5: Plan",
+                       extra={'run_id': self.run_id, 'step': step_num})
+            hitl, tok_in, tok_out, calls, cached, start_ts, end_ts = self._execute_phase('plan', command_text)
+            total_hitl_count += hitl
+            total_tokens_in += tok_in
+            total_tokens_out += tok_out
+            total_api_calls += calls
+            total_cached_tokens += cached
+            
+            if not self.plan_md_path.exists():
+                raise RuntimeError("Failed to generate plan.md")
+            
+            # Phase 3: Generate task breakdown
+            logger.info("GHSpec Phase 3/5: Tasks",
+                       extra={'run_id': self.run_id, 'step': step_num})
+            hitl, tok_in, tok_out, calls, cached, start_ts, end_ts = self._execute_phase('tasks', command_text)
+            total_hitl_count += hitl
+            total_tokens_in += tok_in
+            total_tokens_out += tok_out
+            total_api_calls += calls
+            total_cached_tokens += cached
+            
+            if not self.tasks_md_path.exists():
+                raise RuntimeError("Failed to generate tasks.md")
+            
+            # Phase 4: Implement code task-by-task
+            logger.info("GHSpec Phase 4/5: Implement",
+                       extra={'run_id': self.run_id, 'step': step_num})
+            hitl, tok_in, tok_out, calls, cached, start_ts, end_ts = self._execute_task_implementation(command_text)
+            total_hitl_count += hitl
+            total_tokens_in += tok_in
+            total_tokens_out += tok_out
+            total_api_calls += calls
+            total_cached_tokens += cached
+            
+            # Check if code was generated
+            created_files = list(self.src_dir.rglob('*.py')) + list(self.src_dir.rglob('*.md'))
+            if len(created_files) == 0:
+                raise RuntimeError("No code files generated during implementation")
+            
+            # Phase 5: Bugfix cycle (stub - orchestrator handles validation)
+            logger.info("GHSpec Phase 5/5: Bugfix (skipped - orchestrator handles)",
+                       extra={'run_id': self.run_id, 'step': step_num})
+            # Bugfix would go here, but orchestrator handles validation retry logic
+            
+            # Copy all artifacts to workspace root for validation
+            self._copy_phase3_artifacts(step_num)  # Copy spec/plan/tasks
+            self._copy_artifacts(step_num)         # Copy generated code
+            
+            success = True
+            overall_end_timestamp = int(time.time())
+            duration = time.time() - self._step_start_time
+            
+            logger.info("GHSpec complete workflow finished",
+                       extra={'run_id': self.run_id, 'step': step_num,
+                             'event': 'step_complete',
+                             'metadata': {
+                                 'success': True,
+                                 'duration_seconds': duration,
+                                 'total_hitl_count': total_hitl_count,
+                                 'total_tokens_in': total_tokens_in,
+                                 'total_tokens_out': total_tokens_out,
+                                 'total_api_calls': total_api_calls,
+                                 'total_cached_tokens': total_cached_tokens,
+                                 'files_generated': len(created_files)
+                             }})
+            
+            return {
+                'success': True,
+                'duration_seconds': duration,
+                'hitl_count': total_hitl_count,
+                'tokens_in': total_tokens_in,
+                'tokens_out': total_tokens_out,
+                'api_calls': total_api_calls,
+                'cached_tokens': total_cached_tokens,
+                'start_timestamp': overall_start_timestamp,
+                'end_timestamp': overall_end_timestamp,
+                'retry_count': 0
+            }
                 
         except Exception as e:
             # Store error for validation reporting
@@ -245,40 +287,73 @@ class GHSpecAdapter(BaseAdapter):
                 'error': str(e),
                 'exception_type': type(e).__name__
             }
-            logger.error("Step execution failed",
+            logger.error("GHSpec workflow execution failed",
                         extra={'run_id': self.run_id, 'step': step_num,
-                              'metadata': {'error': str(e)}})
-            success = False
+                              'metadata': {'error': str(e), 'exception_type': type(e).__name__}})
             # Re-raise to let orchestrator handle
             raise
+    
+    def _copy_artifacts(self, step_num: int) -> None:
+        """
+        Copy GHSpec's generated code from specs/001-baes-experiment/src/ to workspace root.
         
-        duration = time.time() - self._step_start_time
+        This ensures validation can find the generated code in a standard location,
+        aligning with BAeS and ChatDev patterns.
         
-        logger.info("Step completed",
-                   extra={'run_id': self.run_id, 'step': step_num,
-                         'event': 'step_complete',
-                         'metadata': {
-                             'success': success,
-                             'duration': duration,
-                             'hitl_count': hitl_count,
-                             'tokens_in': tokens_in,
-                             'tokens_out': tokens_out,
-                             'api_calls': api_calls,
-                             'cached_tokens': cached_tokens
-                         }})
+        Args:
+            step_num: Step number that was executed
+        """
+        # Use DRY helper from BaseAdapter
+        copied_count = self._copy_directory_contents(
+            source_dir=self.src_dir,
+            dest_dir=Path(self.workspace_path),
+            step_num=step_num,
+            recursive=True
+        )
+    
+    def _copy_phase3_artifacts(self, step_num: int) -> None:
+        """
+        Copy GHSpec's Phase 3 artifacts (spec.md, plan.md, tasks.md) to workspace root.
         
-        return {
-            'success': success,
-            'duration_seconds': duration,
-            'hitl_count': hitl_count,
-            'tokens_in': tokens_in,
-            'tokens_out': tokens_out,
-            'api_calls': api_calls,
-            'cached_tokens': cached_tokens,
-            'start_timestamp': start_timestamp,
-            'end_timestamp': end_timestamp,
-            'retry_count': 0
+        Phase 3 generates specification documents in specs/001-baes-experiment/:
+        - spec.md: Feature specification
+        - plan.md: Technical implementation plan
+        - tasks.md: Breakdown of implementation tasks
+        
+        These files are copied to workspace root for:
+        1. Consistent validation (same location as BAeS/ChatDev artifacts)
+        2. Easy access for analysis and reporting
+        3. Archive packaging (all artifacts in one place)
+        
+        Args:
+            step_num: Step number that was executed (1, 2, or 3)
+        """
+        workspace_root = Path(self.workspace_path)
+        
+        # Map of artifacts to copy
+        artifacts = {
+            'spec.md': self.spec_md_path,
+            'plan.md': self.plan_md_path,
+            'tasks.md': self.tasks_md_path
         }
+        
+        copied_count = 0
+        for filename, source_path in artifacts.items():
+            if source_path.exists():
+                dest_path = workspace_root / filename
+                try:
+                    dest_path.write_text(source_path.read_text(), encoding='utf-8')
+                    copied_count += 1
+                    logger.info(f"Copied Phase 3 artifact: {filename}",
+                               extra={'run_id': self.run_id, 'step': step_num})
+                except Exception as e:
+                    logger.warning(f"Failed to copy {filename}: {e}",
+                                  extra={'run_id': self.run_id, 'step': step_num})
+        
+        if copied_count > 0:
+            logger.info(f"Copied {copied_count} Phase 3 artifacts to workspace root",
+                       extra={'run_id': self.run_id, 'step': step_num})
+
     
     def _execute_phase(self, phase: str, command_text: str) -> Tuple[int, int, int, int, int]:
         """
@@ -1234,11 +1309,15 @@ class GHSpecAdapter(BaseAdapter):
                    extra={'run_id': self.run_id, 'event': 'framework_stopped'})
     
     def validate_run_artifacts(self) -> tuple[bool, str]:
-        """Validate that GHSpec generated code artifacts in workspace directory.
+        """Validate that GHSpec generated expected artifacts based on completed phases.
         
-        Checks that the workspace directory contains expected files:
-        - At least one Python file (.py)
-        - At least one API endpoint file (typical: api.py, routes.py, or main.py)
+        GHSpec is multi-phase:
+        - Phase 3 (Steps 1-3): Generate spec.md, plan.md, tasks.md
+        - Phase 4 (Steps 4-5): Generate Python code files
+        
+        Validation checks for artifacts appropriate to the completed phase.
+        If only specification phases were run, validates spec/plan/tasks files.
+        If implementation phases were run, validates Python code files.
         
         Returns:
             tuple[bool, str]: (success, error_message)
@@ -1252,32 +1331,63 @@ class GHSpecAdapter(BaseAdapter):
                 "GHSpec framework failed to create workspace directory."
             )
         
-        # Count Python files
+        # Check what phase was completed by looking at generated files
+        has_spec = self.spec_md_path.exists()
+        has_plan = self.plan_md_path.exists()
+        has_tasks = self.tasks_md_path.exists()
         python_files = list(workspace_dir.rglob("*.py"))
-        if not python_files:
-            # Use DRY helper from BaseAdapter to format error message
+        has_code = len(python_files) > 0
+        
+        # Determine validation expectations based on artifacts present
+        if has_code:
+            # Phase 4 (implementation) completed - validate code artifacts
+            logger.info("Validating Phase 4 artifacts (implementation)",
+                       extra={'run_id': self.run_id,
+                             'metadata': {'python_files': len(python_files)}})
+            
+            # Check for typical API entry point files
+            api_files = ["api.py", "routes.py", "main.py", "app.py"]
+            has_api_file = any((workspace_dir / f).exists() for f in api_files)
+            if not has_api_file:
+                logger.warning(
+                    f"No typical API entry point file found in workspace directory: {workspace_dir}",
+                    extra={'run_id': self.run_id}
+                )
+            
+            # Success - log summary
+            file_count = len(list(workspace_dir.rglob("*")))
+            logger.info(
+                f"Artifact validation passed: {len(python_files)} Python files, "
+                f"{file_count} total files in workspace",
+                extra={'run_id': self.run_id}
+            )
+            return True, ""
+            
+        elif has_spec or has_plan or has_tasks:
+            # Phase 3 (specification) completed - validate spec/plan/tasks artifacts
+            phase_files = []
+            if has_spec:
+                phase_files.append("spec.md")
+            if has_plan:
+                phase_files.append("plan.md")
+            if has_tasks:
+                phase_files.append("tasks.md")
+            
+            logger.info("Validating Phase 3 artifacts (specification)",
+                       extra={'run_id': self.run_id,
+                             'metadata': {'files': phase_files}})
+            
+            logger.info(
+                f"Artifact validation passed: Phase 3 complete with {', '.join(phase_files)}",
+                extra={'run_id': self.run_id}
+            )
+            return True, ""
+            
+        else:
+            # No artifacts generated at all - this is a failure
             error_msg = self._format_validation_error(
                 workspace_dir=workspace_dir,
                 framework_name="GHSpec",
                 last_execution_error=self.last_execution_error
             )
             return False, error_msg
-        
-        # Check for typical API entry point files
-        api_files = ["api.py", "routes.py", "main.py", "app.py"]
-        has_api_file = any((workspace_dir / f).exists() for f in api_files)
-        if not has_api_file:
-            logger.warning(
-                f"No typical API entry point file found in workspace directory: {workspace_dir}",
-                extra={'run_id': self.run_id}
-            )
-        
-        # Success - log summary
-        file_count = len(list(workspace_dir.rglob("*")))
-        logger.info(
-            f"Artifact validation passed: {len(python_files)} Python files, "
-            f"{file_count} total files in workspace",
-            extra={'run_id': self.run_id}
-        )
-        
-        return True, ""

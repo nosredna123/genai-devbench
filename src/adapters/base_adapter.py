@@ -791,6 +791,80 @@ class BaseAdapter(ABC):
             f"   3. Fix the issue in the {framework_name} framework if needed"
         )
     
+    def _copy_directory_contents(
+        self,
+        source_dir: Path,
+        dest_dir: Path,
+        step_num: int,
+        recursive: bool = True
+    ) -> int:
+        """
+        DRY helper to copy directory contents to destination.
+        
+        Shared by ChatDev and GHSpec adapters for copying generated artifacts
+        to workspace directory where validation expects them.
+        
+        Args:
+            source_dir: Source directory containing files to copy
+            dest_dir: Destination directory (typically workspace root)
+            step_num: Current step number for logging
+            recursive: If True, use rglob for recursive copy; else use iterdir
+            
+        Returns:
+            Number of files copied
+            
+        Raises:
+            Exception: If copy operation fails
+        """
+        if not source_dir.exists():
+            logger.warning(
+                f"Source directory not found - no artifacts to copy: {source_dir}",
+                extra={'run_id': self.run_id, 'step': step_num}
+            )
+            return 0
+        
+        copied_count = 0
+        
+        try:
+            # Choose iteration method based on recursive flag
+            items = source_dir.rglob('*') if recursive else source_dir.iterdir()
+            
+            for item in items:
+                if item.is_file():
+                    # Calculate relative path from source_dir
+                    rel_path = item.relative_to(source_dir)
+                    dest = dest_dir / rel_path
+                    
+                    # Create parent directories if needed
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # Copy file
+                    shutil.copy2(item, dest)
+                    copied_count += 1
+                    
+                    logger.debug(f"Copied artifact: {rel_path}",
+                               extra={'run_id': self.run_id, 'step': step_num})
+            
+            logger.info(f"Copied {copied_count} artifacts to workspace",
+                       extra={'run_id': self.run_id, 'step': step_num,
+                             'metadata': {
+                                 'source': str(source_dir),
+                                 'dest': str(dest_dir),
+                                 'files_copied': copied_count
+                             }})
+            
+            return copied_count
+            
+        except Exception as e:
+            logger.error("Failed to copy artifacts",
+                       extra={'run_id': self.run_id, 'step': step_num,
+                             'metadata': {
+                                 'error': str(e),
+                                 'source': str(source_dir),
+                                 'dest': str(dest_dir)
+                             }})
+            raise
+    
     @abstractmethod
     def validate_run_artifacts(self) -> tuple[bool, str]:
         """
