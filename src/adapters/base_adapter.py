@@ -729,3 +729,82 @@ class BaseAdapter(ABC):
         - Remove Docker containers if used
         """
         pass
+    
+    def _format_validation_error(
+        self,
+        workspace_dir: Path,
+        framework_name: str,
+        last_execution_error: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        DRY helper to format user-friendly validation error messages.
+        
+        Extracts root cause from last_execution_error and formats a consistent
+        error message across all framework adapters.
+        
+        Args:
+            workspace_dir: Path to the workspace directory
+            framework_name: Name of the framework (e.g., "BAEs", "ChatDev", "GHSpec")
+            last_execution_error: Optional dict containing error details with keys:
+                - 'stderr': Standard error output
+                - 'stdout': Standard output
+                - 'error': Error message
+                - 'exception_type': Type of exception
+        
+        Returns:
+            Formatted error message with root cause and next steps
+        """
+        error_details = ""
+        
+        if last_execution_error:
+            # Try to extract meaningful error from stderr (BAeS, ChatDev)
+            stderr = last_execution_error.get('stderr', '')
+            if stderr and 'ERROR:' in stderr:
+                # Find first ERROR line for concise output
+                for line in stderr.split('\n'):
+                    if 'ERROR:' in line:
+                        error_details = f"\n\n📋 Root Cause:\n{line.strip()}"
+                        break
+            # Fallback to last non-empty stderr line (ChatDev pattern)
+            elif stderr:
+                error_lines = [line.strip() for line in stderr.split('\n') if line.strip()]
+                if error_lines:
+                    error_details = f"\n\n📋 Root Cause:\n{error_lines[-1]}"
+            # Try exception-based errors (GHSpec pattern)
+            elif 'error' in last_execution_error:
+                error_msg = last_execution_error.get('error', '')
+                error_type = last_execution_error.get('exception_type', '')
+                if error_msg:
+                    error_details = f"\n\n📋 Root Cause:\n{error_type}: {error_msg}"
+        
+        return (
+            f"❌ Validation Failed: No Python files generated in workspace\n\n"
+            f"📁 Expected location: {workspace_dir}\n"
+            f"🔍 Issue: {framework_name} framework executed but failed to generate code files"
+            f"{error_details}\n\n"
+            f"💡 Next Steps:\n"
+            f"   1. Check adapter logs: runs/<run_id>/logs/step_*/adapter.log\n"
+            f"   2. Review the root cause error above\n"
+            f"   3. Fix the issue in the {framework_name} framework if needed"
+        )
+    
+    @abstractmethod
+    def validate_run_artifacts(self) -> tuple[bool, str]:
+        """
+        Validate that the framework generated expected artifacts in the workspace.
+        
+        This method should be called during the validation phase to ensure that
+        the framework execution actually produced the expected output files.
+        An empty workspace directory indicates a framework execution failure.
+        
+        Returns:
+            tuple[bool, str]: (success, error_message)
+                - success: True if artifacts are valid, False otherwise
+                - error_message: Empty string if success, descriptive error if failure
+                
+        Example:
+            success, error = adapter.validate_run_artifacts()
+            if not success:
+                logger.error(f"Artifact validation failed: {error}")
+        """
+        pass

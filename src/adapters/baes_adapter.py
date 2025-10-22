@@ -46,6 +46,7 @@ class BAeSAdapter(BaseAdapter):
         self._kernel = None
         self.hitl_text = None
         self.current_step = 0
+        self.last_execution_error = None  # Track last framework execution error for debugging
         
     def start(self) -> None:
         """Initialize BAEs adapter with shared framework resources."""
@@ -171,6 +172,13 @@ class BAeSAdapter(BaseAdapter):
                     }
                 except json.JSONDecodeError:
                     error_msg = f"CLI execution failed: {result.stderr or result.stdout}"
+                    # Store error for validation reporting
+                    self.last_execution_error = {
+                        'type': 'CLI_EXECUTION_FAILURE',
+                        'exit_code': result.returncode,
+                        'stderr': result.stderr,
+                        'stdout': result.stdout
+                    }
                     logger.error(
                         f"BAeS CLI failed with non-JSON output (exit code {result.returncode})",
                         extra={
@@ -480,3 +488,50 @@ class BAeSAdapter(BaseAdapter):
         logger.info("HITL intervention", extra={'run_id': self.run_id, 'step': self.current_step})
         
         return self.hitl_text
+    
+    def validate_run_artifacts(self) -> tuple[bool, str]:
+        """Validate that BAEs generated code artifacts in managed_system directory.
+        
+        Checks that the managed_system directory contains expected files:
+        - At least one Python file (.py)
+        - A requirements.txt file (for dependencies)
+        
+        Returns:
+            tuple[bool, str]: (success, error_message)
+                - success: True if artifacts are valid, False otherwise
+                - error_message: Empty string if success, descriptive error if failure
+        """
+        if not self.managed_system_dir or not self.managed_system_dir.exists():
+            return False, (
+                f"Managed system directory does not exist: {self.managed_system_dir}. "
+                "BAEs framework failed to create workspace directory."
+            )
+        
+        # Count Python files
+        python_files = list(self.managed_system_dir.rglob("*.py"))
+        if not python_files:
+            # Use DRY helper from BaseAdapter to format error message
+            error_msg = self._format_validation_error(
+                workspace_dir=self.managed_system_dir,
+                framework_name="BAEs",
+                last_execution_error=self.last_execution_error
+            )
+            return False, error_msg
+        
+        # Check for requirements.txt (common dependency file)
+        requirements_file = self.managed_system_dir / "requirements.txt"
+        if not requirements_file.exists():
+            logger.warning(
+                f"No requirements.txt found in managed_system directory: {self.managed_system_dir}",
+                extra={'run_id': self.run_id}
+            )
+        
+        # Success - log summary
+        file_count = len(list(self.managed_system_dir.rglob("*")))
+        logger.info(
+            f"Artifact validation passed: {len(python_files)} Python files, "
+            f"{file_count} total files in managed_system",
+            extra={'run_id': self.run_id}
+        )
+        
+        return True, ""

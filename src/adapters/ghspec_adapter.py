@@ -35,6 +35,7 @@ class GHSpecAdapter(BaseAdapter):
         self.hitl_text = None
         # Get project root for resolving template paths
         self.project_root = Path(__file__).parent.parent.parent
+        self.last_execution_error = None  # Track last framework execution error for debugging
         
     def start(self) -> None:
         """
@@ -238,6 +239,12 @@ class GHSpecAdapter(BaseAdapter):
                 raise ValueError(f"Invalid step number: {step_num}")
                 
         except Exception as e:
+            # Store error for validation reporting
+            self.last_execution_error = {
+                'type': 'EXECUTION_EXCEPTION',
+                'error': str(e),
+                'exception_type': type(e).__name__
+            }
             logger.error("Step execution failed",
                         extra={'run_id': self.run_id, 'step': step_num,
                               'metadata': {'error': str(e)}})
@@ -1225,3 +1232,52 @@ class GHSpecAdapter(BaseAdapter):
         
         logger.info("GitHub Spec-kit framework stopped",
                    extra={'run_id': self.run_id, 'event': 'framework_stopped'})
+    
+    def validate_run_artifacts(self) -> tuple[bool, str]:
+        """Validate that GHSpec generated code artifacts in workspace directory.
+        
+        Checks that the workspace directory contains expected files:
+        - At least one Python file (.py)
+        - At least one API endpoint file (typical: api.py, routes.py, or main.py)
+        
+        Returns:
+            tuple[bool, str]: (success, error_message)
+                - success: True if artifacts are valid, False otherwise
+                - error_message: Empty string if success, descriptive error if failure
+        """
+        workspace_dir = Path(self.workspace_path)
+        if not workspace_dir.exists():
+            return False, (
+                f"Workspace directory does not exist: {workspace_dir}. "
+                "GHSpec framework failed to create workspace directory."
+            )
+        
+        # Count Python files
+        python_files = list(workspace_dir.rglob("*.py"))
+        if not python_files:
+            # Use DRY helper from BaseAdapter to format error message
+            error_msg = self._format_validation_error(
+                workspace_dir=workspace_dir,
+                framework_name="GHSpec",
+                last_execution_error=self.last_execution_error
+            )
+            return False, error_msg
+        
+        # Check for typical API entry point files
+        api_files = ["api.py", "routes.py", "main.py", "app.py"]
+        has_api_file = any((workspace_dir / f).exists() for f in api_files)
+        if not has_api_file:
+            logger.warning(
+                f"No typical API entry point file found in workspace directory: {workspace_dir}",
+                extra={'run_id': self.run_id}
+            )
+        
+        # Success - log summary
+        file_count = len(list(workspace_dir.rglob("*")))
+        logger.info(
+            f"Artifact validation passed: {len(python_files)} Python files, "
+            f"{file_count} total files in workspace",
+            extra={'run_id': self.run_id}
+        )
+        
+        return True, ""

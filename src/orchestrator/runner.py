@@ -448,6 +448,21 @@ class OrchestratorRunner:
             
             logger.info("Running final validation",
                        extra={'run_id': self.run_id, 'event': 'validation_start'})
+            
+            # Validate that framework generated artifacts in workspace (DRY principle)
+            artifact_validation_success, artifact_error = self.adapter.validate_run_artifacts()
+            if not artifact_validation_success:
+                # Print user-friendly error to terminal
+                print("\n" + "="*60, flush=True)
+                print(artifact_error, flush=True)
+                print("="*60 + "\n", flush=True)
+                
+                # Log for structured logging
+                logger.error(artifact_error, extra={'run_id': self.run_id, 'event': 'artifact_validation_failed'})
+                raise RuntimeError(artifact_error)
+            
+            logger.info("Artifact validation passed",
+                       extra={'run_id': self.run_id, 'event': 'artifact_validation_passed'})
                        
             crude_score, esr = self.validator.test_crud_endpoints()
             mc = self.validator.compute_migration_continuity()

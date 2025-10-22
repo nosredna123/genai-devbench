@@ -52,6 +52,7 @@ class ChatDevAdapter(BaseAdapter):
         self.hitl_text = None
         self.python_path = None  # Path to virtual environment Python
         self.venv_path = None    # Path to virtual environment directory
+        self.last_execution_error = None  # Track last framework execution error for debugging
         
     def start(self) -> None:
         """
@@ -271,6 +272,13 @@ class ChatDevAdapter(BaseAdapter):
             
             # Log stderr if execution failed
             if not success:
+                # Store error for validation reporting
+                self.last_execution_error = {
+                    'type': 'EXECUTION_FAILURE',
+                    'exit_code': result.returncode,
+                    'stderr': result.stderr,
+                    'stdout': result.stdout
+                }
                 logger.error("ChatDev execution failed",
                            extra={'run_id': self.run_id, 'step': step_num,
                                  'metadata': {
@@ -575,3 +583,51 @@ class ChatDevAdapter(BaseAdapter):
                 
         logger.info("ChatDev framework stopped",
                    extra={'run_id': self.run_id, 'event': 'framework_stopped'})
+    
+    def validate_run_artifacts(self) -> tuple[bool, str]:
+        """Validate that ChatDev generated code artifacts in workspace directory.
+        
+        Checks that the workspace directory contains expected files:
+        - At least one Python file (.py)
+        - Main entry point file (main.py)
+        
+        Returns:
+            tuple[bool, str]: (success, error_message)
+                - success: True if artifacts are valid, False otherwise
+                - error_message: Empty string if success, descriptive error if failure
+        """
+        workspace_dir = Path(self.workspace_path)
+        if not workspace_dir.exists():
+            return False, (
+                f"Workspace directory does not exist: {workspace_dir}. "
+                "ChatDev framework failed to create workspace directory."
+            )
+        
+        # Count Python files
+        python_files = list(workspace_dir.rglob("*.py"))
+        if not python_files:
+            # Use DRY helper from BaseAdapter to format error message
+            error_msg = self._format_validation_error(
+                workspace_dir=workspace_dir,
+                framework_name="ChatDev",
+                last_execution_error=self.last_execution_error
+            )
+            return False, error_msg
+        
+        # Check for main.py (typical ChatDev entry point)
+        main_file = workspace_dir / "main.py"
+        if not main_file.exists():
+            logger.warning(
+                f"No main.py found in workspace directory: {workspace_dir}",
+                extra={'run_id': self.run_id}
+            )
+        
+        # Success - log summary
+        file_count = len(list(workspace_dir.rglob("*")))
+        logger.info(
+            f"Artifact validation passed: {len(python_files)} Python files, "
+            f"{file_count} total files in workspace",
+            extra={'run_id': self.run_id}
+        )
+        
+        return True, ""
