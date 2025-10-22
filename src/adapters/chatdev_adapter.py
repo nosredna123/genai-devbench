@@ -253,6 +253,8 @@ class ChatDevAdapter(BaseAdapter):
         # Add ChatDev directory to PYTHONPATH for relative imports
         # ChatDev's code uses absolute imports like "from utils import ..." 
         # which require the framework directory to be in sys.path
+        # IMPORTANT: When using venv's Python, it automatically adds venv/lib/pythonX.Y/site-packages
+        # We just need to add the framework directory for ChatDev's own modules
         env['PYTHONPATH'] = str(self.framework_dir)
         
         logger.info("Environment setup for subprocess", extra={'run_id': self.run_id,

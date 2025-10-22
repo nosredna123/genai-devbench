@@ -385,7 +385,10 @@ class BaseAdapter(ABC):
             f"Using framework Python: {python_path}",
             extra={'run_id': self.run_id, 'framework': framework_name}
         )
-        return python_path.resolve()
+        # Return the path WITHOUT resolving symlinks
+        # Venv's python is a symlink, and we need to use it as-is
+        # so Python can detect it's in a venv and use the correct site-packages
+        return python_path
     
     def create_workspace_structure(self, subdirs: list[str], exist_ok: bool = True) -> Dict[str, Path]:
         """
