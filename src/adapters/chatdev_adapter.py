@@ -242,7 +242,7 @@ class ChatDevAdapter(BaseAdapter):
         
         # Clean Python-related environment variables to ensure venv isolation
         # Remove system Python paths that could interfere with venv
-        for key in ['PYTHONPATH', 'PYTHONHOME', '__PYVENV_LAUNCHER__']:
+        for key in ['PYTHONHOME', '__PYVENV_LAUNCHER__']:
             env.pop(key, None)
         
         # Set virtual environment variables
@@ -250,11 +250,16 @@ class ChatDevAdapter(BaseAdapter):
         env['PATH'] = f"{self.venv_path / 'bin'}:{env.get('PATH', '')}"
         env['OPENAI_API_KEY'] = api_key  # Set standard OpenAI key name
         
+        # Add ChatDev directory to PYTHONPATH for relative imports
+        # ChatDev's code uses absolute imports like "from utils import ..." 
+        # which require the framework directory to be in sys.path
+        env['PYTHONPATH'] = str(self.framework_dir)
+        
         logger.info("Environment setup for subprocess", extra={'run_id': self.run_id,
                    'metadata': {'OPENAI_API_KEY_set': 'OPENAI_API_KEY' in env,
                                'OPENAI_API_KEY_length': len(env.get('OPENAI_API_KEY', '')),
                                'VIRTUAL_ENV': env.get('VIRTUAL_ENV', ''),
-                               'PYTHONPATH_removed': 'PYTHONPATH' not in env,
+                               'PYTHONPATH': env.get('PYTHONPATH', ''),
                                'total_env_vars': len(env)}})
         
         try:
