@@ -153,14 +153,37 @@ class BAeSAdapter(BaseAdapter):
                 # Try to parse error from JSON output
                 try:
                     error_data = json.loads(result.stdout)
+                    error_msg = error_data.get('error', result.stderr or 'Unknown error')
+                    logger.error(
+                        f"BAeS CLI returned error (exit code {result.returncode})",
+                        extra={
+                            'run_id': self.run_id,
+                            'metadata': {
+                                'error': error_msg,
+                                'stdout': result.stdout[:500] if result.stdout else None,
+                                'stderr': result.stderr[:500] if result.stderr else None
+                            }
+                        }
+                    )
                     return {
                         'success': False,
-                        'error': error_data.get('error', result.stderr or 'Unknown error')
+                        'error': error_msg
                     }
                 except json.JSONDecodeError:
+                    error_msg = f"CLI execution failed: {result.stderr or result.stdout}"
+                    logger.error(
+                        f"BAeS CLI failed with non-JSON output (exit code {result.returncode})",
+                        extra={
+                            'run_id': self.run_id,
+                            'metadata': {
+                                'stdout': result.stdout[:500] if result.stdout else None,
+                                'stderr': result.stderr[:500] if result.stderr else None
+                            }
+                        }
+                    )
                     return {
                         'success': False,
-                        'error': f"CLI execution failed: {result.stderr or result.stdout}"
+                        'error': error_msg
                     }
             
             # Parse JSON output from CLI
@@ -337,12 +360,24 @@ class BAeSAdapter(BaseAdapter):
             RuntimeError: If archiving fails
         """
         if self.managed_system_dir and self.managed_system_dir.exists():
+            # Use DRY helper from BaseAdapter to validate directory contents
+            file_count = self.validate_workspace_directory(
+                self.managed_system_dir,
+                "managed_system"
+            )
+            
             archive_path = Path(self.workspace_path) / "managed_system.tar.gz"
             
             with tarfile.open(archive_path, "w:gz") as tar:
                 tar.add(self.managed_system_dir, arcname="managed_system")
             
-            logger.info(f"Archived managed system to {archive_path}", extra={'run_id': self.run_id})
+            logger.info(
+                f"Archived managed system to {archive_path}",
+                extra={
+                    'run_id': self.run_id,
+                    'metadata': {'file_count': file_count}
+                }
+            )
     
     def health_check(self) -> bool:
         """Check BAEs framework health.

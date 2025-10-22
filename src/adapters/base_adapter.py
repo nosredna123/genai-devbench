@@ -463,6 +463,54 @@ class BaseAdapter(ABC):
         )
         return result
     
+    def validate_workspace_directory(self, dir_path: Path, dir_name: str = None) -> int:
+        """
+        Validate that a workspace directory contains files (DRY helper).
+        
+        This method checks if a workspace directory has any generated files
+        and logs a warning if it's empty. Useful for frameworks that generate
+        artifacts (code, configs, etc.) that should be captured.
+        
+        Args:
+            dir_path: Path to the directory to validate
+            dir_name: Optional name for logging (defaults to dir_path.name)
+            
+        Returns:
+            Number of files found in the directory (recursively)
+            
+        Example:
+            >>> file_count = adapter.validate_workspace_directory(
+            ...     self.managed_system_dir,
+            ...     "managed_system"
+            ... )
+            >>> if file_count == 0:
+            ...     logger.warning("No files generated")
+        """
+        if not dir_path or not dir_path.exists():
+            return 0
+        
+        dir_name = dir_name or dir_path.name
+        file_count = sum(1 for _ in dir_path.rglob('*') if _.is_file())
+        
+        if file_count == 0:
+            logger.warning(
+                f"⚠️  Workspace directory '{dir_name}' is empty - no files were generated",
+                extra={
+                    'run_id': self.run_id,
+                    'metadata': {
+                        'directory_path': str(dir_path),
+                        'note': 'Framework may have failed to execute or generate artifacts'
+                    }
+                }
+            )
+        else:
+            logger.debug(
+                f"Workspace directory '{dir_name}' contains {file_count} files",
+                extra={'run_id': self.run_id}
+            )
+        
+        return file_count
+    
     def setup_shared_venv(
         self,
         framework_name: str,
