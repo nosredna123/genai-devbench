@@ -125,6 +125,19 @@ def setup_venv_if_needed(name: str, framework_path: Path, use_venv: bool):
             timeout=60
         )
         
+        # Upgrade pip and setuptools first (critical for Python 3.12+ compatibility)
+        print(f"  Upgrading pip and setuptools...")
+        subprocess.run(
+            [
+                str(python_path), '-m', 'pip', 'install',
+                '--upgrade', 'pip', 'setuptools',
+                '--timeout', '120'
+            ],
+            check=True,
+            capture_output=True,
+            timeout=120
+        )
+        
         # Install requirements
         print(f"  Installing dependencies (this may take 3-5 minutes)...")
         subprocess.run(
