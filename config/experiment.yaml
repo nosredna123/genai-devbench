@@ -16,7 +16,7 @@ frameworks:
   baes:
     enabled: true
     repo_url: "https://github.com/gesad-lab/baes_demo"
-    commit_hash: "160154fc63f87e982aa5f7f3a714894548c39700"  # Latest version with improvements
+    commit_hash: "2f37e48fb1a20cc18b24a8c82d44a09f11f61262"
     api_port: 8100
     ui_port: 8600
     max_retries: 3
