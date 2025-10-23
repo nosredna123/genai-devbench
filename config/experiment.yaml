@@ -491,3 +491,7 @@ report:
         - name: conclusions
           title: "📊 What We Can Conclude"
 
+# Sprint-based archiving configuration (for multi-sprint runs)
+archiving:
+  mode: "final_only"  # or "all_sprints"
+  compress_intermediate: true

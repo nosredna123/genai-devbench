@@ -26,7 +26,7 @@ import sys
 import time
 import shutil
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Optional
 import requests
 from src.adapters.base_adapter import BaseAdapter
 from src.utils.logger import get_logger
@@ -37,7 +37,14 @@ logger = get_logger(__name__, component="adapter")
 class ChatDevAdapter(BaseAdapter):
     """Adapter for ChatDev framework."""
     
-    def __init__(self, config: Dict[str, Any], run_id: str, workspace_path: str):
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        run_id: str,
+        workspace_path: str,
+        sprint_num: int = 1,
+        run_dir: Optional[Path] = None
+    ):
         """
         Initialize ChatDev adapter.
         
@@ -45,8 +52,10 @@ class ChatDevAdapter(BaseAdapter):
             config: Framework configuration from experiment.yaml
             run_id: Unique run identifier
             workspace_path: Isolated workspace directory
+            sprint_num: Current sprint number (1-indexed)
+            run_dir: Run directory path (required for sprint-aware runs)
         """
-        super().__init__(config, run_id, workspace_path)
+        super().__init__(config, run_id, workspace_path, sprint_num, run_dir)
         self.process = None
         self.framework_dir = None
         self.hitl_text = None

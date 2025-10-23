@@ -20,20 +20,85 @@ logger = get_logger(__name__, component="adapter")
 class BaseAdapter(ABC):
     """Abstract interface for LLM framework adapters."""
     
-    def __init__(self, config: Dict[str, Any], run_id: str, workspace_path: str):
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        run_id: str,
+        workspace_path: str,
+        sprint_num: int = 1,
+        run_dir: Optional[Path] = None
+    ):
         """
         Initialize adapter with configuration and run context.
         
         Args:
             config: Framework-specific settings from experiment.yaml
             run_id: Unique run identifier (UUID)
-            workspace_path: Isolated directory for this run
+            workspace_path: Isolated directory for this run (legacy single-step runs)
+            sprint_num: Current sprint number (1-indexed, default=1 for backward compatibility)
+            run_dir: Run directory path (required for sprint-aware runs)
         """
         self.config = config
         self.run_id = run_id
         self.workspace_path = workspace_path
         self.current_step = 0
         self._step_start_time: Optional[float] = None  # Track step execution start time
+        
+        # Sprint-aware properties (US1: Sprint Architecture)
+        self._sprint_num = sprint_num
+        self._run_dir = Path(run_dir) if run_dir else None
+    
+    # =============================================================================
+    # Sprint-Aware Properties (US1: Sprint Architecture)
+    # =============================================================================
+    
+    @property
+    def sprint_num(self) -> int:
+        """Get current sprint number."""
+        return self._sprint_num
+    
+    @property
+    def run_dir(self) -> Optional[Path]:
+        """Get run directory path."""
+        return self._run_dir
+    
+    @property
+    def previous_sprint_artifacts(self) -> Optional[Path]:
+        """
+        Get path to previous sprint's generated artifacts.
+        
+        Returns:
+            Path to previous sprint's generated_artifacts/ directory, or None if:
+            - This is the first sprint (sprint_num == 1)
+            - Run directory is not set (legacy single-step runs)
+            - Previous sprint doesn't exist
+        """
+        if not self._run_dir or self._sprint_num <= 1:
+            return None
+        
+        # Import here to avoid circular dependency
+        from src.utils.isolation import get_previous_sprint_artifacts
+        return get_previous_sprint_artifacts(self._run_dir, self._sprint_num)
+    
+    @property
+    def sprint_log_dir(self) -> Optional[Path]:
+        """
+        Get path to current sprint's logs directory.
+        
+        Returns:
+            Path to sprint_NNN/logs/ directory, or None if run_dir not set
+        """
+        if not self._run_dir:
+            return None
+        
+        # Use sprint_dir helper from isolation.py (DRY principle)
+        from src.utils.isolation import sprint_dir
+        sprint_path = sprint_dir(self._run_dir, self._sprint_num)
+        return sprint_path / "logs"
+    
+    # =============================================================================
+    # Token Metrics (Lazy Evaluation Pattern)
+    # =============================================================================
     
     def fetch_usage_from_openai(
         self,

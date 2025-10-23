@@ -17,7 +17,7 @@ import tarfile
 import socket
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 from src.adapters.base_adapter import BaseAdapter
 from src.utils.logger import get_logger
@@ -36,8 +36,15 @@ class BAeSAdapter(BaseAdapter):
     - Future-proof against internal API changes
     """
     
-    def __init__(self, config: Dict[str, Any], run_id: str, workspace_path: str):
-        super().__init__(config, run_id, workspace_path)
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        run_id: str,
+        workspace_path: str,
+        sprint_num: int = 1,
+        run_dir: Optional[Path] = None
+    ):
+        super().__init__(config, run_id, workspace_path, sprint_num, run_dir)
         self.framework_dir = None
         self.managed_system_dir = None
         self.database_dir = None

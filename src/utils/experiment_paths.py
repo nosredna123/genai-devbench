@@ -324,6 +324,35 @@ class ExperimentPaths:
         return self.get_run_dir(framework, run_id) / "step_metrics.json"
     
     # =============================================================================
+    # Sprint-Specific Paths (US1: Sprint Architecture)
+    # =============================================================================
+    
+    def get_sprint_dir(self, run_dir: Path, sprint_num: int) -> Path:
+        """
+        Get path for a specific sprint within a run.
+        
+        Args:
+            run_dir: Run directory path (e.g., experiments/my_exp/runs/baes/abc123)
+            sprint_num: Sprint number (1-indexed)
+            
+        Returns:
+            Path to sprint directory (e.g., run_dir/sprint_001)
+        """
+        return run_dir / f"sprint_{sprint_num:03d}"
+    
+    def get_summary_dir(self, run_dir: Path) -> Path:
+        """
+        Get path for run-level summary directory.
+        
+        Args:
+            run_dir: Run directory path
+            
+        Returns:
+            Path to summary directory (e.g., run_dir/summary)
+        """
+        return run_dir / "summary"
+    
+    # =============================================================================
     # Config Hash Computation & Validation
     # =============================================================================
     

@@ -21,7 +21,14 @@ logger = get_logger(__name__, component="adapter")
 class GHSpecAdapter(BaseAdapter):
     """Adapter for GitHub Spec-kit framework."""
     
-    def __init__(self, config: Dict[str, Any], run_id: str, workspace_path: str):
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        run_id: str,
+        workspace_path: str,
+        sprint_num: int = 1,
+        run_dir: Optional[Path] = None
+    ):
         """
         Initialize GitHub Spec-kit adapter.
         
@@ -29,8 +36,10 @@ class GHSpecAdapter(BaseAdapter):
             config: Framework configuration from experiment.yaml
             run_id: Unique run identifier
             workspace_path: Isolated workspace directory
+            sprint_num: Current sprint number (1-indexed)
+            run_dir: Run directory path (required for sprint-aware runs)
         """
-        super().__init__(config, run_id, workspace_path)
+        super().__init__(config, run_id, workspace_path, sprint_num, run_dir)
         self.framework_dir = None
         self.hitl_text = None
         # Get project root for resolving template paths

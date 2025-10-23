@@ -1,3 +1,65 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Optional, Tuple
+
+
+def sprint_dir(run_dir: Path, sprint_num: int) -> Path:
+    return run_dir / f"sprint_{sprint_num:03d}"
+
+
+def create_sprint_workspace(run_dir: Path, sprint_num: int) -> Tuple[Path, Path]:
+    """Create sprint directory structure and return (sprint_dir, artifacts_dir).
+
+    Idempotent: creating an existing sprint dir is a no-op (directory is ensured).
+    """
+    sd = sprint_dir(run_dir, sprint_num)
+    artifacts = sd / "generated_artifacts"
+    logs = sd / "logs"
+    sd.mkdir(parents=True, exist_ok=True)
+    artifacts.mkdir(parents=True, exist_ok=True)
+    logs.mkdir(parents=True, exist_ok=True)
+    # create placeholders for metadata/metrics/validation to indicate creation
+    for fname in ("metadata.json", "metrics.json", "validation.json"):
+        fpath = sd / fname
+        if not fpath.exists():
+            fpath.write_text("{}")
+    return sd, artifacts
+
+
+def get_previous_sprint_artifacts(run_dir: Path, current_sprint_num: int) -> Optional[Path]:
+    """Return the Path to previous sprint's generated_artifacts or None if not present."""
+    if current_sprint_num <= 1:
+        return None
+    prev = sprint_dir(run_dir, current_sprint_num - 1) / "generated_artifacts"
+    return prev if prev.exists() else None
+
+
+def create_final_symlink(run_dir: Path, final_sprint_num: int) -> Path:
+    """Create or update `final` symlink pointing to the given sprint directory.
+
+    Returns the Path to the symlink.
+    """
+    target = sprint_dir(run_dir, final_sprint_num)
+    link = run_dir / "final"
+    # Remove existing symlink or file
+    if link.exists() or link.is_symlink():
+        try:
+            link.unlink()
+        except Exception:
+            # on some systems unlink may fail; try rmdir for directories
+            if link.is_dir():
+                import shutil
+
+                shutil.rmtree(link)
+    # Create symlink (POSIX)
+    try:
+        link.symlink_to(target)
+    except Exception:
+        # fallback: copy (fail-fast principle prefers raising, but keep minimal safety)
+        raise
+    return link
 """
 Workspace isolation utilities for experiment runs.
 
