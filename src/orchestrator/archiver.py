@@ -150,14 +150,16 @@ class Archiver:
             commit_hash: Repository commit SHA
             
         Returns:
-            Path to commit.txt file
+            Path to framework_version.txt file
         """
-        commit_file = self.run_dir / "commit.txt"
+        summary_dir = self.run_dir / "summary"
+        summary_dir.mkdir(parents=True, exist_ok=True)
+        commit_file = summary_dir / "framework_version.txt"
         
-        with open(commit_file, 'w') as f:
+        with open(commit_file, 'w', encoding='utf-8') as f:
             f.write(commit_hash)
             
-        logger.debug("Commit info saved",
+        logger.debug("Framework version saved",
                     extra={'run_id': self.run_id})
                     
         return commit_file

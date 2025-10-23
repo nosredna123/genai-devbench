@@ -271,6 +271,8 @@ class LogSummarizer:
         Returns:
             Path to summary file
         """
-        summary_path = self.run_dir / "logs_summary.txt"
+        summary_dir = self.run_dir / "summary"
+        summary_dir.mkdir(parents=True, exist_ok=True)
+        summary_path = summary_dir / "logs_summary.txt"
         summary_path.write_text(summary_text, encoding='utf-8')
         return summary_path

@@ -92,7 +92,7 @@ def create_isolated_workspace(
     experiment_name: Optional[str] = None
 ) -> Tuple[Path, Path]:
     """
-    Create isolated workspace directory for a run.
+    Create isolated run directory for sprint-based execution.
     
     Args:
         framework: Framework name (baes, chatdev, ghspec)
@@ -100,11 +100,14 @@ def create_isolated_workspace(
         experiment_name: Name of experiment (optional, for backward compatibility)
         
     Returns:
-        Tuple of (run_dir, workspace_dir) Path objects
+        Tuple of (run_dir, run_dir) Path objects
+        Note: Returns run_dir twice for backward compatibility. In sprint-based
+        architecture, there's no single "workspace" - each sprint has its own
+        workspace at sprint_NNN/generated_artifacts/
         
     Example:
         run_dir: runs/baes/550e8400-e29b-41d4-a716-446655440000/
-        workspace_dir: runs/baes/550e8400-e29b-41d4-a716-446655440000/workspace/
+        Individual sprint workspaces created by create_sprint_workspace()
     """
     # Get run directory
     if experiment_name:
@@ -113,8 +116,6 @@ def create_isolated_workspace(
     else:
         # Backward compatibility: use old path
         run_dir = Path("runs") / framework / run_id
-    
-    workspace_dir = run_dir / "workspace"
     
     # Check for collision (should be astronomically rare with UUIDs)
     if run_dir.exists():
@@ -130,18 +131,19 @@ def create_isolated_workspace(
             run_dir = exp_paths.runs_dir / framework / f"{run_id}-{collision_id}"
         else:
             run_dir = Path("runs") / framework / f"{run_id}-{collision_id}"
-        
-        workspace_dir = run_dir / "workspace"
     
-    # Create directories
-    workspace_dir.mkdir(parents=True, exist_ok=True)
+    # Create only the run directory (no workspace dir in sprint architecture)
+    run_dir.mkdir(parents=True, exist_ok=True)
     
     logger.info(
-        f"Created isolated workspace: {workspace_dir}",
+        "Created isolated run directory: %s",
+        run_dir,
         extra={'run_id': run_id, 'framework': framework}
     )
     
-    return run_dir, workspace_dir
+    # Return run_dir twice for backward compatibility with code expecting (run_dir, workspace_dir)
+    # In sprint architecture, workspace_dir is not used - each sprint creates its own workspace
+    return run_dir, run_dir
 
 
 def cleanup_workspace(workspace_dir: Path, run_id: str) -> None:

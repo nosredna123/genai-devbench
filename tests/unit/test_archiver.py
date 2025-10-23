@@ -342,7 +342,8 @@ class TestCommitInfo:
         commit_file = archiver.save_commit_info(commit_hash)
         
         assert commit_file.exists()
-        assert commit_file.name == "commit.txt"
+        assert commit_file.name == "framework_version.txt"
+        assert commit_file.parent.name == "summary"  # Should be in summary/ dir
         
         content = commit_file.read_text()
         assert content == commit_hash
@@ -446,7 +447,7 @@ class TestArchiveIntegration:
         # Verify all artifacts exist
         assert (archiver.run_dir / "run.tar.gz").exists()
         assert (archiver.run_dir / "metadata.json").exists()
-        assert (archiver.run_dir / "commit.txt").exists()
+        assert (archiver.run_dir / "summary" / "framework_version.txt").exists()
     
     def test_workflow_with_chatdev_outputs(self, temp_run_dir):
         """Test archiving workflow with ChatDev-like outputs."""
