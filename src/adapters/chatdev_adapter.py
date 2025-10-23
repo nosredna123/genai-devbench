@@ -85,9 +85,9 @@ class ChatDevAdapter(BaseAdapter):
             logger.info(f"Using framework Python: {self.python_path}",
                        extra={'run_id': self.run_id})
             
-            # Create workspace directories (ChatDev writes to WareHouse)
-            workspace_dirs = self.create_workspace_structure(['WareHouse'])
-            self.warehouse_dir = workspace_dirs['WareHouse']
+            # Initialize directory attributes (will be set properly in sprint loop)
+            # In sprint architecture, directories are created per-sprint, not during framework initialization
+            self.warehouse_dir = None
             
             # NOTE: Patches (_patch_openai_compatibility, _patch_o1_model_support) 
             # are now applied during setup_frameworks.py, NOT per-run.

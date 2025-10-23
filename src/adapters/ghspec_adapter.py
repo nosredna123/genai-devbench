@@ -125,16 +125,13 @@ class GHSpecAdapter(BaseAdapter):
         - Kebab-case for feature names
         - For this experiment, we use "001-baes-experiment" consistently
         """
-        # Create specs root directory
+        # Create directory structure
         self.specs_dir = Path(self.workspace_path) / "specs"
         self.specs_dir.mkdir(parents=True, exist_ok=True)
         
-        # Create feature directory with fixed name for reproducibility
-        # Using "baes-experiment" as the feature name for all runs
         self.feature_dir = self.specs_dir / "001-baes-experiment"
         self.feature_dir.mkdir(parents=True, exist_ok=True)
         
-        # Create src directory for generated code (used in Phase 4)
         self.src_dir = self.feature_dir / "src"
         self.src_dir.mkdir(parents=True, exist_ok=True)
         

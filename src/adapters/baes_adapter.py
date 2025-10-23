@@ -72,17 +72,12 @@ class BAeSAdapter(BaseAdapter):
             logger.info(f"Using framework Python: {self.python_path}",
                        extra={'run_id': self.run_id})
             
-            # Create workspace directories (writable, run-specific)
-            workspace_dirs = self.create_workspace_structure([
-                'managed_system',
-                'database'
-            ])
-            self.managed_system_dir = workspace_dirs['managed_system']
-            self.database_dir = workspace_dirs['database']
+            # Initialize directory attributes (will be set properly in sprint loop)
+            # In sprint architecture, directories are created per-sprint, not during framework initialization
+            self.managed_system_dir = None
+            self.database_dir = None
             
-            # Set environment variables
-            os.environ['BAE_CONTEXT_STORE_PATH'] = str(self.database_dir / "context_store.json")
-            os.environ['MANAGED_SYSTEM_PATH'] = str(self.managed_system_dir)
+            # Set framework-level environment variables (sprint-specific paths set in sprint loop)
             os.environ['API_PORT'] = str(self.config.get('api_port', 8100))
             os.environ['UI_PORT'] = str(self.config.get('ui_port', 8600))
             os.environ['BAE_MAX_RETRIES'] = str(self.config.get('max_retries', 3))

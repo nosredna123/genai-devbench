@@ -657,24 +657,8 @@ cat sprint_001/metrics.json
                         workspace_dirs = self.adapter.create_workspace_structure(['WareHouse'])
                         self.adapter.warehouse_dir = workspace_dirs['WareHouse']
                     elif self.framework_name == 'ghspec':
-                        # GHSpec creates its own directory structure in start()
                         # Recreate the directory structure for the new sprint workspace
-                        specs_dir = Path(self.adapter.workspace_path) / "specs"
-                        specs_dir.mkdir(parents=True, exist_ok=True)
-                        self.adapter.specs_dir = specs_dir
-                        
-                        feature_dir = specs_dir / "001-baes-experiment"
-                        feature_dir.mkdir(parents=True, exist_ok=True)
-                        self.adapter.feature_dir = feature_dir
-                        
-                        src_dir = feature_dir / "src"
-                        src_dir.mkdir(parents=True, exist_ok=True)
-                        self.adapter.src_dir = src_dir
-                        
-                        # Update artifact paths
-                        self.adapter.spec_md_path = feature_dir / "spec.md"
-                        self.adapter.plan_md_path = feature_dir / "plan.md"
-                        self.adapter.tasks_md_path = feature_dir / "tasks.md"
+                        self.adapter._setup_workspace_structure()
                     
                     # Execute step with timeout and retry (use original step ID)
                     result = self._execute_step_with_retry(step_config.id, command_text)
