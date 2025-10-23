@@ -367,10 +367,20 @@ class BaseAdapter(ABC):
             Path('/experiments/my-exp/frameworks/baes')
         """
         # Compute experiment root from workspace path
-        # workspace_path: /exp-root/runs/framework/run-id/workspace
-        # experiment_root: /exp-root (go up 4 levels)
+        # Sprint architecture: workspace_path points to sprint_NNN/generated_artifacts/
+        # Example: /exp-root/runs/baes/run-id/sprint_001/generated_artifacts/
+        # We need to go up to /exp-root/
         workspace = Path(self.workspace_path).resolve()
-        experiment_root = workspace.parent.parent.parent.parent
+        
+        # Detect if this is sprint architecture or old architecture
+        # Sprint: .../runs/framework/run-id/sprint_NNN/generated_artifacts/
+        # Old:    .../runs/framework/run-id/workspace/
+        if 'sprint_' in str(workspace):
+            # Sprint architecture: go up 5 levels (generated_artifacts -> sprint_NNN -> run-id -> framework -> runs -> exp-root)
+            experiment_root = workspace.parent.parent.parent.parent.parent
+        else:
+            # Old architecture: go up 4 levels (workspace -> run-id -> framework -> runs -> exp-root)
+            experiment_root = workspace.parent.parent.parent.parent
         
         # Try new shared location first
         shared_path = experiment_root / 'frameworks' / framework_name
