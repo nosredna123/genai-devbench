@@ -186,6 +186,39 @@ T018-bugfix. (US1 Hotfix) **CRITICAL BUG FIX**: Refactor sprint loop to update a
   - Files: `src/orchestrator/runner.py`
   - **Status**: ✅ **FIXED** - Removed local Path import from line 660
 
+[X] T021-cleanup. (Directory Structure) Clean up generated directory structure and improve naming.
+  - **Issues Found** (from user testing generated experiments):
+    1. Redundant empty `workspace/` directory created (not used in sprint architecture)
+    2. Empty `run_dir/logs/` directory created (old logging system, replaced by `sprint_NNN/logs/`)
+    3. `logs_summary.txt` at run root (should be in summary/ for organization)
+    4. `commit.txt` unclear name (should be `framework_version.txt`)
+  - **Solutions**:
+    1. Modified `create_isolated_workspace()` to only create `run_dir` (no workspace subdir)
+    2. Removed old logging system directory creation
+    3. Moved `logs_summary.txt` to `summary/logs_summary.txt`
+    4. Renamed `commit.txt` → `framework_version.txt` and moved to `summary/`
+  - **Final Structure**:
+    ```
+    runs/<framework>/<run-id>/
+    ├── sprint_001/
+    │   ├── generated_artifacts/  # Sprint workspace
+    │   ├── logs/                 # Sprint logs
+    │   ├── metadata.json
+    │   ├── metrics.json
+    │   └── validation.json
+    ├── summary/
+    │   ├── metrics_cumulative.json
+    │   ├── logs_summary.txt
+    │   └── framework_version.txt  # Git commit of framework
+    ├── final -> sprint_002
+    ├── README.md
+    └── run.tar.gz
+    ```
+  - **Validation**: All 249 tests passing
+  - **Constitution Compliance**: Principle II (Clarity) - Self-explanatory file names and directory structure
+  - Files: `src/utils/isolation.py`, `src/utils/log_summary.py`, `src/orchestrator/archiver.py`, `tests/unit/test_archiver.py`
+  - **Status**: ✅ **COMPLETE** - Clean directory structure, no redundant files
+
 ✅ **Checkpoint: US1 complete! Integration tests pass, per-sprint directories + summary + final symlink working.**
 ### US2 (P2): Token Efficiency Analysis Per Sprint
 Goal: Capture per-sprint token metrics and produce sprint comparison outputs.
