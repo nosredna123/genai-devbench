@@ -31,7 +31,7 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-Verify compliance with BAEs Experiment Constitution v1.0.0:
+Verify compliance with BAEs Experiment Constitution v1.2.0:
 
 - [ ] **Scientific Reproducibility**: Are random seeds fixed? Framework versions pinned?
 - [ ] **Clarity & Transparency**: All modules documented? Logs structured as JSON?
@@ -43,6 +43,9 @@ Verify compliance with BAEs Experiment Constitution v1.0.0:
 - [ ] **Automation-First**: All steps executable via `run_experiment.sh`?
 - [ ] **Failure Isolation**: Each run in isolated workspace with unique run ID?
 - [ ] **Educational Accessibility**: Documentation beginner-friendly? Code follows PEP 8?
+- [ ] **DRY Principle**: No code duplication? Shared logic in base classes/utilities?
+- [ ] **No Backward Compatibility Burden**: Each experiment is independent? Breaking changes acceptable?
+- [ ] **Fail-Fast Philosophy**: No fallback mechanisms? Errors fail immediately with clear messages?
 
 ## Project Structure
 

@@ -1,34 +1,37 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version Change: [NEW] → 1.0.0
-Modification Type: Initial constitution creation for BAEs experiment project
+Version Change: 1.1.0 → 1.2.0
+Modification Type: MINOR - Two new principles added (No Backward Compatibility, Fail-Fast)
 
-Principles Created:
-- I. Scientific Reproducibility
-- II. Clarity and Transparency
-- III. Open Science
-- IV. Minimal Dependencies
-- V. Deterministic Human-in-the-Loop (HITL)
-- VI. Reproducible Metrics
-- VII. Version Control Integrity
-- VIII. Automation-First Philosophy
-- IX. Failure Isolation
-- X. Educational Accessibility
+Principles Modified:
+- None (all existing principles preserved)
+
+Principles Added:
+- XII. No Backward Compatibility Burden
+- XIII. Fail-Fast Philosophy
 
 Added Sections:
-- Core Principles (10 principles)
-- Technical Standards
-- Quality Assurance
-- Governance
+- None
+
+Removed Sections:
+- None
 
 Templates Requiring Updates:
-✅ plan-template.md - Constitution Check section aligns with reproducibility principles
-✅ spec-template.md - Requirements structure supports deterministic specification
-✅ tasks-template.md - Task categorization supports automation and isolation requirements
+✅ plan-template.md - Constitution Check section updated with XII and XIII
+✅ spec-template.md - No changes required (error handling is implementation concern)
+✅ tasks-template.md - No changes required (backward compatibility not applicable to task structure)
 
 Follow-up TODOs:
-- None - all placeholders filled with concrete values
+- None - all templates reviewed and updated where necessary
+
+Amendment Date: 2025-10-22
+Amendment Rationale: Sprint architecture and experiment isolation model clarified two
+critical architectural decisions: (1) Each generated experiment is an independent git
+repository with no cross-experiment dependencies, eliminating backward compatibility
+concerns. (2) System should fail fast with clear errors rather than degrade gracefully
+with fallback mechanisms that obscure root causes. These principles ensure clean
+boundaries and rapid debugging.
 -->
 
 # BAEs Experiment Constitution
@@ -187,6 +190,61 @@ teachable, and replicable by others.
 educational materials amplify impact by enabling curriculum integration and training new
 researchers.
 
+### XI. Don't Repeat Yourself (DRY)
+
+All code, configuration, and documentation MUST eliminate duplication through shared utilities,
+base classes, and reusable components. Copy-paste code is prohibited.
+
+**Non-negotiable requirements**:
+- Duplicate logic MUST be extracted into shared functions in base classes or utility modules
+- Framework adapters MUST inherit common functionality from `BaseAdapter`
+- Configuration values MUST be defined once and referenced (no hardcoded duplicates)
+- Documentation patterns MUST use includes/templates, not copy-paste
+- Code reviews MUST reject pull requests containing obvious duplication
+- Refactoring for DRY MUST happen before adding new similar functionality
+
+**Rationale**: Duplication creates maintenance burden and introduces bugs when one copy is
+updated but others are missed. DRY principles ensure single source of truth, reduce errors,
+and make the codebase more maintainable. In a research artifact designed for educational use,
+DRY demonstrates professional software engineering practices.
+
+### XII. No Backward Compatibility Burden
+
+Generated experiments are independent git repositories with no cross-dependencies.
+Breaking changes are permitted and encouraged when they improve clarity or correctness.
+
+**Non-negotiable requirements**:
+- Each experiment run MUST generate a standalone git repository with all dependencies pinned
+- No shared state or artifacts between different experiment runs
+- Configuration schema changes do NOT require backward compatibility layers
+- Code refactoring MUST prioritize current best practices over preserving old interfaces
+- Documentation of breaking changes is sufficient (no migration scripts required)
+- Framework adapter updates MUST reflect current framework APIs, not legacy versions
+
+**Rationale**: Backward compatibility constraints slow innovation and accumulate technical debt.
+Since each experiment is isolated, there is no cross-contamination risk from breaking changes.
+This principle enables aggressive refactoring, cleaner APIs, and faster iteration. Researchers
+can always reproduce old results by checking out the experiment's git commit.
+
+### XIII. Fail-Fast Philosophy
+
+The system MUST halt immediately with clear error messages when preconditions are violated
+or unexpected states occur. Fallback mechanisms and graceful degradation are prohibited.
+
+**Non-negotiable requirements**:
+- Missing configuration keys MUST raise exceptions, not default to fallback values
+- Framework command failures MUST propagate errors immediately (no silent retries)
+- Invalid metric values MUST abort the run, not substitute zeros or estimates
+- File path errors MUST fail loudly with absolute paths in error messages
+- Type mismatches MUST be caught at runtime with explicit type checks (assert statements)
+- No "try and hope it works" logic—validate inputs before executing operations
+
+**Rationale**: Fallback mechanisms mask bugs and create subtle failure modes that are hard
+to debug. Fail-fast design surfaces errors immediately during development, reducing time
+spent diagnosing obscure issues. In a reproducibility-focused research tool, unexpected
+silent behavior is worse than a clear crash. Explicit failures force developers to fix
+root causes rather than papering over problems.
+
 ## Technical Standards
 
 ### Programming Language
@@ -265,4 +323,4 @@ with the principles outlined above.
 - Version changes MUST be recorded in this file's Sync Impact Report
 - All dependent templates MUST reference constitution version in frontmatter
 
-**Version**: 1.0.0 | **Ratified**: 2025-10-08 | **Last Amended**: 2025-10-08
+**Version**: 1.2.0 | **Ratified**: 2025-10-08 | **Last Amended**: 2025-10-22
