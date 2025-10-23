@@ -523,14 +523,8 @@ cat sprint_001/metrics.json
             )
             self.workspace_path = str(workspace_dir)
             
-            # Initialize logging context for per-run, per-step logging
-            logs_dir = run_dir / "logs"
-            log_context = LogContext.get_instance()
-            log_context.set_run_context(
-                run_id=self.run_id,
-                framework=self.framework_name,
-                logs_dir=logs_dir
-            )
+            # Note: Logging context is initialized per-sprint in the sprint loop
+            # to ensure logs go to sprint_NNN/logs/ instead of run_dir/logs/
             
             # Initialize HITL event log (T039)
             self.hitl_log_path = run_dir / "hitl_events.jsonl"
@@ -598,11 +592,20 @@ cat sprint_001/metrics.json
             # Execute steps as sprints (one sprint per step)
             last_successful_sprint = 0
             for sprint_num, step_config in enumerate(enabled_steps, start=1):
-                # Set logging context for this step (use original step ID)
-                log_context.set_step_context(step_config.id)
-                
                 # Create sprint workspace
                 sprint_dir_path, sprint_workspace_dir = create_sprint_workspace(run_dir, sprint_num)
+                
+                # Initialize logging context for this sprint
+                # Each sprint logs to its own sprint_NNN/logs/ directory
+                sprint_logs_dir = sprint_dir_path / "logs"
+                log_context = LogContext.get_instance()
+                log_context.set_run_context(
+                    run_id=self.run_id,
+                    framework=self.framework_name,
+                    logs_dir=sprint_logs_dir
+                )
+                log_context.set_step_context(step_config.id)
+                
                 logger.info(f"Created sprint {sprint_num} workspace",
                            extra={'run_id': self.run_id, 'sprint': sprint_num,
                                  'event': 'sprint_workspace_created'})

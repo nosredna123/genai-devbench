@@ -344,14 +344,11 @@ class BaseAdapter(ABC):
     
     def get_shared_framework_path(self, framework_name: str) -> Path:
         """
-        Get path to shared framework directory with backward compatibility.
+        Get path to shared framework directory.
         
-        This method implements a fallback pattern to support both new (shared frameworks/)
-        and old (workspace-local) directory structures, ensuring backward compatibility.
-        
-        Priority order:
-        1. New location: <experiment_root>/frameworks/<framework_name>/
-        2. Old location: <workspace>/workspace/<framework_name>_framework/ (deprecated)
+        Handles two cases:
+        1. Sprint workspace: .../runs/framework/run-id/sprint_NNN/generated_artifacts/
+        2. Run directory: .../runs/framework/run-id/
         
         Args:
             framework_name: Framework identifier (baes, chatdev, ghspec)
@@ -360,57 +357,29 @@ class BaseAdapter(ABC):
             Path to framework directory (absolute)
             
         Raises:
-            RuntimeError: If framework not found in either location
-            
-        Example:
-            >>> adapter.get_shared_framework_path('baes')
-            Path('/experiments/my-exp/frameworks/baes')
+            RuntimeError: If framework not found
         """
-        # Compute experiment root from workspace path
-        # Sprint architecture: workspace_path points to sprint_NNN/generated_artifacts/
-        # Example: /exp-root/runs/baes/run-id/sprint_001/generated_artifacts/
-        # We need to go up to /exp-root/
         workspace = Path(self.workspace_path).resolve()
         
-        # Detect if this is sprint architecture or old architecture
-        # Sprint: .../runs/framework/run-id/sprint_NNN/generated_artifacts/
-        # Old:    .../runs/framework/run-id/workspace/
+        # Determine experiment root based on workspace location
         if 'sprint_' in str(workspace):
-            # Sprint architecture: go up 5 levels (generated_artifacts -> sprint_NNN -> run-id -> framework -> runs -> exp-root)
+            # Sprint workspace: go up 5 levels
+            # generated_artifacts -> sprint_NNN -> run-id -> framework -> runs -> exp-root
             experiment_root = workspace.parent.parent.parent.parent.parent
         else:
-            # Old architecture: go up 4 levels (workspace -> run-id -> framework -> runs -> exp-root)
-            experiment_root = workspace.parent.parent.parent.parent
+            # Run directory: go up 3 levels
+            # run-id -> framework -> runs -> exp-root
+            experiment_root = workspace.parent.parent.parent
         
-        # Try new shared location first
-        shared_path = experiment_root / 'frameworks' / framework_name
-        if shared_path.exists() and shared_path.is_dir():
-            logger.debug(
-                f"Using shared framework: {shared_path}",
-                extra={'run_id': self.run_id, 'framework': framework_name}
+        # Check framework exists
+        framework_path = experiment_root / 'frameworks' / framework_name
+        if not framework_path.exists():
+            raise RuntimeError(
+                f"Framework '{framework_name}' not found at: {framework_path}\n"
+                f"Run './setup.sh' to set up frameworks."
             )
-            return shared_path
         
-        # Fallback to old workspace location (deprecated)
-        workspace_base = experiment_root / "workspace"
-        old_path = workspace_base / f"{framework_name}_framework"
-        if old_path.exists() and old_path.is_dir():
-            logger.warning(
-                f"Using deprecated workspace framework location: {old_path}. "
-                f"Run setup_frameworks.py to migrate to shared location.",
-                extra={'run_id': self.run_id, 'framework': framework_name}
-            )
-            return old_path.resolve()
-        
-        # Framework not found in either location
-        error_msg = (
-            f"Framework '{framework_name}' not found. Checked:\n"
-            f"  - Shared location: {shared_path}\n"
-            f"  - Old location: {old_path}\n"
-            f"Run 'python templates/setup_frameworks.py' or './setup.sh' to set up frameworks."
-        )
-        logger.error(error_msg, extra={'run_id': self.run_id, 'framework': framework_name})
-        raise RuntimeError(error_msg)
+        return framework_path
     
     def get_framework_python(self, framework_name: str) -> Path:
         """
