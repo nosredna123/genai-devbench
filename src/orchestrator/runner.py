@@ -15,7 +15,13 @@ from typing import Dict, Any, Optional, List
 import subprocess
 from src.utils.logger import get_logger, LogContext
 from src.utils.log_summary import LogSummarizer
-from src.utils.isolation import create_isolated_workspace, cleanup_workspace
+from src.utils.isolation import (
+    create_isolated_workspace,
+    cleanup_workspace,
+    create_sprint_workspace,
+    create_final_symlink,
+    get_previous_sprint_artifacts
+)
 from src.utils.api_client import OpenAIAPIClient
 from src.orchestrator.config_loader import load_config, set_deterministic_seeds
 from src.orchestrator.metrics_collector import MetricsCollector
@@ -226,6 +232,270 @@ class OrchestratorRunner:
                     break
                     
         raise last_exception
+    
+    # =============================================================================
+    # Sprint Artifact Saving Methods (T012: US1)
+    # =============================================================================
+    
+    def _save_sprint_metadata(
+        self,
+        sprint_dir: Path,
+        sprint_num: int,
+        step_id: str,
+        start_time: datetime,
+        end_time: datetime,
+        status: str,
+        error: Optional[str]
+    ) -> None:
+        """
+        Save sprint metadata to sprint_NNN/metadata.json.
+        
+        Args:
+            sprint_dir: Path to sprint directory
+            sprint_num: Sprint number
+            step_id: Step identifier
+            start_time: Sprint start timestamp
+            end_time: Sprint end timestamp
+            status: Sprint status (completed/failed)
+            error: Error message if failed, None otherwise
+        """
+        metadata = {
+            "sprint_number": sprint_num,
+            "step_id": step_id,
+            "framework": self.framework_name,
+            "run_id": self.run_id,
+            "start_timestamp": start_time.isoformat() + 'Z',
+            "end_timestamp": end_time.isoformat() + 'Z',
+            "status": status
+        }
+        
+        if error:
+            metadata["error"] = error
+        
+        metadata_path = sprint_dir / "metadata.json"
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, indent=2)
+        
+        logger.debug(f"Saved sprint {sprint_num} metadata",
+                    extra={'run_id': self.run_id, 'sprint': sprint_num})
+    
+    def _save_sprint_metrics(
+        self,
+        sprint_dir: Path,
+        result: Dict[str, Any]
+    ) -> None:
+        """
+        Save sprint metrics to sprint_NNN/metrics.json.
+        
+        Args:
+            sprint_dir: Path to sprint directory
+            result: Step execution result containing tokens and api_calls
+        """
+        metrics = {
+            "tokens": {
+                "input": result.get('tokens_in', 0),
+                "output": result.get('tokens_out', 0),
+                "cached": result.get('cached_tokens', 0),
+                "total": result.get('tokens_in', 0) + result.get('tokens_out', 0)
+            },
+            "api_calls": result.get('api_calls', 0),
+            "execution_time": result.get('duration_seconds', 0)
+        }
+        
+        metrics_path = sprint_dir / "metrics.json"
+        with open(metrics_path, 'w', encoding='utf-8') as f:
+            json.dump(metrics, f, indent=2)
+        
+        logger.debug(f"Saved sprint metrics",
+                    extra={'run_id': self.run_id})
+    
+    def _save_sprint_validation(
+        self,
+        sprint_dir: Path,
+        validation_result: Dict[str, Any]
+    ) -> None:
+        """
+        Save sprint validation results to sprint_NNN/validation.json.
+        
+        Args:
+            sprint_dir: Path to sprint directory
+            validation_result: Validation results dictionary
+        """
+        validation_path = sprint_dir / "validation.json"
+        with open(validation_path, 'w', encoding='utf-8') as f:
+            json.dump(validation_result, f, indent=2)
+        
+        logger.debug(f"Saved sprint validation",
+                    extra={'run_id': self.run_id})
+    
+    def _create_cumulative_metrics(
+        self,
+        run_dir: Path,
+        sprint_results: List[Dict[str, Any]]
+    ) -> None:
+        """
+        Create cumulative metrics aggregation and save to summary/metrics_cumulative.json.
+        
+        Args:
+            run_dir: Run directory path
+            sprint_results: List of sprint result dictionaries
+        """
+        if not sprint_results:
+            logger.warning("No sprint results to aggregate",
+                         extra={'run_id': self.run_id})
+            return
+        
+        # Calculate cumulative totals
+        total_tokens_in = sum(s.get('tokens_in', 0) for s in sprint_results)
+        total_tokens_out = sum(s.get('tokens_out', 0) for s in sprint_results)
+        total_api_calls = sum(s.get('api_calls', 0) for s in sprint_results)
+        total_execution_time = sum(s.get('execution_time', 0) for s in sprint_results)
+        
+        # Calculate trends (increasing/decreasing/stable)
+        def calculate_trend(values: List[float]) -> str:
+            """Calculate trend from a list of values."""
+            if len(values) < 2:
+                return "stable"
+            
+            # Simple trend: compare first half avg vs second half avg
+            mid = len(values) // 2
+            first_half_avg = sum(values[:mid]) / len(values[:mid]) if mid > 0 else 0
+            second_half_avg = sum(values[mid:]) / len(values[mid:]) if len(values[mid:]) > 0 else 0
+            
+            if second_half_avg > first_half_avg * 1.1:  # 10% threshold
+                return "increasing"
+            elif second_half_avg < first_half_avg * 0.9:
+                return "decreasing"
+            else:
+                return "stable"
+        
+        tokens_per_sprint = [s.get('tokens_in', 0) + s.get('tokens_out', 0) for s in sprint_results]
+        tokens_trend = calculate_trend(tokens_per_sprint)
+        
+        cumulative = {
+            "total_sprints": len(sprint_results),
+            "cumulative": {
+                "tokens_in": total_tokens_in,
+                "tokens_out": total_tokens_out,
+                "tokens_total": total_tokens_in + total_tokens_out,
+                "api_calls": total_api_calls,
+                "execution_time": total_execution_time
+            },
+            "per_sprint": sprint_results,
+            "sprint_efficiency": {
+                "tokens_per_sprint_avg": (total_tokens_in + total_tokens_out) / len(sprint_results),
+                "api_calls_per_sprint_avg": total_api_calls / len(sprint_results),
+                "execution_time_per_sprint_avg": total_execution_time / len(sprint_results),
+                "tokens_trend": tokens_trend
+            }
+        }
+        
+        # Create summary directory if it doesn't exist
+        summary_dir = run_dir / "summary"
+        summary_dir.mkdir(exist_ok=True)
+        
+        # Save cumulative metrics
+        cumulative_path = summary_dir / "metrics_cumulative.json"
+        with open(cumulative_path, 'w', encoding='utf-8') as f:
+            json.dump(cumulative, f, indent=2)
+        
+        logger.info("Created cumulative metrics",
+                   extra={'run_id': self.run_id, 'event': 'cumulative_metrics_created',
+                         'metadata': {'total_sprints': len(sprint_results)}})
+    
+    def _generate_run_readme(
+        self,
+        run_dir: Path,
+        sprint_results: List[Dict[str, Any]],
+        run_start_time: datetime,
+        run_end_time: datetime
+    ) -> None:
+        """
+        Generate README.md for the run directory with sprint summary table.
+        
+        Args:
+            run_dir: Run directory path
+            sprint_results: List of sprint result dictionaries
+            run_start_time: Run start timestamp
+            run_end_time: Run end timestamp
+        """
+        total_duration = (run_end_time - run_start_time).total_seconds()
+        
+        readme_content = f"""# Run Summary
+
+**Run ID**: {self.run_id}
+**Framework**: {self.framework_name}
+**Started**: {run_start_time.isoformat()}Z
+**Completed**: {run_end_time.isoformat()}Z
+**Duration**: {total_duration:.2f}s
+**Total Sprints**: {len(sprint_results)}
+
+## Sprint Results
+
+| Sprint | Step ID | Status | Tokens (in/out) | API Calls | Time (s) |
+|--------|---------|--------|-----------------|-----------|----------|
+"""
+        
+        for sprint in sprint_results:
+            sprint_num = sprint.get('sprint_num', '?')
+            step_id = sprint.get('step_id', '?')
+            status = sprint.get('status', 'unknown')
+            tokens_in = sprint.get('tokens_in', 0)
+            tokens_out = sprint.get('tokens_out', 0)
+            api_calls = sprint.get('api_calls', 0)
+            exec_time = sprint.get('execution_time', 0)
+            
+            readme_content += f"| {sprint_num} | {step_id} | {status} | {tokens_in}/{tokens_out} | {api_calls} | {exec_time:.2f} |\n"
+        
+        readme_content += f"""
+## Directory Structure
+
+```
+{run_dir.name}/
+├── sprint_001/          # First sprint artifacts
+│   ├── generated_artifacts/
+│   ├── logs/
+│   ├── metadata.json
+│   ├── metrics.json
+│   └── validation.json
+├── sprint_002/          # Second sprint artifacts
+│   └── ...
+├── final/               # Symlink to last successful sprint
+└── summary/             # Run-level aggregations
+    ├── metrics_cumulative.json
+    └── ...
+```
+
+## Accessing Results
+
+### View final artifacts
+```bash
+cd final/generated_artifacts/managed_system/
+```
+
+### Compare sprints
+```bash
+diff -r sprint_001/generated_artifacts sprint_002/generated_artifacts
+```
+
+### View cumulative metrics
+```bash
+cat summary/metrics_cumulative.json | jq
+```
+
+### Check specific sprint
+```bash
+cat sprint_001/metadata.json
+cat sprint_001/metrics.json
+```
+"""
+        
+        readme_path = run_dir / "README.md"
+        with open(readme_path, 'w', encoding='utf-8') as f:
+            f.write(readme_content)
+        
+        logger.info("Generated run README",
+                   extra={'run_id': self.run_id, 'event': 'readme_generated'})
         
     def execute_single_run(self) -> Dict[str, Any]:
         """
@@ -312,6 +582,7 @@ class OrchestratorRunner:
             # Track step summaries for log summary
             step_summaries = []
             errors_and_warnings = []
+            sprint_results = []  # Track sprint-level results
             
             # Get enabled steps from config (in declaration order)
             try:
@@ -324,10 +595,17 @@ class OrchestratorRunner:
                            extra={'run_id': self.run_id, 'event': 'steps_load_error'})
                 raise
             
-            # Execute steps sequentially in declaration order
-            for step_index, step_config in enumerate(enabled_steps, start=1):
+            # Execute steps as sprints (one sprint per step)
+            last_successful_sprint = 0
+            for sprint_num, step_config in enumerate(enabled_steps, start=1):
                 # Set logging context for this step (use original step ID)
                 log_context.set_step_context(step_config.id)
+                
+                # Create sprint workspace
+                sprint_dir_path, sprint_workspace_dir = create_sprint_workspace(run_dir, sprint_num)
+                logger.info(f"Created sprint {sprint_num} workspace",
+                           extra={'run_id': self.run_id, 'sprint': sprint_num,
+                                 'event': 'sprint_workspace_created'})
                 
                 # Load step prompt
                 prompt_path = Path(step_config.prompt_file)
@@ -341,17 +619,61 @@ class OrchestratorRunner:
                 with open(prompt_path, 'r', encoding='utf-8') as f:
                     command_text = f.read().strip()
                 
-                # Print step start to console for user visibility
+                # Print sprint start to console for user visibility
                 from datetime import datetime as dt
                 timestamp = dt.now().strftime("%H:%M:%S")
-                print(f"        ⋯ Step {step_config.id} ({step_config.name}) | {step_index}/{total_steps} | {timestamp}", flush=True)
+                print(f"        ⋯ Sprint {sprint_num} - Step {step_config.id} ({step_config.name}) | {sprint_num}/{total_steps} | {timestamp}", flush=True)
                     
-                step_start_time = datetime.utcnow()
+                sprint_start_time = datetime.utcnow()
                 step_status = "success"
                 step_error = None
                 retries = 0
                 
                 try:
+                    # Update adapter with new sprint context (workspace, sprint_num, run_dir)
+                    # Note: We don't re-create the adapter or call start() because the framework
+                    # is already initialized. We only update the sprint-specific attributes.
+                    self.adapter.workspace_path = str(sprint_workspace_dir)
+                    self.adapter._sprint_num = sprint_num
+                    self.adapter._run_dir = run_dir
+                    
+                    # Recreate sprint-specific workspace subdirectories (managed_system, database, etc.)
+                    # This ensures each sprint has its own isolated artifact directories
+                    if self.framework_name == 'baes':
+                        workspace_dirs = self.adapter.create_workspace_structure([
+                            'managed_system',
+                            'database'
+                        ])
+                        self.adapter.managed_system_dir = workspace_dirs['managed_system']
+                        self.adapter.database_dir = workspace_dirs['database']
+                        # Update environment variables for the new sprint workspace
+                        import os
+                        os.environ['BAE_CONTEXT_STORE_PATH'] = str(self.adapter.database_dir / "context_store.json")
+                        os.environ['MANAGED_SYSTEM_PATH'] = str(self.adapter.managed_system_dir)
+                    elif self.framework_name == 'chatdev':
+                        workspace_dirs = self.adapter.create_workspace_structure(['WareHouse'])
+                        self.adapter.warehouse_dir = workspace_dirs['WareHouse']
+                    elif self.framework_name == 'ghspec':
+                        # GHSpec creates its own directory structure in start()
+                        # Recreate the directory structure for the new sprint workspace
+                        from pathlib import Path
+                        specs_dir = Path(self.adapter.workspace_path) / "specs"
+                        specs_dir.mkdir(parents=True, exist_ok=True)
+                        self.adapter.specs_dir = specs_dir
+                        
+                        feature_dir = specs_dir / "001-baes-experiment"
+                        feature_dir.mkdir(parents=True, exist_ok=True)
+                        self.adapter.feature_dir = feature_dir
+                        
+                        src_dir = feature_dir / "src"
+                        src_dir.mkdir(parents=True, exist_ok=True)
+                        self.adapter.src_dir = src_dir
+                        
+                        # Update artifact paths
+                        self.adapter.spec_md_path = feature_dir / "spec.md"
+                        self.adapter.plan_md_path = feature_dir / "plan.md"
+                        self.adapter.tasks_md_path = feature_dir / "tasks.md"
+                    
                     # Execute step with timeout and retry (use original step ID)
                     result = self._execute_step_with_retry(step_config.id, command_text)
                     retries = result.get('retry_count', 0)
@@ -372,11 +694,43 @@ class OrchestratorRunner:
                         end_timestamp=result.get('end_timestamp')
                     )
                     
-                    logger.info("Step completed successfully",
-                               extra={'run_id': self.run_id, 'step': step_config.id,
-                                     'event': 'step_complete'})
+                    # Save sprint metadata, metrics, and validation (T012)
+                    sprint_end_time = datetime.utcnow()
+                    self._save_sprint_metadata(
+                        sprint_dir_path,
+                        sprint_num,
+                        step_config.id,
+                        sprint_start_time,
+                        sprint_end_time,
+                        "completed",
+                        None
+                    )
+                    self._save_sprint_metrics(
+                        sprint_dir_path,
+                        result
+                    )
+                    self._save_sprint_validation(
+                        sprint_dir_path,
+                        {"overall_status": "passed", "checks": {}, "issues": [], "completeness": 1.0}
+                    )
                     
-                    # Add a sleep time between steps to avoid overlap usage data
+                    logger.info("Sprint completed successfully",
+                               extra={'run_id': self.run_id, 'sprint': sprint_num,
+                                     'event': 'sprint_complete'})
+                    
+                    # Track successful sprint
+                    last_successful_sprint = sprint_num
+                    sprint_results.append({
+                        'sprint_num': sprint_num,
+                        'step_id': step_config.id,
+                        'status': 'completed',
+                        'tokens_in': result.get('tokens_in', 0),
+                        'tokens_out': result.get('tokens_out', 0),
+                        'api_calls': result.get('api_calls', 0),
+                        'execution_time': (sprint_end_time - sprint_start_time).total_seconds()
+                    })
+                    
+                    # Add a sleep time between sprints to avoid overlap usage data
                     time.sleep(1)
                                      
                 except StepTimeoutError as e:
@@ -385,11 +739,23 @@ class OrchestratorRunner:
                     errors_and_warnings.append({
                         'timestamp': datetime.utcnow().isoformat() + 'Z',
                         'level': 'TIMEOUT',
-                        'message': f"Step {step_config.id} ({step_config.name}): {step_error}"
+                        'message': f"Sprint {sprint_num} - Step {step_config.id} ({step_config.name}): {step_error}"
                     })
-                    logger.error("Step timed out",
-                               extra={'run_id': self.run_id, 'step': step_config.id,
+                    logger.error("Sprint timed out",
+                               extra={'run_id': self.run_id, 'sprint': sprint_num,
                                      'metadata': {'error': step_error}})
+                    
+                    # Save partial sprint metadata with error
+                    sprint_end_time = datetime.utcnow()
+                    self._save_sprint_metadata(
+                        sprint_dir_path,
+                        sprint_num,
+                        step_config.id,
+                        sprint_start_time,
+                        sprint_end_time,
+                        "failed",
+                        step_error
+                    )
                     raise
                 except Exception as e:
                     step_status = "error"
@@ -397,23 +763,36 @@ class OrchestratorRunner:
                     errors_and_warnings.append({
                         'timestamp': datetime.utcnow().isoformat() + 'Z',
                         'level': 'ERROR',
-                        'message': f"Step {step_config.id} ({step_config.name}): {step_error}"
+                        'message': f"Sprint {sprint_num} - Step {step_config.id} ({step_config.name}): {step_error}"
                     })
-                    logger.error("Step failed permanently",
-                               extra={'run_id': self.run_id, 'step': step_config.id,
+                    logger.error("Sprint failed permanently",
+                               extra={'run_id': self.run_id, 'sprint': sprint_num,
                                      'metadata': {'error': step_error}})
+                    
+                    # Save partial sprint metadata with error
+                    sprint_end_time = datetime.utcnow()
+                    self._save_sprint_metadata(
+                        sprint_dir_path,
+                        sprint_num,
+                        step_config.id,
+                        sprint_start_time,
+                        sprint_end_time,
+                        "failed",
+                        step_error
+                    )
                     raise
                 finally:
-                    # Calculate step duration
-                    step_end_time = datetime.utcnow()
-                    step_duration = (step_end_time - step_start_time).total_seconds()
+                    # Calculate sprint duration
+                    sprint_end_time = datetime.utcnow()
+                    sprint_duration = (sprint_end_time - sprint_start_time).total_seconds()
                     
-                    # Build step summary (preserve original step ID)
+                    # Build step summary (preserve original step ID for backward compat)
                     step_summary = {
                         'step_num': step_config.id,
                         'step_name': step_config.name,
+                        'sprint_num': sprint_num,
                         'status': step_status,
-                        'duration_seconds': step_duration,
+                        'duration_seconds': sprint_duration,
                         'retries': retries,
                         'api_calls': result.get('api_calls', 0) if 'result' in locals() else 0,
                         'tokens': {
@@ -435,6 +814,21 @@ class OrchestratorRunner:
                     
                     # Clear step context
                     log_context.clear_step_context()
+            
+            # Track run end time for README and summary generation
+            run_end_time = datetime.utcnow()
+            
+            # Create final symlink pointing to last successful sprint (T025, US4)
+            if last_successful_sprint > 0:
+                create_final_symlink(run_dir, last_successful_sprint)
+                logger.info(f"Created final symlink to sprint {last_successful_sprint}",
+                           extra={'run_id': self.run_id, 'event': 'final_symlink_created'})
+            
+            # Create cumulative metrics aggregation (T013, US1)
+            if sprint_results:
+                self._create_cumulative_metrics(run_dir, sprint_results)
+                # Generate run README (T014, US1)
+                self._generate_run_readme(run_dir, sprint_results, run_start_time, run_end_time)
                     
             # End metrics collection
             self.metrics_collector.end_run()

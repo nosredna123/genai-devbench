@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Sprint Metadata Schema",
+  "type": "object",
+  "required": ["sprint_number", "step_id", "framework", "started_at", "status"],
+  "properties": {
+    "sprint_number": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "step_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "step_name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "framework": {
+      "type": "string",
+      "enum": ["baes", "chatdev", "ghspec"]
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["success", "failed", "timeout"]
+    },
+    "error": {
+      "type": "string"
+    }
+  }
+}

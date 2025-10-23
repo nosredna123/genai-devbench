@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Cumulative Metrics Schema",
+  "type": "object",
+  "required": ["total_sprints", "cumulative", "per_sprint"],
+  "properties": {
+    "total_sprints": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "cumulative": {
+      "type": "object",
+      "required": ["tokens", "api_calls", "execution_time_seconds"],
+      "properties": {
+        "tokens": {
+          "type": "object",
+          "properties": {
+            "total": {"type": "integer", "minimum": 0}
+          }
+        },
+        "api_calls": {"type": "integer", "minimum": 0},
+        "execution_time_seconds": {"type": "number", "minimum": 0}
+      }
+    },
+    "per_sprint": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sprint", "tokens"],
+        "properties": {
+          "sprint": {"type": "integer", "minimum": 1},
+          "tokens": {
+            "type": "object",
+            "properties": {
+              "total": {"type": "integer", "minimum": 0}
+            }
+          }
+        }
+      }
+    },
+    "sprint_efficiency": {
+      "type": "object",
+      "properties": {
+        "tokens_per_sprint_avg": {"type": "number"},
+        "tokens_trend": {"type": "string", "enum": ["increasing", "decreasing", "stable"]}
+      }
+    }
+  }
+}
