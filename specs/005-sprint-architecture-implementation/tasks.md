@@ -176,6 +176,16 @@ T018-bugfix. (US1 Hotfix) **CRITICAL BUG FIX**: Refactor sprint loop to update a
   - Files: `specs/005-sprint-architecture-implementation/spec.md`, `REQUIREMENTS_GAP_ANALYSIS.md`, `checklists/post-implementation-review.md`
   - **Status**: ✅ **COMPLETE** - Spec updated with FR9, FR10, and clarifications to FR2, FR3, FR5
 
+[X] T020-bugfix. (Bugfix) Remove redundant Path import causing UnboundLocalError in generated experiments.
+  - **Bug**: Generated experiments immediately failed with `UnboundLocalError: cannot access local variable 'Path' where it is not associated with a value` at line 589
+  - **Root Cause**: Local `from pathlib import Path` import on line 660 (inside GHSpec branch of execute_single_run()) shadows the global Path import from line 13. Python treats Path as local variable throughout entire function scope, causing UnboundLocalError when Path.cwd() is called on line 589 (before the local import executes).
+  - **Solution**: Removed redundant local import. Path is already imported at module level, so local import is unnecessary and causes variable shadowing.
+  - **Impact**: All generated experiments failed immediately before any sprint execution could begin. Users saw error in all three frameworks (BAeS, ChatDev, GHSpec).
+  - **Validation**: All 5 integration tests pass (test_multi_sprint_run.py)
+  - **Constitution Compliance**: Principle XIII (Fail-Fast) - Proper import management prevents subtle scoping bugs
+  - Files: `src/orchestrator/runner.py`
+  - **Status**: ✅ **FIXED** - Removed local Path import from line 660
+
 ✅ **Checkpoint: US1 complete! Integration tests pass, per-sprint directories + summary + final symlink working.**
 ### US2 (P2): Token Efficiency Analysis Per Sprint
 Goal: Capture per-sprint token metrics and produce sprint comparison outputs.
