@@ -656,7 +656,6 @@ cat sprint_001/metrics.json
                     elif self.framework_name == 'ghspec':
                         # GHSpec creates its own directory structure in start()
                         # Recreate the directory structure for the new sprint workspace
-                        from pathlib import Path
                         specs_dir = Path(self.adapter.workspace_path) / "specs"
                         specs_dir.mkdir(parents=True, exist_ok=True)
                         self.adapter.specs_dir = specs_dir
