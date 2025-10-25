@@ -528,6 +528,11 @@ class GHSpecAdapter(BaseAdapter):
         """
         Build complete user prompt by filling template with context.
         
+        For sprint > 1, includes previous sprint context to enable incremental development:
+        - Previous spec.md and plan.md (to understand existing system)
+        - Previous generated code (to build upon, not replace)
+        - Maintains tech stack consistency across sprints
+        
         Args:
             phase: Phase name ('specify', 'plan', or 'tasks')
             template: User prompt template with placeholders
@@ -536,22 +541,102 @@ class GHSpecAdapter(BaseAdapter):
         Returns:
             Complete user prompt with all placeholders filled
         """
+        # Get previous sprint context for incremental development
+        previous_context = self._get_previous_sprint_context() if self.sprint_num > 1 else None
+        
         if phase == 'specify':
-            # Specify phase: just substitute user command
-            return template.replace('{user_command}', command_text)
+            # Specify phase: substitute user command + previous context
+            prompt = template.replace('{user_command}', command_text)
+            
+            # Add previous sprint context for incremental development
+            if previous_context:
+                incremental_context = f"""
+
+---
+IMPORTANT: INCREMENTAL DEVELOPMENT CONTEXT
+
+This is sprint {self.sprint_num} of an incremental development process.
+You must build UPON the existing system, not replace it.
+
+Previous Sprint Specification:
+{previous_context['spec']}
+
+Previous Sprint Tech Stack:
+{previous_context['tech_stack']}
+
+Previous Entities/Models:
+{previous_context['entities']}
+
+Instructions for Incremental Development:
+1. The new feature should EXTEND the existing system
+2. Use the SAME tech stack as previous sprint (consistency is critical)
+3. Reference existing entities/models - don't recreate them
+4. Specify how new components integrate with existing ones
+5. Document what changes are needed to existing code (additions/modifications, NOT replacements)
+---
+"""
+                prompt += incremental_context
+            
+            return prompt
             
         elif phase == 'plan':
-            # Plan phase: substitute spec content
+            # Plan phase: substitute spec content + previous context
             spec_content = self.spec_md_path.read_text(encoding='utf-8')
-            return template.replace('{spec_content}', spec_content)
+            prompt = template.replace('{spec_content}', spec_content)
+            
+            # Add previous sprint context
+            if previous_context:
+                incremental_context = f"""
+
+---
+INCREMENTAL DEVELOPMENT CONTEXT
+
+Previous Sprint Plan:
+{previous_context['plan']}
+
+Existing Code Files:
+{previous_context['code_files']}
+
+Instructions for Technical Plan:
+1. MUST use the exact same tech stack as previous sprint
+2. Show how new modules integrate with existing ones
+3. Document modifications needed to existing files (not replacements)
+4. Maintain backward compatibility with existing data models
+5. Specify database migration strategy if data model changes
+---
+"""
+                prompt += incremental_context
+            
+            return prompt
             
         elif phase == 'tasks':
-            # Tasks phase: substitute spec + plan content
+            # Tasks phase: substitute spec + plan content + previous context
             spec_content = self.spec_md_path.read_text(encoding='utf-8')
             plan_content = self.plan_md_path.read_text(encoding='utf-8')
-            return (template
+            prompt = (template
                    .replace('{spec_content}', spec_content)
                    .replace('{plan_content}', plan_content))
+            
+            # Add previous sprint context
+            if previous_context:
+                incremental_context = f"""
+
+---
+INCREMENTAL DEVELOPMENT CONTEXT
+
+Existing Code to Build Upon:
+{previous_context['code_summary']}
+
+Instructions for Task Breakdown:
+1. Identify which existing files need modifications
+2. Create new files for new functionality
+3. Ensure integration tasks are included
+4. Maintain consistency with existing code style and patterns
+---
+"""
+                prompt += incremental_context
+            
+            return prompt
         
         else:
             raise ValueError(f"Unknown phase: {phase}")
@@ -605,6 +690,117 @@ class GHSpecAdapter(BaseAdapter):
         assistant_message = result['choices'][0]['message']['content']
         
         return assistant_message
+    
+    def _get_previous_sprint_context(self) -> Optional[Dict[str, str]]:
+        """
+        Load context from previous sprint for incremental development.
+        
+        Extracts:
+        - Previous sprint's spec.md (business requirements)
+        - Previous sprint's plan.md (technical decisions, tech stack)
+        - Previous sprint's generated code (to build upon)
+        - Key entities/models from previous sprint
+        
+        Returns:
+            Dictionary with previous sprint context, or None if unavailable
+        """
+        prev_artifacts = self.previous_sprint_artifacts
+        
+        if not prev_artifacts or not prev_artifacts.exists():
+            logger.warning("Previous sprint artifacts not found",
+                         extra={'run_id': self.run_id,
+                               'metadata': {
+                                   'sprint': self.sprint_num,
+                                   'expected_path': str(prev_artifacts) if prev_artifacts else 'None'
+                               }})
+            return None
+        
+        try:
+            context = {}
+            
+            # Load previous spec.md
+            prev_spec = prev_artifacts / "spec.md"
+            if prev_spec.exists():
+                context['spec'] = prev_spec.read_text(encoding='utf-8')
+                # Extract entities from spec (usually in "Key Entities" section)
+                context['entities'] = self._extract_entities_from_spec(context['spec'])
+            else:
+                context['spec'] = "No previous specification found"
+                context['entities'] = "No entities defined"
+            
+            # Load previous plan.md
+            prev_plan = prev_artifacts / "plan.md"
+            if prev_plan.exists():
+                context['plan'] = prev_plan.read_text(encoding='utf-8')
+                # Extract tech stack from plan (usually in "Technical Context" section)
+                context['tech_stack'] = self._extract_tech_stack_from_plan(context['plan'])
+            else:
+                context['plan'] = "No previous plan found"
+                context['tech_stack'] = "No tech stack defined"
+            
+            # Load previous generated code files
+            prev_models_dir = prev_artifacts / "models"
+            prev_api_dir = prev_artifacts / "api"
+            prev_tests_dir = prev_artifacts / "tests"
+            
+            code_files = []
+            for code_dir in [prev_models_dir, prev_api_dir, prev_tests_dir]:
+                if code_dir.exists():
+                    for file_path in code_dir.rglob("*"):
+                        if file_path.is_file() and file_path.suffix in ['.py', '.js', '.ts', '.java', '.go']:
+                            code_files.append({
+                                'path': str(file_path.relative_to(prev_artifacts)),
+                                'content': file_path.read_text(encoding='utf-8', errors='ignore')
+                            })
+            
+            # Create code summary (limit to avoid token explosion)
+            if code_files:
+                context['code_files'] = "\n\n".join([
+                    f"File: {f['path']}\n```\n{f['content'][:500]}...\n```"
+                    for f in code_files[:5]  # Limit to first 5 files
+                ])
+                context['code_summary'] = "\n".join([
+                    f"- {f['path']} ({len(f['content'])} bytes)"
+                    for f in code_files
+                ])
+            else:
+                context['code_files'] = "No code files found from previous sprint"
+                context['code_summary'] = "No code files found"
+            
+            logger.info("Loaded previous sprint context for incremental development",
+                       extra={'run_id': self.run_id,
+                             'metadata': {
+                                 'sprint': self.sprint_num,
+                                 'prev_sprint': self.sprint_num - 1,
+                                 'has_spec': 'spec' in context,
+                                 'has_plan': 'plan' in context,
+                                 'code_files_count': len(code_files)
+                             }})
+            
+            return context
+            
+        except Exception as e:
+            logger.error("Failed to load previous sprint context",
+                       extra={'run_id': self.run_id,
+                             'metadata': {
+                                 'error': str(e),
+                                 'sprint': self.sprint_num
+                             }})
+            return None
+    
+    def _extract_entities_from_spec(self, spec_content: str) -> str:
+        """Extract Key Entities section from spec.md."""
+        match = re.search(r'## Key Entities\s+(.*?)(?=\n##|\Z)', spec_content, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return "No entities defined in previous spec"
+    
+    def _extract_tech_stack_from_plan(self, plan_content: str) -> str:
+        """Extract Technical Context section from plan.md."""
+        match = re.search(r'## Technical Context\s+(.*?)(?=\n##|\Z)', plan_content, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return "No tech stack defined in previous plan"
     
     def _needs_clarification(self, response_text: str) -> bool:
         """
@@ -883,6 +1079,7 @@ class GHSpecAdapter(BaseAdapter):
         - Relevant spec excerpt (extracted via keywords)
         - Relevant plan excerpt (extracted via keywords)
         - Current file content (if file exists)
+        - Previous sprint code (for incremental development, sprint > 1)
         
         Args:
             task: Task dictionary from _parse_tasks()
@@ -912,6 +1109,30 @@ class GHSpecAdapter(BaseAdapter):
                  .replace('{spec_excerpt}', spec_excerpt)
                  .replace('{plan_excerpt}', plan_excerpt)
                  .replace('{current_file_content}', current_file_content))
+        
+        # Add previous sprint context for incremental development
+        if self.sprint_num > 1:
+            previous_context = self._get_previous_sprint_context()
+            if previous_context and previous_context.get('code_files'):
+                incremental_context = f"""
+
+---
+INCREMENTAL DEVELOPMENT CONTEXT
+
+This is sprint {self.sprint_num}. You are building upon existing code from previous sprint.
+
+Previous Sprint Code:
+{previous_context['code_files']}
+
+CRITICAL INSTRUCTIONS:
+1. If modifying an existing file, preserve its structure and patterns
+2. If creating a new file, match the coding style of existing files
+3. Use the same language/framework as previous sprint ({previous_context.get('tech_stack', 'see previous code')})
+4. Import/reference existing models and components - don't duplicate them
+5. Add functionality incrementally - don't rewrite everything
+---
+"""
+                prompt += incremental_context
         
         return prompt
     
