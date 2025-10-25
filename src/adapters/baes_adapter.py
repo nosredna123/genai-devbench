@@ -509,10 +509,8 @@ class BAeSAdapter(BaseAdapter):
                 "BAEs framework failed to create workspace directory."
             )
         
-        # Count Python files
-        python_files = list(self.managed_system_dir.rglob("*.py"))
-        if not python_files:
-            # Use DRY helper from BaseAdapter to format error message
+        # Use DRY helper from BaseAdapter for language-agnostic validation
+        if not self.validate_artifacts_generated(self.managed_system_dir, "BAEs"):
             error_msg = self._format_validation_error(
                 workspace_dir=self.managed_system_dir,
                 framework_name="BAEs",
@@ -527,13 +525,5 @@ class BAeSAdapter(BaseAdapter):
                 f"No requirements.txt found in managed_system directory: {self.managed_system_dir}",
                 extra={'run_id': self.run_id}
             )
-        
-        # Success - log summary
-        file_count = len(list(self.managed_system_dir.rglob("*")))
-        logger.info(
-            f"Artifact validation passed: {len(python_files)} Python files, "
-            f"{file_count} total files in managed_system",
-            extra={'run_id': self.run_id}
-        )
         
         return True, ""

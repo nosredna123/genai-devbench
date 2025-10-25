@@ -656,10 +656,8 @@ class ChatDevAdapter(BaseAdapter):
                 "ChatDev framework failed to create workspace directory."
             )
         
-        # Count Python files
-        python_files = list(workspace_dir.rglob("*.py"))
-        if not python_files:
-            # Use DRY helper from BaseAdapter to format error message
+        # Use DRY helper from BaseAdapter for language-agnostic validation
+        if not self.validate_artifacts_generated(workspace_dir, "ChatDev"):
             error_msg = self._format_validation_error(
                 workspace_dir=workspace_dir,
                 framework_name="ChatDev",
@@ -674,13 +672,5 @@ class ChatDevAdapter(BaseAdapter):
                 f"No main.py found in workspace directory: {workspace_dir}",
                 extra={'run_id': self.run_id}
             )
-        
-        # Success - log summary
-        file_count = len(list(workspace_dir.rglob("*")))
-        logger.info(
-            f"Artifact validation passed: {len(python_files)} Python files, "
-            f"{file_count} total files in workspace",
-            extra={'run_id': self.run_id}
-        )
         
         return True, ""

@@ -558,6 +558,107 @@ class BaseAdapter(ABC):
         
         return file_count
     
+    def validate_artifacts_generated(self, workspace_dir: Path, framework_name: str) -> bool:
+        """
+        Validate that framework generated any files (language-agnostic).
+        
+        This is a DRY helper to check if ANY files were generated during execution,
+        regardless of programming language or framework choice. It replaces the
+        anti-pattern of checking for specific file extensions (*.py, *.js, etc.).
+        
+        Additionally detects common application types and logs them for debugging:
+        - Web applications (HTML, CSS, JS, React, Vue, Angular)
+        - Backend APIs (Python, Node.js, Java, Go, PHP)
+        - Databases (SQL, migrations, schemas)
+        - Configuration (Docker, package managers, env files)
+        
+        Why language-agnostic?
+        - Frameworks can generate code in any language (Python, JS, Java, Go, etc.)
+        - Hardcoding file extensions is fragile and requires maintenance
+        - Purpose is to detect catastrophic failures (AI generated nothing)
+        - Actual code quality validation happens in orchestrator's validation phase
+        
+        Args:
+            workspace_dir: Directory to check for generated files
+            framework_name: Name of framework (for error messages)
+            
+        Returns:
+            True if files were generated, False if directory is empty
+            
+        Example:
+            >>> if not self.validate_artifacts_generated(self.workspace_path, "BAEs"):
+            ...     raise RuntimeError("No files generated during execution")
+        """
+        if not workspace_dir or not workspace_dir.exists():
+            logger.error(
+                f"{framework_name} workspace directory does not exist: {workspace_dir}",
+                extra={'run_id': self.run_id}
+            )
+            return False
+        
+        # Check for ANY files (language-agnostic)
+        generated_files = [f for f in workspace_dir.rglob('*') if f.is_file()]
+        
+        if not generated_files:
+            logger.error(
+                f"{framework_name} generated no files in {workspace_dir}",
+                extra={'run_id': self.run_id}
+            )
+            return False
+        
+        # Check if at least one non-documentation file exists
+        # Documentation-only output (just .md, .txt, .pdf) indicates failure
+        doc_extensions = {'.md', '.txt', '.pdf', '.rst', '.adoc'}
+        non_doc_files = [f for f in generated_files if f.suffix.lower() not in doc_extensions]
+        
+        if not non_doc_files:
+            logger.error(
+                f"{framework_name} generated only documentation files (no code/config)",
+                extra={
+                    'run_id': self.run_id,
+                    'metadata': {
+                        'total_files': len(generated_files),
+                        'file_types': sorted({f.suffix.lower() for f in generated_files if f.suffix})
+                    }
+                }
+            )
+            return False
+        
+        # Detect application type by file extensions (informational only)
+        file_extensions = {f.suffix.lower() for f in generated_files if f.suffix}
+        
+        app_types = []
+        # Web frontend indicators
+        if any(ext in file_extensions for ext in ['.html', '.css', '.jsx', '.tsx', '.vue']):
+            app_types.append('web-frontend')
+        # Backend/API indicators
+        if any(ext in file_extensions for ext in ['.py', '.js', '.java', '.go', '.php', '.rb', '.cs']):
+            app_types.append('backend')
+        # Database indicators
+        if any(ext in file_extensions for ext in ['.sql', '.db', '.sqlite']):
+            app_types.append('database')
+        # Container/deployment indicators
+        if any('dockerfile' in f.name.lower() or 'docker-compose' in f.name.lower() 
+               for f in generated_files):
+            app_types.append('containerized')
+        # Config/package managers
+        if any(f.name in ['package.json', 'requirements.txt', 'pom.xml', 'go.mod', 'Cargo.toml']
+               for f in generated_files):
+            app_types.append('managed-dependencies')
+        
+        logger.info(
+            f"{framework_name} validation passed: {len(generated_files)} files generated",
+            extra={
+                'run_id': self.run_id,
+                'metadata': {
+                    'file_count': len(generated_files),
+                    'file_types': sorted(file_extensions),
+                    'detected_app_types': app_types if app_types else ['unknown']
+                }
+            }
+        )
+        return True
+    
     def setup_shared_venv(
         self,
         framework_name: str,
