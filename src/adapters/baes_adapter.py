@@ -15,12 +15,12 @@ import time
 import shutil
 import tarfile
 import socket
-import json
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
 
 from src.adapters.base_adapter import BaseAdapter
 from src.utils.logger import get_logger
+from src.utils.text import parse_json_from_output
 
 logger = get_logger(__name__, component="adapter")
 
@@ -153,9 +153,9 @@ class BAeSAdapter(BaseAdapter):
             )
             
             if result.returncode != 0:
-                # Try to parse error from JSON output
-                try:
-                    error_data = json.loads(result.stdout)
+                # Try to parse error from JSON output (with ANSI stripping)
+                error_data, parse_error = parse_json_from_output(result.stdout or "")
+                if error_data:
                     error_msg = error_data.get('error', result.stderr or 'Unknown error')
                     logger.error(
                         f"BAeS CLI returned error (exit code {result.returncode})",
@@ -172,7 +172,7 @@ class BAeSAdapter(BaseAdapter):
                         'success': False,
                         'error': error_msg
                     }
-                except json.JSONDecodeError:
+                else:
                     error_msg = f"CLI execution failed: {result.stderr or result.stdout}"
                     # Store error for validation reporting
                     self.last_execution_error = {
@@ -187,7 +187,8 @@ class BAeSAdapter(BaseAdapter):
                             'run_id': self.run_id,
                             'metadata': {
                                 'stdout': result.stdout[:500] if result.stdout else None,
-                                'stderr': result.stderr[:500] if result.stderr else None
+                                'stderr': result.stderr[:500] if result.stderr else None,
+                                'parse_error': parse_error
                             }
                         }
                     )
@@ -196,14 +197,25 @@ class BAeSAdapter(BaseAdapter):
                         'error': error_msg
                     }
             
-            # Parse JSON output from CLI
-            try:
-                output = json.loads(result.stdout)
+            # Parse JSON output from CLI (with robust ANSI stripping and JSON extraction)
+            output, parse_error = parse_json_from_output(result.stdout or "")
+            if output:
                 return output
-            except json.JSONDecodeError as e:
+            else:
+                logger.error(
+                    "Failed to parse CLI output after ANSI cleaning and JSON extraction",
+                    extra={
+                        'run_id': self.run_id,
+                        'step': self.current_step,
+                        'metadata': {
+                            'parse_error': parse_error,
+                            'raw_stdout_snippet': (result.stdout[:1000] + '...') if len(result.stdout) > 1000 else result.stdout
+                        }
+                    }
+                )
                 return {
                     'success': False,
-                    'error': f'Failed to parse CLI output: {e}\nOutput: {result.stdout}'
+                    'error': f'Failed to parse CLI output after cleaning: {parse_error}'
                 }
             
         except subprocess.TimeoutExpired:

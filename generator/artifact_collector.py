@@ -140,6 +140,7 @@ class ArtifactCollector:
             utils_dir / 'isolation.py',
             utils_dir / 'log_summary.py',
             utils_dir / 'metrics_config.py',
+            utils_dir / 'text.py',
             utils_dir / '__init__.py',
         ]
         
