@@ -173,13 +173,13 @@ class BaseAdapter(ABC):
         Uses configuration from experiment.yaml:
         - API key from config['api_key_env']
         - Model from parameter or config (gpt-4o-mini default)
-        - Temperature from parameter (0 default for determinism)
+        - Temperature: Only included if explicitly provided (otherwise uses OpenAI's default)
         
         Args:
             system_prompt: System role instructions
             user_prompt: User message/request
             model: Optional model override (defaults to gpt-4o-mini)
-            temperature: Optional temperature override (defaults to 0 for determinism)
+            temperature: Optional temperature value (omitted if None, allowing OpenAI default)
             timeout: Request timeout in seconds (default: 120)
             
         Returns:
@@ -208,9 +208,6 @@ class BaseAdapter(ABC):
         # Use provided model or default to gpt-4o-mini
         model_name = model or "gpt-4o-mini"
         
-        # Use provided temperature or default to 0 (deterministic)
-        temp_value = temperature if temperature is not None else 0
-        
         # Build request
         url = "https://api.openai.com/v1/chat/completions"
         headers = {
@@ -219,12 +216,15 @@ class BaseAdapter(ABC):
         }
         payload = {
             "model": model_name,
-            "temperature": temp_value,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ]
         }
+        
+        # Only include temperature if explicitly provided
+        if temperature is not None:
+            payload["temperature"] = temperature
         
         logger.debug(
             "Calling OpenAI Chat Completion API",
@@ -233,7 +233,7 @@ class BaseAdapter(ABC):
                 'step': self.current_step,
                 'metadata': {
                     'model': model_name,
-                    'temperature': temp_value,
+                    'temperature': temperature if temperature is not None else '1.0 (OpenAI default)',
                     'system_prompt_length': len(system_prompt),
                     'user_prompt_length': len(user_prompt)
                 }

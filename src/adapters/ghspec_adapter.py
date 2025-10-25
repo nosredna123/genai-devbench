@@ -646,7 +646,7 @@ Instructions for Task Breakdown:
         to follow DRY principle. The base adapter method:
         - Retrieves API key from self.config['api_key_env']
         - Uses gpt-4o-mini model (can be overridden)
-        - Sets temperature=0 for determinism (can be overridden)
+        - Uses OpenAI default temperature (framework comparison as-is)
         - Handles logging and error handling consistently
         
         Args:
@@ -659,8 +659,8 @@ Instructions for Task Breakdown:
         return self.call_openai_chat_completion(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
-            model="gpt-4o-mini",  # From experiment.yaml config
-            temperature=0  # Deterministic
+            model="gpt-4o-mini"  # From experiment.yaml config
+            # Note: temperature not specified - uses BaseAdapter default (0 for consistency)
         )
     
     def _get_previous_sprint_context(self) -> Optional[Dict[str, str]]:
