@@ -241,8 +241,16 @@ class GHSpecAdapter(BaseAdapter):
             total_api_calls += calls
             total_cached_tokens += cached
             
-            # Check if code was generated
-            created_files = list(self.src_dir.rglob('*.py')) + list(self.src_dir.rglob('*.md'))
+            # Check if code was generated (look for common code file extensions)
+            # Support multiple languages: Python, JavaScript, TypeScript, Java, etc.
+            common_extensions = ['*.py', '*.js', '*.ts', '*.jsx', '*.tsx', '*.java', 
+                                 '*.cpp', '*.c', '*.h', '*.cs', '*.go', '*.rb', '*.php',
+                                 '*.md', '*.json', '*.yaml', '*.yml', '*.html', '*.css',
+                                 '*.sh', '*.sql', '*.Dockerfile']
+            created_files = []
+            for ext in common_extensions:
+                created_files.extend(list(self.src_dir.rglob(ext)))
+            
             if len(created_files) == 0:
                 raise RuntimeError("No code files generated during implementation")
             
