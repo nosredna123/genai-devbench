@@ -144,51 +144,6 @@ def validate_frameworks(frameworks: List[str]) -> None:
 # Configuration Generation
 # =============================================================================
 
-def load_base_config() -> Dict[str, Any]:
-    """
-    Load complete base configuration from config/experiment.yaml.
-    
-    This ensures ALL configuration (frameworks, timeouts, pricing, metrics, etc.)
-    is loaded dynamically from the single source of truth, avoiding hardcoded
-    values that can become stale.
-    
-    Returns:
-        Complete base configuration dictionary
-        
-    Raises:
-        ExperimentCreationError: If base config cannot be loaded
-    """
-    base_config_path = Path(__file__).parent.parent / "config" / "experiment.yaml"
-    
-    if not base_config_path.exists():
-        raise ExperimentCreationError(
-            f"Base experiment config not found: {base_config_path}"
-        )
-    
-    try:
-        with open(base_config_path, 'r', encoding='utf-8') as f:
-            base_config = yaml.safe_load(f)
-        
-        # Validate required sections
-        required_sections = ['frameworks', 'stopping_rule', 'timeouts']
-        for section in required_sections:
-            if section not in base_config:
-                raise ExperimentCreationError(
-                    f"Base experiment config missing required section: '{section}'"
-                )
-        
-        return base_config
-        
-    except yaml.YAMLError as e:
-        raise ExperimentCreationError(
-            f"Failed to parse base experiment config: {e}"
-        )
-    except Exception as e:
-        raise ExperimentCreationError(
-            f"Failed to load base experiment config: {e}"
-        )
-
-
 def load_template_config(template_path: Path) -> Dict[str, Any]:
     """
     Load configuration from template experiment.
@@ -225,7 +180,8 @@ def generate_config(
     model: str,
     frameworks: List[str],
     max_runs: int,
-    template_config: Optional[Dict[str, Any]] = None
+    template_config: Optional[Dict[str, Any]] = None,
+    config_set_obj: Optional[Any] = None
 ) -> Dict[str, Any]:
     """
     Generate experiment configuration.
@@ -235,6 +191,7 @@ def generate_config(
         frameworks: List of enabled frameworks
         max_runs: Maximum runs per framework
         template_config: Optional template to base on
+        config_set_obj: Optional ConfigSet object to use for base template
         
     Returns:
         Complete configuration dictionary
@@ -252,8 +209,20 @@ def generate_config(
             config['frameworks'][fw_name]['enabled'] = fw_name in frameworks
     
     else:
-        # Generate from scratch using base config as template
-        base_config = load_base_config()
+        # Generate from config set's experiment_template.yaml
+        if not config_set_obj:
+            raise ExperimentCreationError(
+                "Config set object is required when not using a template"
+            )
+        
+        if not config_set_obj.template_path.exists():
+            raise ExperimentCreationError(
+                f"Experiment template not found: {config_set_obj.template_path}"
+            )
+        
+        # Load from config set's experiment_template.yaml
+        with open(config_set_obj.template_path, 'r', encoding='utf-8') as f:
+            base_config = yaml.safe_load(f)
         
         # Start with a copy of the base config
         config = base_config.copy()
@@ -621,7 +590,7 @@ def create_experiment(
         template_config = load_template_config(template_path)
     
     # Generate configuration
-    config = generate_config(model, frameworks, max_runs, template_config)
+    config = generate_config(model, frameworks, max_runs, template_config, config_set_obj)
     config['experiment_name'] = name  # Add experiment name to config
     
     # Determine output directory

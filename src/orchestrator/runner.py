@@ -649,6 +649,31 @@ cat sprint_001/metrics.json
                         ])
                         self.adapter.managed_system_dir = workspace_dirs['managed_system']
                         self.adapter.database_dir = workspace_dirs['database']
+                        
+                        # Copy previous sprint's state for incremental development (sprint_num > 1)
+                        if sprint_num > 1:
+                            prev_sprint_num = sprint_num - 1
+                            prev_sprint_id = f"sprint_{prev_sprint_num:03d}"
+                            prev_sprint_dir = run_dir / prev_sprint_id / "generated_artifacts"
+                            
+                            # Copy context_store.json if it exists
+                            prev_context_store = prev_sprint_dir / "database" / "context_store.json"
+                            if prev_context_store.exists():
+                                import shutil
+                                shutil.copy2(prev_context_store, self.adapter.database_dir / "context_store.json")
+                                logger.info(f"Copied context_store.json from sprint {prev_sprint_num}",
+                                           extra={'run_id': self.run_id, 'sprint': sprint_num})
+                            
+                            # Copy SQLite database if it exists
+                            prev_db = prev_sprint_dir / "managed_system" / "app" / "database" / "baes_system.db"
+                            if prev_db.exists():
+                                import shutil
+                                # Copy to managed_system/app/database/ (where BAES generates/modifies it)
+                                (self.adapter.managed_system_dir / "app" / "database").mkdir(parents=True, exist_ok=True)
+                                shutil.copy2(prev_db, self.adapter.managed_system_dir / "app" / "database" / "baes_system.db")
+                                logger.info(f"Copied baes_system.db from sprint {prev_sprint_num}",
+                                           extra={'run_id': self.run_id, 'sprint': sprint_num})
+                        
                         # Update environment variables for the new sprint workspace
                         import os
                         os.environ['BAE_CONTEXT_STORE_PATH'] = str(self.adapter.database_dir / "context_store.json")
@@ -663,6 +688,18 @@ cat sprint_001/metrics.json
                     # Execute step with timeout and retry (use original step ID)
                     result = self._execute_step_with_retry(step_config.id, command_text)
                     retries = result.get('retry_count', 0)
+                    
+                    # For BAES: Create symlink from database/ to managed_system/app/database/baes_system.db
+                    # This ensures the database is accessible from both locations
+                    if self.framework_name == 'baes':
+                        db_file = self.adapter.managed_system_dir / "app" / "database" / "baes_system.db"
+                        db_symlink = self.adapter.database_dir / "baes_system.db"
+                        
+                        # Only create symlink if database exists and symlink doesn't exist yet
+                        if db_file.exists() and not db_symlink.exists():
+                            db_symlink.symlink_to(db_file)
+                            logger.info(f"Created symlink: database/baes_system.db → managed_system/app/database/baes_system.db",
+                                       extra={'run_id': self.run_id, 'sprint': sprint_num})
                     
                     # Record metrics (use original step ID)
                     self.metrics_collector.record_step(

@@ -91,7 +91,7 @@ frameworks:
   baes:
     enabled: true
     repo_url: "https://github.com/gesad-lab/baes_demo"
-    commit_hash: "1285967748549b62c2e3af7993fa8e81f79eae45"
+    commit_hash: "553c68a2aa35c353688b885f6a83c678caf05466"
     api_port: 8100
     ui_port: 8600
     api_key_env: "OPENAI_API_KEY_BAES"

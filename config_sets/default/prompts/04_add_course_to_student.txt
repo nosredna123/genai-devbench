@@ -1,0 +1,7 @@
+Add course relationship to Student entity.
+
+Requirements:
+- Add a relationship between Student and Course entities
+- Student should be able to have courses
+- Update the database schema to support this relationship
+- Database migration should preserve existing Student and Course data

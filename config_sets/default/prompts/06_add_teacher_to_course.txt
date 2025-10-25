@@ -1,0 +1,7 @@
+Add teacher relationship to Course entity.
+
+Requirements:
+- Add a relationship from Course to Teacher entity
+- Course should be able to have a teacher
+- Update the database schema to support this relationship
+- Database migration should preserve existing Student, Course, and Teacher data

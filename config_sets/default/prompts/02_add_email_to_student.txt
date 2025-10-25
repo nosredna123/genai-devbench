@@ -1,0 +1,7 @@
+Add email field to Student entity.
+
+Requirements:
+- Add email field to the existing Student entity:
+  - email (string, required)
+- Update the database schema to include the email field
+- Database migration should preserve existing Student data

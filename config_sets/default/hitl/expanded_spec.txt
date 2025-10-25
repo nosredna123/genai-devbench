@@ -1,57 +1,43 @@
-EXPANDED SPECIFICATION - Academic Course Management System
+EXPANDED SPECIFICATION - Generic Guidance
 
-This is a deterministic clarification provided to all frameworks to ensure reproducible results.
+TECHNOLOGY STACK:
+- Use the technologies specified in the prompt
+- If not specified, use your best judgment based on common practices
+- Prefer widely-adopted and well-documented tools
 
-TECHNOLOGY STACK (MANDATORY):
-- Backend: Python 3.11+ with FastAPI framework
-- Database: SQLite with SQLAlchemy ORM
-- API Style: RESTful with JSON responses
-- Frontend: HTML/CSS/JavaScript (vanilla or framework of your choice)
+IMPLEMENTATION APPROACH:
+- Follow the prompt requirements exactly as stated
+- For unspecified details, use industry best practices
+- When in doubt, choose the simplest working solution
+- Ensure data persistence across application restarts
 
-DATA MODEL DETAILS:
-- Student: {id: int, name: str, email: str (unique), enrollment_date: date}
-- Course: {id: int, code: str (unique), title: str, credits: int, teacher_id: int (nullable FK)}
-- Teacher: {id: int, name: str, email: str (unique), department: str}
-- Enrollment: {id: int, student_id: int (FK), course_id: int (FK), enrollment_date: date, grade: str (nullable)}
+DATA MODELING:
+- Create entities with the fields explicitly mentioned in the prompt
+- Use appropriate data types for each field (your best guess)
+- Add primary keys automatically (auto-increment integers)
+- Implement relationships as described in the prompt
 
-VALIDATION RULES:
-- Emails must match format: [local]@[domain].[tld]
-- Names: 1-100 characters, non-empty
-- Course codes: 3-10 alphanumeric characters
-- Credits: 1-12 integer
-- Grades: One of ['A', 'B', 'C', 'D', 'F'] or null
-- Departments: 1-50 characters
-
-API ENDPOINTS STRUCTURE:
-- Students: GET/POST /students, GET/PATCH/DELETE /students/{id}
-- Courses: GET/POST /courses, GET/PATCH/DELETE /courses/{id}
-- Teachers: GET/POST /teachers, GET/PATCH/DELETE /teachers/{id}
-- Enrollments: POST /enrollments, GET/PATCH/DELETE /enrollments/{id}
-- Relationships: GET /students/{id}/enrollments, GET /courses/{id}/students, GET /teachers/{id}/courses
-- Operations: PATCH /courses/{id}/assign-teacher, PATCH /courses/{id}/unassign-teacher
-
-PAGINATION:
-- Parameters: page (default 1), page_size (default 20, max 100)
-- Response includes: {data: [...], total_count: int, total_pages: int, current_page: int, page_size: int}
-
-ERROR RESPONSES:
-- 400: Validation errors with field details
-- 404: Resource not found
-- 409: Unique constraint violation (duplicate email/code)
-- 422: Invalid data type
-- 500: Server error
-
-UI REQUIREMENTS:
-- Homepage with navigation
-- Separate pages for Students, Courses, Teachers, Enrollments
-- Each page: List view with pagination, Add/Edit forms, Delete confirmation
-- Display validation errors from API
-- Accessible at /students, /courses, /teachers, /enrollments URLs
+API DESIGN:
+- Use RESTful conventions when applicable
+- Return JSON responses unless otherwise specified
+- Implement basic error handling
+- Choose appropriate HTTP methods and status codes
 
 DATABASE:
-- Auto-create tables on startup
-- Migrations must preserve existing data
-- Enforce foreign key constraints
-- Prevent duplicate enrollments
+- Auto-create schema on first startup
+- When adding new fields or entities, preserve existing data
+- Use migrations or schema updates that don't lose data
+- Enforce data integrity where it makes sense
 
-This specification is fixed and identical across all experiment runs to ensure reproducibility.
+VALIDATION:
+- Apply sensible validation for fields (e.g., non-empty strings, valid email formats)
+- Use your best judgment for constraints not explicitly mentioned
+- Handle errors gracefully
+
+GENERAL PRINCIPLES:
+- Incremental development: each sprint builds on the previous one
+- Backward compatibility: don't break existing functionality
+- Simplicity: don't over-engineer solutions
+- Functionality: ensure the application works as requested
+
+When specifications are ambiguous or incomplete, use your best professional judgment to fill in the gaps in a reasonable and conventional way.

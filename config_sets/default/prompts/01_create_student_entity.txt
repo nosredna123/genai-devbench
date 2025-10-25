@@ -1,0 +1,9 @@
+Create a Student entity with name field using Python, FastAPI, and SQLite.
+
+Requirements:
+- Use Python 3.11+ with FastAPI framework
+- SQLite database for persistence
+- Create Student entity with only:
+  - name (string, required)
+- API should return JSON responses
+- Database schema should be created automatically on startup

@@ -1,0 +1,8 @@
+Create a Teacher entity with name and email fields.
+
+Requirements:
+- Create Teacher entity with only:
+  - name (string, required)
+  - email (string, required)
+- Update the database schema to include the new Teacher table
+- Database migration should preserve existing Student and Course data

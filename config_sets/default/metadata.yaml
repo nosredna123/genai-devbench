@@ -1,41 +1,41 @@
 # Config Set Metadata
 # This file defines a curated experiment scenario template
 
-name: "baes_chatdev_ghspec"
+name: "default"
 version: "1.0.0"
-description: "Traditional 6-step CRUD application (Student/Course/Teacher)"
+description: "Incremental 6-step entity development (Student/Course/Teacher)"
 
 # Catalog of available steps in this config set
 available_steps:
   - id: 1
-    name: "Student CRUD"
-    prompt_file: "prompts/01_student_crud.txt"
-    description: "Generate Student entity with CRUD operations"
+    name: "Create Student Entity"
+    prompt_file: "prompts/01_create_student_entity.txt"
+    description: "Create Student entity with name field"
   
   - id: 2
-    name: "Course CRUD"
-    prompt_file: "prompts/02_course_crud.txt"
-    description: "Generate Course entity with CRUD operations"
+    name: "Add Email to Student"
+    prompt_file: "prompts/02_add_email_to_student.txt"
+    description: "Add email field to Student entity"
   
   - id: 3
-    name: "Teacher CRUD"
-    prompt_file: "prompts/03_teacher_crud.txt"
-    description: "Generate Teacher entity with CRUD operations"
+    name: "Create Course Entity"
+    prompt_file: "prompts/03_create_course_entity.txt"
+    description: "Create Course entity with name and level fields"
   
   - id: 4
-    name: "Authentication"
-    prompt_file: "prompts/04_authentication.txt"
-    description: "Add user authentication and authorization"
+    name: "Add Course to Student"
+    prompt_file: "prompts/04_add_course_to_student.txt"
+    description: "Add course relationship to Student entity"
   
   - id: 5
-    name: "Relationships"
-    prompt_file: "prompts/05_relationships.txt"
-    description: "Implement relationships between entities"
+    name: "Create Teacher Entity"
+    prompt_file: "prompts/05_create_teacher_entity.txt"
+    description: "Create Teacher entity with name and email fields"
   
   - id: 6
-    name: "Testing"
-    prompt_file: "prompts/06_testing.txt"
-    description: "Add unit and integration tests"
+    name: "Add Teacher to Course"
+    prompt_file: "prompts/06_add_teacher_to_course.txt"
+    description: "Add teacher relationship to Course entity"
 
 # Scenario-specific defaults (copied to generated config.yaml)
 defaults:
