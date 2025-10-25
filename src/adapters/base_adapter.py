@@ -155,6 +155,125 @@ class BaseAdapter(ABC):
         
         return 0, 0, 0, 0
     
+    def call_openai_chat_completion(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        timeout: int = 120
+    ) -> str:
+        """
+        Generic method to call OpenAI Chat Completion API.
+        
+        DRY PRINCIPLE: Centralizes OpenAI API calls for all adapters that need
+        direct API access (e.g., GHSpec). Frameworks that have their own OpenAI
+        integration (BAeS, ChatDev) don't need this method.
+        
+        Uses configuration from experiment.yaml:
+        - API key from config['api_key_env']
+        - Model from parameter or config (gpt-4o-mini default)
+        - Temperature from parameter (0 default for determinism)
+        
+        Args:
+            system_prompt: System role instructions
+            user_prompt: User message/request
+            model: Optional model override (defaults to gpt-4o-mini)
+            temperature: Optional temperature override (defaults to 0 for determinism)
+            timeout: Request timeout in seconds (default: 120)
+            
+        Returns:
+            Response text from assistant
+            
+        Raises:
+            RuntimeError: If API key not found or API call fails
+            
+        Example:
+            response = self.call_openai_chat_completion(
+                system_prompt="You are a helpful assistant",
+                user_prompt="Write a hello world function"
+            )
+        """
+        import requests
+        
+        # Get API key from environment
+        api_key_env = self.config.get('api_key_env')
+        if not api_key_env:
+            raise RuntimeError("api_key_env not configured in experiment.yaml")
+        
+        api_key = os.getenv(api_key_env)
+        if not api_key:
+            raise RuntimeError(f"API key not found in environment variable: {api_key_env}")
+        
+        # Use provided model or default to gpt-4o-mini
+        model_name = model or "gpt-4o-mini"
+        
+        # Use provided temperature or default to 0 (deterministic)
+        temp_value = temperature if temperature is not None else 0
+        
+        # Build request
+        url = "https://api.openai.com/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": model_name,
+            "temperature": temp_value,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+        }
+        
+        logger.debug(
+            "Calling OpenAI Chat Completion API",
+            extra={
+                'run_id': self.run_id,
+                'step': self.current_step,
+                'metadata': {
+                    'model': model_name,
+                    'temperature': temp_value,
+                    'system_prompt_length': len(system_prompt),
+                    'user_prompt_length': len(user_prompt)
+                }
+            }
+        )
+        
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=timeout)
+            response.raise_for_status()
+            
+            result = response.json()
+            assistant_message = result['choices'][0]['message']['content']
+            
+            logger.debug(
+                "OpenAI API call successful",
+                extra={
+                    'run_id': self.run_id,
+                    'step': self.current_step,
+                    'metadata': {
+                        'response_length': len(assistant_message)
+                    }
+                }
+            )
+            
+            return assistant_message
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(
+                "OpenAI API call failed",
+                extra={
+                    'run_id': self.run_id,
+                    'step': self.current_step,
+                    'metadata': {
+                        'error': str(e),
+                        'model': model_name
+                    }
+                }
+            )
+            raise RuntimeError(f"OpenAI API call failed: {e}") from e
+    
     def verify_commit_hash(self, repo_path: Path, expected_hash: str) -> None:
         """
         Verify cloned repository is at expected commit hash.

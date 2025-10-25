@@ -11,7 +11,6 @@ import re
 import shutil
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
-import requests
 from src.adapters.base_adapter import BaseAdapter
 from src.utils.logger import get_logger
 
@@ -641,12 +640,14 @@ Instructions for Task Breakdown:
     
     def _call_openai(self, system_prompt: str, user_prompt: str) -> str:
         """
-        Call OpenAI API directly with chat completion.
+        Call OpenAI API using the generic base adapter method.
         
-        Uses configuration from experiment.yaml:
-        - API key from environment variable (api_key_env)
-        - Model: gpt-4o-mini (from model config)
-        - Temperature: 0 (deterministic)
+        REFACTORED: Now delegates to BaseAdapter.call_openai_chat_completion()
+        to follow DRY principle. The base adapter method:
+        - Retrieves API key from self.config['api_key_env']
+        - Uses gpt-4o-mini model (can be overridden)
+        - Sets temperature=0 for determinism (can be overridden)
+        - Handles logging and error handling consistently
         
         Args:
             system_prompt: System role instructions
@@ -655,39 +656,12 @@ Instructions for Task Breakdown:
         Returns:
             Response text from assistant
         """
-        api_key = os.getenv(self.config['api_key_env'])
-        if not api_key:
-            raise RuntimeError(f"API key not found in {self.config['api_key_env']}")
-        
-        url = "https://api.openai.com/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": "gpt-4o-mini",  # From experiment.yaml
-            "temperature": 0,  # Deterministic
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
-        }
-        
-        logger.debug("Calling OpenAI API",
-                    extra={'run_id': self.run_id, 'step': self.current_step,
-                          'metadata': {
-                              'model': 'gpt-4o-mini',
-                              'system_prompt_length': len(system_prompt),
-                              'user_prompt_length': len(user_prompt)
-                          }})
-        
-        response = requests.post(url, headers=headers, json=payload, timeout=120)
-        response.raise_for_status()
-        
-        result = response.json()
-        assistant_message = result['choices'][0]['message']['content']
-        
-        return assistant_message
+        return self.call_openai_chat_completion(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            model="gpt-4o-mini",  # From experiment.yaml config
+            temperature=0  # Deterministic
+        )
     
     def _get_previous_sprint_context(self) -> Optional[Dict[str, str]]:
         """
