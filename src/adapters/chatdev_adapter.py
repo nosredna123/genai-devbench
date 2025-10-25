@@ -229,21 +229,56 @@ class ChatDevAdapter(BaseAdapter):
                          'metadata': {'pydantic_check': verify_result.stdout.strip(),
                                      'check_stderr': verify_result.stderr[:200] if verify_result.stderr else ''}})
         
+        # Determine if we should use incremental development
+        # For sprint > 1, use ChatDev's built-in incremental mode with --path to previous code
+        use_incremental = self.sprint_num > 1
+        config_mode = "Incremental" if use_incremental else "Default"
+        
         # Construct ChatDev command
-        # Using Default config for fully automated execution (no HITL)
         cmd = [
             str(self.python_path),
             "run.py",
             "--task", command_text,
             "--name", project_name,
             "--org", "BAEs_Experiment",
-            "--config", "Default",  # Fully automated mode
+            "--config", config_mode,
             "--model", chatdev_model
         ]
         
+        # Add --path parameter for incremental development
+        # ChatDev's incremental mode requires the path to previous sprint's source code
+        if use_incremental:
+            prev_artifacts = self.previous_sprint_artifacts
+            if prev_artifacts and prev_artifacts.exists():
+                cmd.extend(["--path", str(prev_artifacts)])
+                logger.info("Using incremental development mode",
+                           extra={'run_id': self.run_id, 'step': step_num,
+                                 'metadata': {
+                                     'sprint': self.sprint_num,
+                                     'prev_sprint': self.sprint_num - 1,
+                                     'source_path': str(prev_artifacts),
+                                     'config': config_mode
+                                 }})
+            else:
+                logger.warning("Previous sprint artifacts not found - falling back to Default mode",
+                             extra={'run_id': self.run_id, 'step': step_num,
+                                   'metadata': {
+                                       'sprint': self.sprint_num,
+                                       'expected_path': str(prev_artifacts) if prev_artifacts else 'None'
+                                   }})
+                # Fallback to Default mode if previous sprint not found
+                cmd[cmd.index("Incremental")] = "Default"
+                config_mode = "Default"
+        
         logger.info("Invoking ChatDev",
                    extra={'run_id': self.run_id, 'step': step_num,
-                         'metadata': {'project': project_name, 'model': chatdev_model}})
+                         'metadata': {
+                             'project': project_name,
+                             'model': chatdev_model,
+                             'config': config_mode,
+                             'sprint': self.sprint_num,
+                             'incremental': use_incremental
+                         }})
         
         # Execute ChatDev with timeout
         # IMPORTANT: ChatDev expects OPENAI_API_KEY (not our custom name)
