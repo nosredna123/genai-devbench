@@ -625,7 +625,7 @@ cat sprint_001/metrics.json
                 # Print sprint start to console for user visibility
                 from datetime import datetime as dt
                 timestamp = dt.now().strftime("%H:%M:%S")
-                print(f"        ⋯ Sprint {sprint_num} - Step {step_config.id} ({step_config.name}) | {sprint_num}/{total_steps} | {timestamp}", flush=True)
+                print(f"        ⋯ Sprint/Step {sprint_num} ({step_config.name}) | {sprint_num}/{total_steps} | {timestamp}", flush=True)
                     
                 sprint_start_time = datetime.utcnow()
                 step_status = "success"
@@ -762,7 +762,7 @@ cat sprint_001/metrics.json
                     errors_and_warnings.append({
                         'timestamp': datetime.utcnow().isoformat() + 'Z',
                         'level': 'TIMEOUT',
-                        'message': f"Sprint {sprint_num} - Step {step_config.id} ({step_config.name}): {step_error}"
+                        'message': f"Sprint/Step {sprint_num} ({step_config.name}): {step_error}"
                     })
                     logger.error("Sprint timed out",
                                extra={'run_id': self.run_id, 'sprint': sprint_num,
@@ -786,7 +786,7 @@ cat sprint_001/metrics.json
                     errors_and_warnings.append({
                         'timestamp': datetime.utcnow().isoformat() + 'Z',
                         'level': 'ERROR',
-                        'message': f"Sprint {sprint_num} - Step {step_config.id} ({step_config.name}): {step_error}"
+                        'message': f"Sprint/Step {sprint_num} ({step_config.name}): {step_error}"
                     })
                     logger.error("Sprint failed permanently",
                                extra={'run_id': self.run_id, 'sprint': sprint_num,
