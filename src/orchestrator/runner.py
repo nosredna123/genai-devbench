@@ -504,6 +504,10 @@ cat sprint_001/metrics.json
         Returns:
             Dictionary with run results and metadata
         """
+
+        # ensure 1s delay before starting the run to avoid log overlap
+        time.sleep(1)
+
         try:
             # Load configuration
             self.config = load_config(self.config_path)
