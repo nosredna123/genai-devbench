@@ -108,8 +108,8 @@ frameworks:
   
   ghspec:
     enabled: true
-    repo_url: "https://github.com/microsoft/github-spark"
-    commit_hash: "f8fb8d7088de23f97dc58c56b8e9e0b63729fe3c"
+    repo_url: "https://github.com/github/spec-kit.git"
+    commit_hash: "e6d6f3cdee99752baee578896797400a72430ec0"
     api_port: 8300
     ui_port: 8800
     api_key_env: "OPENAI_API_KEY_GHSPEC"
