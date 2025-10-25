@@ -138,6 +138,7 @@ def main():
             run_time = time.time() - run_start
             print(f"      ✓ Completed in {run_time:.1f}s [{_timestamp()}]")
             print()
+            time.sleep(1)  # Avoid log overlap
         
         total_time = time.time() - start_time
         logger.info("Experiment completed successfully")
