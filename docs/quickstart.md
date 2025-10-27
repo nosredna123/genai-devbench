@@ -159,6 +159,113 @@ Open the SVG files in a web browser or image viewer:
 firefox analysis_output/radar_chart.svg  # Or your preferred browser
 ```
 
+## Advanced Configuration
+
+### GHSpec Template Configuration (T046)
+
+The GHSpec adapter supports two template modes for reproducibility and upstream tracking:
+
+#### Static Templates (Default)
+
+Use curated, version-controlled templates from `docs/ghspec/prompts/`:
+
+```yaml
+# config_sets/default/experiment.yaml
+framework_config:
+  template_source: static  # Default mode
+```
+
+**Pros:**
+- **Reproducible**: Templates versioned with experiment code
+- **Stable**: Changes require explicit version control
+- **Documented**: Templates include inline documentation
+
+**Use when:** Running production experiments, comparing across time periods
+
+#### Dynamic Templates
+
+Use templates directly from cloned GHSpec-Kit repository at `frameworks/ghspec/`:
+
+```yaml
+# config_sets/default/experiment.yaml
+framework_config:
+  template_source: dynamic  # Upstream tracking mode
+```
+
+**Pros:**
+- **Latest features**: Automatically uses upstream improvements
+- **Development**: Test new template versions without manual sync
+- **Commit tracking**: Framework commit hash logged in experiment metadata
+
+**Use when:** Development, testing new GHSpec-Kit releases, tracking upstream changes
+
+#### Template Synchronization Workflow (T048)
+
+When using dynamic templates, the framework commit hash is automatically logged:
+
+```json
+{
+  "template_source": "dynamic",
+  "ghspec_commit": "a1b2c3d4e5f67890abcdef1234567890abcdef12",
+  "ghspec_commit_short": "a1b2c3d"
+}
+```
+
+**To update dynamic templates:**
+
+```bash
+cd frameworks/ghspec
+git pull origin main
+cd ../..
+# Next run will use updated templates
+```
+
+**To sync static templates from dynamic:**
+
+```bash
+# Copy templates from framework to static location
+cp frameworks/ghspec/.specify/templates/commands/*.md docs/ghspec/prompts/
+# Commit changes to version control
+git add docs/ghspec/prompts/
+git commit -m "Sync templates from GHSpec-Kit vX.Y.Z"
+```
+
+### Constitution Configuration
+
+Define coding standards that guide all 5 GHSpec phases:
+
+```yaml
+# config_sets/default/experiment.yaml
+framework_config:
+  # Option 1: External file (recommended)
+  constitution_file: config_sets/default/constitution/project_constitution.md
+  
+  # Option 2: Inline (for small constitutions)
+  constitution_text: |
+    - Always write unit tests with 80%+ coverage
+    - Follow PEP 8 style guide for Python
+    - Use type hints for all function signatures
+```
+
+**Default fallback:** If no constitution provided, uses `config_sets/default/constitution/default_principles.md`
+
+### Technology Stack Constraints
+
+Enforce specific tech choices for consistent comparisons:
+
+```yaml
+# config_sets/default/experiment.yaml
+framework_config:
+  tech_stack_constraints: |
+    - Language: Python 3.11+
+    - Web Framework: FastAPI 0.104+
+    - Database: PostgreSQL 14+
+    - ORM: SQLAlchemy 2.0+
+    - Testing: pytest with pytest-asyncio
+```
+
+**Sprint consistency:** When `sprint_num > 1`, tech stack is automatically validated against previous sprint
+
 ## Expected Outputs
 
 ### Metrics File (`metrics.json`)
@@ -215,6 +322,207 @@ Compressed tarball with SHA-256 checksum containing:
 - **Metrics**: See [Metrics Guide](./metrics.md) for detailed metric definitions
 - **Architecture**: See [Architecture Guide](./architecture.md) for system design
 - **Troubleshooting**: See [Troubleshooting Guide](./troubleshooting.md) for common issues
+
+## Troubleshooting (T058)
+
+### Constitution Not Loading
+
+**Symptom:** Error: "No constitution found. Checked: project_constitution.md, experiment.yaml constitution_text, default_principles.md"
+
+**Causes:**
+1. Missing default constitution file
+2. Incorrect file path
+3. File permission issues
+
+**Solutions:**
+
+```bash
+# Check if default constitution exists
+ls -la config_sets/default/constitution/default_principles.md
+
+# If missing, verify you're in project root
+pwd  # Should end with genai-devbench
+
+# Check file permissions
+chmod 644 config_sets/default/constitution/default_principles.md
+
+# Verify constitution content is not empty
+cat config_sets/default/constitution/default_principles.md | wc -l  # Should be > 0
+```
+
+**Alternative:** Provide inline constitution in experiment.yaml:
+
+```yaml
+framework_config:
+  constitution_text: |
+    - Use Python 3.11+
+    - Follow PEP 8 style guide
+    - Write comprehensive docstrings
+```
+
+### Template Missing Error
+
+**Symptom:** Error: "Template not found for phase: specify"
+
+**Causes:**
+1. `template_source` misconfigured (invalid value)
+2. Static templates missing from `docs/ghspec/prompts/`
+3. Dynamic templates missing from `frameworks/ghspec/`
+
+**Solutions:**
+
+```bash
+# Check template_source configuration
+grep -r "template_source" config_sets/default/experiment.yaml
+
+# Verify static templates exist
+ls -la docs/ghspec/prompts/
+# Should contain: specify_template.md, plan_template.md, tasks_template.md,
+#                 implement_template.md, bugfix_template.md
+
+# If using dynamic mode, check framework clone
+ls -la frameworks/ghspec/.specify/templates/commands/
+
+# If framework not cloned, clone it manually
+git clone https://github.com/ghspec/ghspec-kit.git frameworks/ghspec
+
+# Switch to static mode as workaround
+# Edit config_sets/default/experiment.yaml:
+framework_config:
+  template_source: static  # Safe default
+```
+
+**Template validation:** Ensure templates contain required sections:
+- `## System Prompt`
+- `## User Prompt Template`
+
+### API Rate Limits
+
+**Symptom:** Error: "Rate limit exceeded for API key"
+
+**Causes:**
+1. Free-tier OpenAI API key (limited to 3 requests/minute)
+2. High request volume from multiple experiments
+3. Shared API key across team
+
+**Solutions:**
+
+```bash
+# Option 1: Add delays between API calls
+# Edit config_sets/default/experiment.yaml:
+timeout_seconds: 3600
+api_rate_limit_delay: 20  # Wait 20 seconds between calls
+
+# Option 2: Upgrade to paid OpenAI API key
+# Visit: https://platform.openai.com/account/billing
+
+# Option 3: Use different API keys for admin vs. user operations
+# Set separate keys in .env:
+OPEN_AI_KEY_USR=sk-user-key-here     # For framework operations
+OPEN_AI_KEY_ADM=sk-admin-key-here    # For usage API queries
+```
+
+**Rate limit monitoring:**
+
+```bash
+# Check recent API usage
+curl https://api.openai.com/v1/usage \
+  -H "Authorization: Bearer $OPENAI_API_KEY"
+```
+
+### Bugfix Cycle Not Converging
+
+**Symptom:** Warning: "Bugfix cycle reached max iterations (3) with N errors remaining"
+
+**Causes:**
+1. Complex syntax errors AI cannot fix
+2. Missing imports/dependencies
+3. Constitution conflicts with code generation
+
+**Solutions:**
+
+```bash
+# Check error types in logs
+grep "Error classification summary" runs/<framework>/<run-id>/event_log.jsonl
+
+# If syntax errors dominate, check constitution for conflicting rules
+cat config_sets/default/constitution/project_constitution.md
+
+# If import errors persist, add dependency constraints
+# Edit experiment.yaml:
+framework_config:
+  tech_stack_constraints: |
+    - Install dependencies: fastapi, sqlalchemy, pytest
+    - Use only standard library for utilities
+```
+
+**Manual intervention:**
+
+```bash
+# After bugfix cycle fails, inspect generated code
+cat runs/<framework>/<run-id>/workspace/src/api.py
+
+# Fix manually and re-run validation
+python -m py_compile runs/<framework>/<run-id>/workspace/src/api.py
+```
+
+### Single-Threaded Execution (T064)
+
+**Important Constraint:** The GHSpec adapter does NOT support concurrent experiment runs.
+
+**Why:** The adapter maintains instance-level state (cached constitution, templates, phase context) that is not thread-safe.
+
+**Symptoms of concurrent execution:**
+- Race conditions in cached templates
+- Constitution content from wrong experiment
+- Corrupted workspace state
+
+**Solutions:**
+
+```bash
+# CORRECT: Run experiments sequentially
+./runners/run_experiment.sh baes
+./runners/run_experiment.sh chatdev
+./runners/run_experiment.sh ghspec
+
+# WRONG: Parallel execution (will cause issues)
+./runners/run_experiment.sh baes &
+./runners/run_experiment.sh chatdev &  # DO NOT DO THIS
+./runners/run_experiment.sh ghspec &
+
+# For multi-framework comparisons, use sequential mode
+./runners/run_experiment.sh --multi --sequential baes chatdev ghspec
+```
+
+**Architecture note:** Each experiment run creates an isolated workspace, but adapter state is shared within a single process. Future versions may add process-level isolation for parallel execution.
+
+### Large Constitution Performance
+
+**Symptom:** Long delays when loading constitution, high memory usage
+
+**Causes:**
+1. Constitution file > 100 KB
+2. Many nested sections
+3. Inefficient chunking strategy
+
+**Solutions:**
+
+```bash
+# Check constitution size
+ls -lh config_sets/default/constitution/project_constitution.md
+
+# If > 100 KB, adapter automatically chunks to first 30% + last 10%
+# To verify chunking, check logs:
+grep "Constitution chunked" runs/<framework>/<run-id>/event_log.jsonl
+
+# Optimize constitution:
+# 1. Remove redundant sections
+# 2. Use concise language
+# 3. Focus on high-impact rules
+
+# Alternative: Use constitution excerpting per phase
+# (Future enhancement - not yet implemented)
+```
 
 ## Common Issues
 
