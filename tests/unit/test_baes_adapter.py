@@ -28,11 +28,27 @@ def mock_config():
 
 
 @pytest.fixture
-def adapter(tmp_path, mock_config):
+def adapter(tmp_path, mock_config, monkeypatch):
     """Create BAeSAdapter instance with temporary workspace."""
+    # Change to temp directory and create HITL file for tests
+    import os
+    original_cwd = os.getcwd()
+    os.chdir(tmp_path)
+    
+    # Create mock HITL file
+    hitl_dir = tmp_path / "config" / "hitl"
+    hitl_dir.mkdir(parents=True, exist_ok=True)
+    hitl_file = hitl_dir / "expanded_spec.txt"
+    hitl_file.write_text("Test HITL specification response")
+    
     run_id = "test-run-123"
     workspace = str(tmp_path / "workspace")
-    return BAeSAdapter(mock_config, run_id, workspace)
+    adapter_instance = BAeSAdapter(mock_config, run_id, workspace)
+    
+    yield adapter_instance
+    
+    # Restore original directory
+    os.chdir(original_cwd)
 
 
 class TestAdapterInitialization:
@@ -214,20 +230,27 @@ class TestHITLHandling:
         finally:
             os.chdir(original_cwd)
     
-    def test_handle_hitl_raises_when_file_missing(self, adapter, tmp_path, monkeypatch):
+    def test_handle_hitl_raises_when_file_missing(self, mock_config, monkeypatch):
         """HITL should raise RuntimeError when file doesn't exist."""
-        # Change to tmp directory where file won't exist
+        # Create a fresh adapter in a different temp directory without HITL file
+        import tempfile
         import os
-        original_cwd = os.getcwd()
-        os.chdir(tmp_path)
         
-        try:
-            # Reset cached value
-            adapter.hitl_text = None
-            with pytest.raises(RuntimeError, match="HITL specification file not found"):
-                adapter.handle_hitl("test query")
-        finally:
-            os.chdir(original_cwd)
+        with tempfile.TemporaryDirectory() as empty_dir:
+            original_cwd = os.getcwd()
+            os.chdir(empty_dir)
+            
+            try:
+                # Create adapter without HITL file
+                run_id = "test-run-missing-hitl"
+                workspace = os.path.join(empty_dir, "workspace")
+                test_adapter = BAeSAdapter(mock_config, run_id, workspace)
+                
+                # Should raise error since file doesn't exist
+                with pytest.raises(RuntimeError, match="HITL specification file not found"):
+                    test_adapter.handle_hitl("test query")
+            finally:
+                os.chdir(original_cwd)
 
 
 class TestKernelProperty:

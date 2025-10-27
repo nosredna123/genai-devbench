@@ -33,10 +33,10 @@ class TestEndToEndWorkflow:
         
         config_set_names = loader.list_available()
         
-        # Should have at least default and baes_chatdev_ghspec
+        # Should have at least default and minimum
         assert len(config_set_names) >= 2
         assert "default" in config_set_names
-        assert "baes_chatdev_ghspec" in config_set_names
+        assert "minimum" in config_set_names
     
     def test_load_default_config_set(self):
         """Test loading the default config set."""
@@ -46,19 +46,19 @@ class TestEndToEndWorkflow:
         config_set = loader.load("default")
         
         assert config_set.name == "default"
-        assert len(config_set.available_steps) == 1  # Default has 1 step (hello world)
+        assert len(config_set.available_steps) == 6  # Default has 6 steps
         assert config_set.available_steps[0].id == 1
     
-    def test_load_baes_chatdev_ghspec_config_set(self):
-        """Test loading the baes_chatdev_ghspec config set."""
+    def test_load_minimum_config_set(self):
+        """Test loading the minimum config set."""
         config_sets_dir = Path(__file__).parent.parent.parent / "config_sets"
         loader = ConfigSetLoader(config_sets_dir)
         
-        config_set = loader.load("baes_chatdev_ghspec")
+        config_set = loader.load("minimum")
         
-        assert config_set.name == "baes_chatdev_ghspec"
-        assert len(config_set.available_steps) == 6  # baes_chatdev_ghspec has 6 steps
-        assert all(step.id in range(1, 7) for step in config_set.available_steps)
+        assert config_set.name == "minimum"
+        assert len(config_set.available_steps) >= 1  # minimum has at least 1 step
+        assert all(step.id >= 1 for step in config_set.available_steps)
     
     def test_generate_experiment_structure(self, temp_workspace):
         """Test generating experiment creates correct structure."""
@@ -436,12 +436,12 @@ class TestMinimalEndToEnd:
         """
         from generator.standalone_generator import StandaloneGenerator
         
-        # Load default config set (which is now the minimal one - 1 step)
+        # Load minimum config set (which has 1 step - hello world)
         config_sets_dir = Path(__file__).parent.parent.parent / "config_sets"
         loader = ConfigSetLoader(config_sets_dir)
-        config_set = loader.load("default")
+        config_set = loader.load("minimum")
         
-        assert config_set.name == "default"
+        assert config_set.name == "minimum"
         assert len(config_set.available_steps) == 1
         
         # Generate experiment configuration
