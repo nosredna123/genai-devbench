@@ -138,6 +138,7 @@ class StandaloneGenerator:
             output_dir / 'src' / 'utils',
             output_dir / 'config' / 'prompts',
             output_dir / 'config' / 'hitl',
+            output_dir / 'config' / 'constitution',
             output_dir / 'runs',
             output_dir / 'analysis' / 'visualizations',
             output_dir / 'frameworks',
@@ -197,6 +198,18 @@ class StandaloneGenerator:
                 dest_file = hitl_dest / hitl_file.name
                 shutil.copy2(hitl_file, dest_file)
                 print(f"  ✓ config/hitl/{hitl_file.name}")
+        
+        # Copy ALL constitution files (required for GHSpec adapter)
+        constitution_source = config_set.base_path / 'constitution'
+        if constitution_source.exists():
+            constitution_dest = output_dir / 'config' / 'constitution'
+            constitution_dest.mkdir(parents=True, exist_ok=True)
+            
+            for constitution_file in constitution_source.glob('*'):
+                if constitution_file.is_file():
+                    dest_file = constitution_dest / constitution_file.name
+                    shutil.copy2(constitution_file, dest_file)
+                    print(f"  ✓ config/constitution/{constitution_file.name}")
     
     def _copy_docs_files(
         self,

@@ -141,3 +141,84 @@ When specification doesn't explicitly state details, use these defaults:
 ---
 
 This expanded specification should resolve most clarifications. Proceed with reasonable assumptions for any remaining minor details, and document them in the specification.
+
+---
+
+## Iteration 2: Additional Clarification
+
+If you're still encountering ambiguity after the initial guidelines, here are additional considerations:
+
+### More Specific Guidance
+
+- **Trade-offs**: When multiple valid approaches exist, prioritize in this order:
+  1. **Security first**: Choose the more secure option
+  2. **User experience**: Choose the approach that reduces friction
+  3. **Maintainability**: Choose simpler, more maintainable solutions
+  4. **Performance**: Optimize only if there's a clear need
+
+- **Scope Boundaries**: If uncertain whether a feature should be included:
+  - **Include** if it's necessary for the core user story to be valuable
+  - **Exclude** if it's a "nice to have" or future enhancement
+  - Document excluded items in "Future Enhancements" section
+
+- **Technology Choices**: If multiple technologies could work:
+  - Prefer widely-adopted, well-documented options
+  - Prefer managed services over self-hosted (reduces operational complexity)
+  - Match the team's existing technology stack when possible
+
+### Handling Edge Cases
+
+- **Error States**: For each operation, consider:
+  - What happens if network fails?
+  - What happens if resource doesn't exist?
+  - What happens if user lacks permissions?
+  - Document error handling strategy in specification
+
+- **Boundary Conditions**: Consider limits:
+  - Empty collections (0 items)
+  - Very large collections (1000+ items)
+  - Concurrent access (multiple users editing same resource)
+  - Document assumptions about limits
+
+### Integration Details
+
+If integration points are unclear:
+- **Default to REST APIs** with JSON for service-to-service communication
+- **Use webhooks** for event notifications rather than polling
+- **Include retry logic** with exponential backoff for all external calls
+- **Require authentication** for all API endpoints unless explicitly public
+
+---
+
+## Iteration 3: Final Clarification
+
+If ambiguity persists after two rounds, apply these final decision rules:
+
+### Decision Heuristics
+
+1. **When in doubt, build less**: Start with minimal viable feature set. It's easier to add than remove.
+
+2. **Explicit over implicit**: Require explicit user actions rather than assuming intent.
+
+3. **Fail loudly**: Return errors rather than silently handling unexpected situations.
+
+4. **Standard patterns**: Use established design patterns and industry conventions.
+
+### Proceeding with Best-Effort
+
+At this point, you have sufficient guidance to proceed. Make your best judgment based on:
+- The original feature description
+- These three rounds of clarification guidelines
+- Industry best practices for similar features
+
+**Document all assumptions prominently** in the specification's "Assumptions & Decisions" section, including:
+- What was unclear
+- What assumption you made
+- Why you made that choice
+- What alternative was considered
+
+This allows assumptions to be reviewed and adjusted if needed before implementation.
+
+---
+
+**Note**: If after three clarification iterations the specification still cannot be reasonably completed, log a warning and proceed with conservative assumptions that minimize risk and scope.

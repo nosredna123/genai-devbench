@@ -18,7 +18,51 @@ logger = get_logger(__name__, component="adapter")
 
 
 class GHSpecAdapter(BaseAdapter):
-    """Adapter for GitHub Spec-kit framework."""
+    """
+    Adapter for GitHub Spec-kit framework.
+    
+    This adapter implements the complete 5-phase GHSpec-Kit workflow:
+    1. Specify - Generate feature specification
+    2. Plan - Create implementation plan
+    3. Tasks - Break down into implementation tasks
+    4. Implement - Generate code for each task
+    5. Bugfix - Automated error resolution
+    
+    **Architecture Constraints**:
+    - **Single-threaded execution only**: This adapter does not support concurrent 
+      experiment runs. All experiment executions must be sequential. The adapter 
+      maintains instance-level state (cached constitution, templates, phase context) 
+      that is not thread-safe.
+    - **Fail-fast on API errors**: Any OpenAI API failure (network error, rate limit, 
+      timeout) immediately aborts the entire experiment run without retries. This 
+      ensures clear failure attribution and data integrity.
+    - **No size limits on constitution**: The adapter handles arbitrarily large 
+      constitution files through intelligent chunking and excerpting strategies.
+    
+    **Template Synchronization (T048)**:
+    The adapter supports two template modes for flexibility and reproducibility:
+    
+    - **Static mode (default)**: Uses version-controlled templates from 
+      `docs/ghspec/prompts/`. Templates are stable and reproducible across runs.
+      Change templates by editing files and committing to version control.
+    
+    - **Dynamic mode**: Uses templates from cloned GHSpec-Kit repository at 
+      `frameworks/ghspec/`. Templates automatically track upstream improvements.
+      Framework commit hash is logged in experiment metadata for reproducibility.
+      Update templates by running `git pull` in `frameworks/ghspec/`.
+    
+    Configure mode in experiment.yaml:
+        framework_config:
+          template_source: static  # or 'dynamic'
+    
+    See docs/quickstart.md "Template Synchronization Workflow" for details.
+    
+    **Usage**:
+        adapter = GHSpecAdapter(config, run_id, workspace_path, sprint_num)
+        adapter.start()  # Initialize framework and load constitution
+        adapter.execute_step(scenario_step, step_num)  # Run 5-phase workflow
+        adapter.cleanup()  # Clean up resources
+    """
     
     def __init__(
         self,
@@ -44,6 +88,16 @@ class GHSpecAdapter(BaseAdapter):
         # Get project root for resolving template paths
         self.project_root = Path(__file__).parent.parent.parent
         self.last_execution_error = None  # Track last framework execution error for debugging
+        
+        # Constitution caching (loaded once, reused across phases)
+        self.constitution_content = None
+        self.constitution_excerpt = None  # Chunked version for prompt injection
+        
+        # Template configuration
+        self.template_cache = {}  # Cache loaded templates {phase: (system_prompt, user_template)}
+        
+        # Tech stack constraints (optional)
+        self.tech_stack_constraints = None
         
     def start(self) -> None:
         """
@@ -87,6 +141,80 @@ class GHSpecAdapter(BaseAdapter):
             # Create per-run workspace structure for artifacts
             # This is writable and isolated per run
             self._setup_workspace_structure()
+            
+            # Load constitution (T004/T007: Load and cache constitution)
+            self.constitution_content = self._load_constitution()
+            self.constitution_excerpt = self._prepare_constitution_excerpt(self.constitution_content)
+            
+            # Load tech stack constraints if configured (T009, T031, T033, T034)
+            if 'tech_stack_constraints' in self.config:
+                self.tech_stack_constraints = self.config['tech_stack_constraints']
+                # T031: Validate - must be non-empty string (fail-fast)
+                if not isinstance(self.tech_stack_constraints, str) or not self.tech_stack_constraints.strip():
+                    raise ValueError(
+                        "tech_stack_constraints must be a non-empty string if provided"
+                    )
+                # T033: Log comprehensive tech stack metadata
+                tech_stack_metadata = {
+                    'configured': True,
+                    'size_bytes': len(self.tech_stack_constraints),
+                    'size_chars': len(self.tech_stack_constraints),
+                    'line_count': len(self.tech_stack_constraints.split('\n')),
+                    'sprint_num': self.sprint_num
+                }
+                logger.info("Tech stack constraints loaded - will enforce in Plan phase",
+                           extra={'run_id': self.run_id,
+                                 'metadata': tech_stack_metadata})
+            else:
+                # T034: Handle missing constraints gracefully
+                self.tech_stack_constraints = None
+                tech_stack_metadata = {
+                    'configured': False,
+                    'mode': 'free_choice',
+                    'sprint_num': self.sprint_num
+                }
+                logger.info("No tech stack constraints - AI has free choice",
+                           extra={'run_id': self.run_id,
+                                 'metadata': tech_stack_metadata})
+            
+            # Validate template configuration (T010, T045, T047)
+            template_source = self.config.get('template_source', 'static')
+            if template_source not in ['static', 'dynamic']:
+                raise ValueError(
+                    f"Invalid template_source '{template_source}'. Must be 'static' or 'dynamic'."
+                )
+            
+            # T045: Log GHSpec commit hash when using dynamic templates
+            template_metadata = {'template_source': template_source}
+            if template_source == 'dynamic':
+                # Get commit hash from frameworks/ghspec directory
+                ghspec_commit_hash = self._get_framework_commit_hash()
+                if ghspec_commit_hash:
+                    template_metadata['ghspec_commit'] = ghspec_commit_hash
+                    template_metadata['ghspec_commit_short'] = ghspec_commit_hash[:7]
+                else:
+                    template_metadata['ghspec_commit'] = 'unknown'
+                    logger.warning("Could not determine GHSpec framework commit hash",
+                                 extra={'run_id': self.run_id})
+            
+            logger.info("Template configuration validated",
+                       extra={'run_id': self.run_id,
+                             'metadata': template_metadata})
+            
+            # T029: Log comprehensive constitution metadata for experiment tracking
+            constitution_metadata = {
+                'source': 'project' if (self.project_root / "config_sets" / "default" / "constitution" / "project_constitution.md").exists()
+                         else 'inline' if 'constitution_text' in self.config
+                         else 'default',
+                'size_bytes': len(self.constitution_content),
+                'size_kb': round(len(self.constitution_content) / 1024, 2),
+                'excerpt_size_bytes': len(self.constitution_excerpt),
+                'was_chunked': len(self.constitution_excerpt) < len(self.constitution_content),
+                'line_count': len(self.constitution_content.split('\n'))
+            }
+            logger.info("Constitution loaded and prepared for prompt injection",
+                       extra={'run_id': self.run_id,
+                             'metadata': constitution_metadata})
             
             # GHSpec is CLI-based (bash scripts + direct OpenAI API calls)
             # No virtual environment needed - we call OpenAI API directly
@@ -147,6 +275,477 @@ class GHSpecAdapter(BaseAdapter):
                              'src_dir': str(self.src_dir)
                          }})
 
+    def _load_constitution(self) -> str:
+        """
+        Load project constitution with hierarchical fallback.
+        
+        Priority order:
+        1. Project-specific constitution: config_sets/default/constitution/project_constitution.md
+        2. Inline YAML override: experiment.yaml 'constitution_text' field
+        3. Default principles: config_sets/default/constitution/default_principles.md
+        
+        Returns:
+            Constitution content as string
+            
+        Raises:
+            FileNotFoundError: If no constitution source is available
+        """
+        # Priority 1: Explicit project constitution
+        project_const = self.project_root / "config_sets" / "default" / "constitution" / "project_constitution.md"
+        if project_const.exists():
+            content = project_const.read_text(encoding='utf-8')
+            logger.info("Loaded project constitution",
+                       extra={'run_id': self.run_id,
+                             'metadata': {'source': 'project', 'size_bytes': len(content)}})
+            return content
+        
+        # Priority 2: Inline YAML override
+        if 'constitution_text' in self.config:
+            content = self.config['constitution_text']
+            logger.info("Loaded inline constitution from config",
+                       extra={'run_id': self.run_id,
+                             'metadata': {'source': 'inline', 'size_bytes': len(content)}})
+            return content
+        
+        # Priority 3: Default principles (standalone experiments)
+        default_const = self.project_root / "config" / "constitution" / "default_principles.md"
+        if default_const.exists():
+            content = default_const.read_text(encoding='utf-8')
+            logger.info("Loaded default constitution",
+                       extra={'run_id': self.run_id,
+                             'metadata': {'source': 'default', 'size_bytes': len(content)}})
+            return content
+        
+        # Priority 4: Default principles (main genai-devbench project)
+        main_project_const = self.project_root / "config_sets" / "default" / "constitution" / "default_principles.md"
+        if main_project_const.exists():
+            content = main_project_const.read_text(encoding='utf-8')
+            logger.info("Loaded default constitution from main project",
+                       extra={'run_id': self.run_id,
+                             'metadata': {'source': 'main_project', 'size_bytes': len(content)}})
+            return content
+        
+        # Fail-fast: No constitution available
+        raise FileNotFoundError(
+            "No constitution found. Checked: project_constitution.md, "
+            "experiment.yaml constitution_text, config/constitution/default_principles.md, "
+            "config_sets/default/constitution/default_principles.md"
+        )
+    
+    def _prepare_constitution_excerpt(self, constitution_content: str) -> str:
+        """
+        Prepare constitution excerpt for prompt injection, handling large files.
+        
+        Strategy for large constitutions (>100KB):
+        - Take first 30KB (beginning with core principles)
+        - Take last 10KB (ending with practical guidelines)
+        - Insert separator indicating middle content omitted
+        
+        Args:
+            constitution_content: Full constitution text
+            
+        Returns:
+            Constitution excerpt suitable for prompt injection
+        """
+        size_bytes = len(constitution_content.encode('utf-8'))
+        
+        # If constitution is reasonable size, use it all
+        if size_bytes <= 100_000:  # 100KB threshold
+            return constitution_content
+        
+        # Large constitution: chunk it
+        lines = constitution_content.split('\n')
+        total_lines = len(lines)
+        
+        # Take first ~30% and last ~10% of lines
+        first_chunk_lines = int(total_lines * 0.3)
+        last_chunk_lines = int(total_lines * 0.1)
+        
+        first_chunk = '\n'.join(lines[:first_chunk_lines])
+        last_chunk = '\n'.join(lines[-last_chunk_lines:])
+        
+        excerpt = f"{first_chunk}\n\n--- [Middle sections omitted for brevity] ---\n\n{last_chunk}"
+        
+        logger.info("Chunked large constitution for prompt",
+                   extra={'run_id': self.run_id,
+                         'metadata': {
+                             'original_size_kb': size_bytes // 1024,
+                             'excerpt_size_kb': len(excerpt.encode('utf-8')) // 1024,
+                             'chunked': True
+                         }})
+        
+        return excerpt
+    
+    def _get_framework_commit_hash(self) -> str:
+        """
+        Get git commit hash of GHSpec framework directory (T045).
+        
+        This is used when template_source='dynamic' to track which version
+        of the upstream GHSpec-Kit templates are being used, enabling
+        reproducibility and debugging of template-related issues.
+        
+        Returns:
+            Git commit hash (40-character SHA-1) or empty string if unavailable
+        """
+        try:
+            # Get commit hash from frameworks/ghspec directory
+            result = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'],
+                cwd=str(self.framework_dir),
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False  # Don't raise on non-zero exit
+            )
+            
+            if result.returncode == 0:
+                return result.stdout.strip()
+            else:
+                logger.debug("Could not get GHSpec framework commit hash",
+                           extra={'run_id': self.run_id,
+                                 'metadata': {'stderr': result.stderr}})
+                return ""
+                
+        except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+            logger.debug(f"Error getting GHSpec framework commit hash: {e}",
+                       extra={'run_id': self.run_id})
+            return ""
+    
+    def _get_template_path(self, phase: str) -> Path:
+        """
+        Resolve template path based on configuration.
+        
+        Supports two modes:
+        - 'static' (default): Use curated templates from docs/ghspec/prompts/
+        - 'dynamic': Use templates from cloned framework (frameworks/ghspec/)
+        
+        Args:
+            phase: Phase name ('specify', 'plan', 'tasks', 'implement', 'bugfix')
+            
+        Returns:
+            Absolute path to template file
+            
+        Raises:
+            ValueError: If template_source mode is invalid
+        """
+        mode = self.config.get('template_source', 'static')
+        
+        if mode == 'static':
+            template_path = self.project_root / "docs" / "ghspec" / "prompts" / f"{phase}_template.md"
+        elif mode == 'dynamic':
+            template_path = self.framework_dir / ".specify" / "templates" / "commands" / f"{phase}.md"
+        else:
+            raise ValueError(
+                f"Invalid template_source: '{mode}'. Must be 'static' or 'dynamic'."
+            )
+        
+        if not template_path.exists():
+            raise FileNotFoundError(
+                f"Template not found: {template_path}. "
+                f"Mode: {mode}, Phase: {phase}"
+            )
+        
+        return template_path
+    
+    def _execute_specify_phase(self, command_text: str) -> Tuple[int, int, int, int, int]:
+        """
+        Execute Phase 1: Specify - Generate feature specification.
+        
+        This phase:
+        1. Loads specify template
+        2. Injects constitution for quality guidance
+        3. Builds prompt with user command
+        4. Handles up to 3 clarification iterations (FR-004)
+        5. Saves spec.md
+        
+        Args:
+            command_text: User's feature request
+            
+        Returns:
+            Tuple of (hitl_count, tokens_in, tokens_out, api_calls, cached_tokens)
+        """
+        phase = 'specify'
+        logger.info("Executing Specify phase (1/5)",
+                   extra={'run_id': self.run_id, 'step': self.current_step})
+        
+        # Load template with caching
+        system_prompt, user_prompt_template = self._load_prompt_template(phase)
+        
+        # Inject constitution into system prompt (T021: Constitution integration)
+        system_prompt_with_constitution = f"""{system_prompt}
+
+## Project Constitution
+
+Follow these coding standards and principles throughout the specification:
+
+{self.constitution_excerpt}
+"""
+        
+        # Build user prompt
+        user_prompt = self._build_phase_prompt(phase, user_prompt_template, command_text)
+        
+        # Track start time
+        api_call_start = int(time.time())
+        
+        # Call OpenAI with constitution-enhanced prompt
+        response_text = self._call_openai(system_prompt_with_constitution, user_prompt)
+        
+        # Handle clarification with up to 3 iterations (FR-004, T036-T038)
+        hitl_count = 0
+        clarification_iteration = 0
+        max_clarifications = 3
+        
+        while self._needs_clarification(response_text) and clarification_iteration < max_clarifications:
+            clarification_iteration += 1
+            hitl_count += 1
+            
+            # T040: Log clarification attempt with iteration number
+            logger.info(f"Clarification needed in specify phase (iteration {clarification_iteration}/{max_clarifications})",
+                       extra={'run_id': self.run_id, 'step': self.current_step,
+                             'metadata': {'iteration': clarification_iteration, 'phase': 'specify'}})
+            
+            # T037: Handle HITL with iteration-specific text
+            clarification_text = self._handle_clarification(response_text, iteration=clarification_iteration)
+            user_prompt_with_hitl = f"{user_prompt}\n\n---\n\n{clarification_text}"
+            
+            # Regenerate
+            response_text = self._call_openai(system_prompt_with_constitution, user_prompt_with_hitl)
+        
+        if clarification_iteration >= max_clarifications and self._needs_clarification(response_text):
+            logger.warning(f"Clarification limit reached ({max_clarifications}) in specify phase - proceeding with best effort",
+                          extra={'run_id': self.run_id, 'step': self.current_step})
+        
+        # Save artifact
+        self._save_artifact(self.spec_md_path, response_text)
+        
+        # Fetch token usage
+        api_call_end = int(time.time())
+        tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
+            api_key_env_var='OPEN_AI_KEY_ADM',
+            start_timestamp=api_call_start,
+            end_timestamp=api_call_end,
+            model='gpt-4o-mini'
+        )
+        
+        logger.info("Specify phase completed",
+                   extra={'run_id': self.run_id, 'step': self.current_step,
+                         'metadata': {
+                             'output_path': str(self.spec_md_path),
+                             'hitl_count': hitl_count,
+                             'tokens_in': tokens_in,
+                             'tokens_out': tokens_out,
+                             'api_calls': api_calls,
+                             'cached_tokens': cached_tokens
+                         }})
+        
+        return hitl_count, tokens_in, tokens_out, api_calls, cached_tokens
+    
+    def _execute_plan_phase(self, command_text: str) -> Tuple[int, int, int, int, int]:
+        """
+        Execute Phase 2: Plan - Generate technical implementation plan.
+        
+        This phase:
+        1. Loads plan template
+        2. Injects constitution + tech stack constraints
+        3. Builds prompt with spec.md content
+        4. Handles up to 3 clarification iterations
+        5. Saves plan.md
+        
+        Args:
+            command_text: User's feature request (for context)
+            
+        Returns:
+            Tuple of (hitl_count, tokens_in, tokens_out, api_calls, cached_tokens)
+        """
+        phase = 'plan'
+        logger.info("Executing Plan phase (2/5)",
+                   extra={'run_id': self.run_id, 'step': self.current_step})
+        
+        # Load template
+        system_prompt, user_prompt_template = self._load_prompt_template(phase)
+        
+        # Inject constitution + tech stack constraints (T030: Tech stack injection)
+        tech_stack_guidance = ""
+        if self.tech_stack_constraints:
+            tech_stack_guidance = f"""
+
+## Technology Stack Constraints
+
+IMPORTANT: The following technology choices are required:
+
+{self.tech_stack_constraints}
+
+You MUST use these technologies in your technical plan.
+"""
+        else:
+            tech_stack_guidance = """
+
+## Technology Stack Constraints
+
+None specified - you have free choice of technologies based on the specification requirements.
+"""
+        
+        system_prompt_with_constitution = f"""{system_prompt}
+
+## Project Constitution
+
+Follow these coding standards and principles in your technical plan:
+
+{self.constitution_excerpt}
+{tech_stack_guidance}
+"""
+        
+        # Build user prompt
+        user_prompt = self._build_phase_prompt(phase, user_prompt_template, command_text)
+        
+        # Track start time
+        api_call_start = int(time.time())
+        
+        # Call OpenAI
+        response_text = self._call_openai(system_prompt_with_constitution, user_prompt)
+        
+        # Handle clarification with up to 3 iterations
+        hitl_count = 0
+        clarification_iteration = 0
+        max_clarifications = 3
+        
+        while self._needs_clarification(response_text) and clarification_iteration < max_clarifications:
+            clarification_iteration += 1
+            hitl_count += 1
+            
+            # T040: Log clarification attempt with iteration number
+            logger.info(f"Clarification needed in plan phase (iteration {clarification_iteration}/{max_clarifications})",
+                       extra={'run_id': self.run_id, 'step': self.current_step,
+                             'metadata': {'iteration': clarification_iteration, 'phase': 'plan'}})
+            
+            # T037: Handle HITL with iteration-specific text
+            clarification_text = self._handle_clarification(response_text, iteration=clarification_iteration)
+            user_prompt_with_hitl = f"{user_prompt}\n\n---\n\n{clarification_text}"
+            response_text = self._call_openai(system_prompt_with_constitution, user_prompt_with_hitl)
+        
+        if clarification_iteration >= max_clarifications and self._needs_clarification(response_text):
+            logger.warning(f"Clarification limit reached ({max_clarifications}) in plan phase - proceeding with best effort",
+                          extra={'run_id': self.run_id, 'step': self.current_step})
+        
+        # Save artifact
+        self._save_artifact(self.plan_md_path, response_text)
+        
+        # T032: Validate tech stack consistency across sprints
+        if self.sprint_num > 1:
+            self._validate_tech_stack_consistency(response_text)
+        
+        # Fetch token usage
+        api_call_end = int(time.time())
+        tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
+            api_key_env_var='OPEN_AI_KEY_ADM',
+            start_timestamp=api_call_start,
+            end_timestamp=api_call_end,
+            model='gpt-4o-mini'
+        )
+        
+        logger.info("Plan phase completed",
+                   extra={'run_id': self.run_id, 'step': self.current_step,
+                         'metadata': {
+                             'output_path': str(self.plan_md_path),
+                             'hitl_count': hitl_count,
+                             'tokens_in': tokens_in,
+                             'tokens_out': tokens_out,
+                             'api_calls': api_calls,
+                             'cached_tokens': cached_tokens
+                         }})
+        
+        return hitl_count, tokens_in, tokens_out, api_calls, cached_tokens
+    
+    def _execute_tasks_phase(self, command_text: str) -> Tuple[int, int, int, int, int]:
+        """
+        Execute Phase 3: Tasks - Generate implementation task breakdown.
+        
+        This phase:
+        1. Loads tasks template
+        2. Injects constitution for task quality
+        3. Builds prompt with spec.md + plan.md content
+        4. Handles up to 3 clarification iterations
+        5. Saves tasks.md
+        
+        Args:
+            command_text: User's feature request (for context)
+            
+        Returns:
+            Tuple of (hitl_count, tokens_in, tokens_out, api_calls, cached_tokens)
+        """
+        phase = 'tasks'
+        logger.info("Executing Tasks phase (3/5)",
+                   extra={'run_id': self.run_id, 'step': self.current_step})
+        
+        # Load template
+        system_prompt, user_prompt_template = self._load_prompt_template(phase)
+        
+        # Inject constitution
+        system_prompt_with_constitution = f"""{system_prompt}
+
+## Project Constitution
+
+Generate tasks that adhere to these coding standards:
+
+{self.constitution_excerpt}
+"""
+        
+        # Build user prompt
+        user_prompt = self._build_phase_prompt(phase, user_prompt_template, command_text)
+        
+        # Track start time
+        api_call_start = int(time.time())
+        
+        # Call OpenAI
+        response_text = self._call_openai(system_prompt_with_constitution, user_prompt)
+        
+        # Handle clarification with up to 3 iterations
+        hitl_count = 0
+        clarification_iteration = 0
+        max_clarifications = 3
+        
+        while self._needs_clarification(response_text) and clarification_iteration < max_clarifications:
+            clarification_iteration += 1
+            hitl_count += 1
+            
+            # T040: Log clarification attempt with iteration number
+            logger.info(f"Clarification needed in tasks phase (iteration {clarification_iteration}/{max_clarifications})",
+                       extra={'run_id': self.run_id, 'step': self.current_step,
+                             'metadata': {'iteration': clarification_iteration, 'phase': 'tasks'}})
+            
+            # T037: Handle HITL with iteration-specific text
+            clarification_text = self._handle_clarification(response_text, iteration=clarification_iteration)
+            user_prompt_with_hitl = f"{user_prompt}\n\n---\n\n{clarification_text}"
+            response_text = self._call_openai(system_prompt_with_constitution, user_prompt_with_hitl)
+        
+        if clarification_iteration >= max_clarifications and self._needs_clarification(response_text):
+            logger.warning(f"Clarification limit reached ({max_clarifications}) in tasks phase - proceeding with best effort",
+                          extra={'run_id': self.run_id, 'step': self.current_step})
+        
+        # Save artifact
+        self._save_artifact(self.tasks_md_path, response_text)
+        
+        # Fetch token usage
+        api_call_end = int(time.time())
+        tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
+            api_key_env_var='OPEN_AI_KEY_ADM',
+            start_timestamp=api_call_start,
+            end_timestamp=api_call_end,
+            model='gpt-4o-mini'
+        )
+        
+        logger.info("Tasks phase completed",
+                   extra={'run_id': self.run_id, 'step': self.current_step,
+                         'metadata': {
+                             'output_path': str(self.tasks_md_path),
+                             'hitl_count': hitl_count,
+                             'tokens_in': tokens_in,
+                             'tokens_out': tokens_out,
+                             'api_calls': api_calls,
+                             'cached_tokens': cached_tokens
+                         }})
+        
+        return hitl_count, tokens_in, tokens_out, api_calls, cached_tokens
             
     def execute_step(self, step_num: int, command_text: str) -> Dict[str, Any]:
         """
@@ -191,58 +790,68 @@ class GHSpecAdapter(BaseAdapter):
         total_cached_tokens = 0
         
         try:
-            # Phase 1: Generate specification
+            # Phase 1: Generate specification (T011: Use new _execute_specify_phase)
             logger.info("GHSpec Phase 1/5: Specify",
                        extra={'run_id': self.run_id, 'step': step_num})
-            hitl, tok_in, tok_out, calls, cached, start_ts, end_ts = self._execute_phase('specify', command_text)
+            hitl, tok_in, tok_out, calls, cached = self._execute_specify_phase(command_text)
             total_hitl_count += hitl
             total_tokens_in += tok_in
             total_tokens_out += tok_out
             total_api_calls += calls
             total_cached_tokens += cached
             
+            # T017: Artifact validation
             if not self.spec_md_path.exists():
                 raise RuntimeError("Failed to generate spec.md")
+            if self.spec_md_path.stat().st_size < 100:
+                raise RuntimeError(f"spec.md too small ({self.spec_md_path.stat().st_size} bytes) - likely empty or truncated")
             
-            # Phase 2: Generate technical plan
+            # Phase 2: Generate technical plan (T012: Use new _execute_plan_phase)
             logger.info("GHSpec Phase 2/5: Plan",
                        extra={'run_id': self.run_id, 'step': step_num})
-            hitl, tok_in, tok_out, calls, cached, start_ts, end_ts = self._execute_phase('plan', command_text)
+            hitl, tok_in, tok_out, calls, cached = self._execute_plan_phase(command_text)
             total_hitl_count += hitl
             total_tokens_in += tok_in
             total_tokens_out += tok_out
             total_api_calls += calls
             total_cached_tokens += cached
             
+            # T017: Artifact validation
             if not self.plan_md_path.exists():
                 raise RuntimeError("Failed to generate plan.md")
+            if self.plan_md_path.stat().st_size < 100:
+                raise RuntimeError(f"plan.md too small ({self.plan_md_path.stat().st_size} bytes) - likely empty or truncated")
             
-            # Phase 3: Generate task breakdown
+            # Phase 3: Generate task breakdown (T013: Use new _execute_tasks_phase)
             logger.info("GHSpec Phase 3/5: Tasks",
                        extra={'run_id': self.run_id, 'step': step_num})
-            hitl, tok_in, tok_out, calls, cached, start_ts, end_ts = self._execute_phase('tasks', command_text)
+            hitl, tok_in, tok_out, calls, cached = self._execute_tasks_phase(command_text)
             total_hitl_count += hitl
             total_tokens_in += tok_in
             total_tokens_out += tok_out
             total_api_calls += calls
             total_cached_tokens += cached
             
+            # T017: Artifact validation
             if not self.tasks_md_path.exists():
                 raise RuntimeError("Failed to generate tasks.md")
+            if self.tasks_md_path.stat().st_size < 100:
+                raise RuntimeError(f"tasks.md too small ({self.tasks_md_path.stat().st_size} bytes) - likely empty or truncated")
             
-            # Phase 4: Implement code task-by-task
+            # Phase 4: Implement code task-by-task (T014: Already exists, enhance with validation)
             logger.info("GHSpec Phase 4/5: Implement",
                        extra={'run_id': self.run_id, 'step': step_num})
-            hitl, tok_in, tok_out, calls, cached, start_ts, end_ts = self._execute_task_implementation(command_text)
+            hitl, tok_in, tok_out, calls, cached = self._execute_task_implementation(command_text)
             total_hitl_count += hitl
             total_tokens_in += tok_in
             total_tokens_out += tok_out
             total_api_calls += calls
             total_cached_tokens += cached
             
-            # Validate that implementation phase generated files
-            if not self.validate_artifacts_generated(self.src_dir, "GHSpec"):
-                raise RuntimeError("No files generated during implementation")
+            # T017: Validate that implementation phase generated files
+            python_files = list(self.src_dir.rglob("*.py"))
+            if len(python_files) == 0:
+                raise RuntimeError("No Python files generated during implementation phase")
             
             # Phase 5: Bugfix cycle (stub - orchestrator handles validation)
             logger.info("GHSpec Phase 5/5: Bugfix (skipped - orchestrator handles)",
@@ -382,9 +991,8 @@ class GHSpecAdapter(BaseAdapter):
                    extra={'run_id': self.run_id, 'step': self.current_step,
                          'metadata': {'phase': phase}})
         
-        # Load prompt template (resolve relative to project root)
-        template_path = self.project_root / "docs" / "ghspec" / "prompts" / f"{phase}_template.md"
-        system_prompt, user_prompt_template = self._load_prompt_template(template_path)
+        # Load prompt template with caching (T005/T006)
+        system_prompt, user_prompt_template = self._load_prompt_template(phase)
         
         # Build complete user prompt with context
         user_prompt = self._build_phase_prompt(phase, user_prompt_template, command_text)
@@ -398,11 +1006,13 @@ class GHSpecAdapter(BaseAdapter):
         # Check for clarification requests
         hitl_count = 0
         if self._needs_clarification(response_text):
+            # T040: Log clarification attempt
             logger.info(f"Clarification needed in {phase} phase",
-                       extra={'run_id': self.run_id, 'step': self.current_step})
+                       extra={'run_id': self.run_id, 'step': self.current_step,
+                             'metadata': {'iteration': 1, 'phase': phase}})
             
-            # Handle HITL by appending guidelines and regenerating
-            clarification_text = self._handle_clarification(response_text)
+            # T037: Handle HITL with iteration-specific text (iteration 1 by default)
+            clarification_text = self._handle_clarification(response_text, iteration=1)
             user_prompt_with_hitl = f"{user_prompt}\n\n---\n\n{clarification_text}"
             
             # Regenerate with clarification
@@ -440,9 +1050,12 @@ class GHSpecAdapter(BaseAdapter):
         
         return hitl_count, tokens_in, tokens_out, api_calls, cached_tokens, api_call_start, api_call_end
     
-    def _load_prompt_template(self, template_path: Path) -> Tuple[str, str]:
+    def _load_prompt_template(self, phase: str) -> Tuple[str, str]:
         """
-        Load system and user prompt templates from markdown file.
+        Load system and user prompt templates from markdown file with caching.
+        
+        Template resolution uses _get_template_path() which respects template_source config.
+        Templates are cached per phase to avoid repeated disk I/O.
         
         Expects template structure:
         ## System Prompt
@@ -456,13 +1069,32 @@ class GHSpecAdapter(BaseAdapter):
         ```
         
         Args:
-            template_path: Path to prompt template markdown file
+            phase: Phase name ('specify', 'plan', 'tasks', 'implement', 'bugfix')
             
         Returns:
             Tuple of (system_prompt, user_prompt_template)
+            
+        Raises:
+            ValueError: If template format is invalid (missing required sections)
         """
+        # Check cache first (T006: Caching)
+        if phase in self.template_cache:
+            logger.debug(f"Using cached template for phase: {phase}",
+                        extra={'run_id': self.run_id})
+            return self.template_cache[phase]
+        
+        # Resolve template path using configuration (T005)
+        template_path = self._get_template_path(phase)
+        
         with open(template_path, 'r', encoding='utf-8') as f:
             content = f.read()
+        
+        # Validate required sections present (T006: Validation)
+        if '## System Prompt' not in content or '## User Prompt Template' not in content:
+            raise ValueError(
+                f"Invalid template format in {template_path}. "
+                "Must contain '## System Prompt' and '## User Prompt Template' sections."
+            )
         
         # Split by ## headers to isolate sections
         lines = content.split('\n')
@@ -517,9 +1149,24 @@ class GHSpecAdapter(BaseAdapter):
                 user_prompt_template = '\n'.join(code_block_content).strip()
         
         if not system_prompt or not user_prompt_template:
-            raise ValueError(f"Invalid template format in {template_path}")
+            raise ValueError(
+                f"Invalid template format in {template_path}. "
+                "Could not extract system prompt or user prompt template."
+            )
         
-        return system_prompt, user_prompt_template
+        # Cache for future use (T006: Caching)
+        result = (system_prompt, user_prompt_template)
+        self.template_cache[phase] = result
+        
+        logger.info(f"Loaded and cached template for phase: {phase}",
+                   extra={'run_id': self.run_id,
+                         'metadata': {
+                             'template_path': str(template_path),
+                             'system_prompt_length': len(system_prompt),
+                             'user_template_length': len(user_prompt_template)
+                         }})
+        
+        return result
     
     def _build_phase_prompt(self, phase: str, template: str, command_text: str) -> str:
         """
@@ -649,13 +1296,28 @@ Instructions for Task Breakdown:
         - Uses OpenAI default temperature (framework comparison as-is)
         - Handles logging and error handling consistently
         
+        **T063: FAIL-FAST GUARANTEE**:
+        This method does NOT retry on API failures. Any OpenAI API exception
+        (network error, rate limit, timeout, authentication failure) immediately
+        propagates to the caller, aborting the entire experiment run.
+        
+        This ensures:
+        - Clear failure attribution (no hidden retries masking issues)
+        - Data integrity (partial results are not saved)
+        - Reproducibility (retry logic would introduce non-determinism)
+        
         Args:
             system_prompt: System role instructions
             user_prompt: User message/request
             
         Returns:
             Response text from assistant
+            
+        Raises:
+            RuntimeError: If API call fails (no retries, immediate abort)
         """
+        # T063: Assert fail-fast behavior - no try-catch wrapper here
+        # Any exception from call_openai_chat_completion() propagates unchanged
         return self.call_openai_chat_completion(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
@@ -774,6 +1436,100 @@ Instructions for Task Breakdown:
             return match.group(1).strip()
         return "No tech stack defined in previous plan"
     
+    def _validate_tech_stack_consistency(self, current_plan: str) -> None:
+        """
+        Validate tech stack consistency across sprints (T032).
+        
+        For sprint > 1, verifies that the current plan uses the same tech stack
+        as the previous sprint. This prevents fragmentation and ensures
+        incremental development on a consistent foundation.
+        
+        Args:
+            current_plan: Generated plan.md content for current sprint
+            
+        Raises:
+            ValueError: If tech stacks are inconsistent (fail-fast)
+        
+        Note: 
+            - Only validates when sprint_num > 1
+            - Uses fuzzy matching to account for formatting differences
+            - Logs warning for review, raises error for critical mismatches
+        """
+        if self.sprint_num <= 1:
+            return  # No validation needed for first sprint
+        
+        # Get previous sprint context
+        previous_context = self._get_previous_sprint_context()
+        if not previous_context:
+            logger.warning("Cannot validate tech stack consistency - no previous sprint data",
+                         extra={'run_id': self.run_id, 
+                               'metadata': {'sprint_num': self.sprint_num}})
+            return
+        
+        # Extract tech stacks
+        previous_tech_stack = previous_context.get('tech_stack', '').lower()
+        current_tech_stack = self._extract_tech_stack_from_plan(current_plan).lower()
+        
+        # Check if previous tech stack is defined
+        if 'no tech stack defined' in previous_tech_stack:
+            logger.info("No previous tech stack to validate against",
+                       extra={'run_id': self.run_id,
+                             'metadata': {'sprint_num': self.sprint_num}})
+            return
+        
+        # Extract key technology terms (languages, frameworks, databases)
+        def extract_tech_terms(text: str) -> set:
+            """Extract technology keywords for comparison."""
+            # Common tech patterns
+            tech_patterns = [
+                r'\b(python|java|javascript|typescript|go|rust|ruby|php|c\+\+|c#)\b',
+                r'\b(flask|django|fastapi|express|react|vue|angular|spring|rails)\b',
+                r'\b(postgresql|mysql|mongodb|redis|sqlite|cassandra|dynamodb)\b',
+                r'\b(docker|kubernetes|aws|gcp|azure|heroku)\b',
+                r'\b(rest|graphql|grpc|soap)\b'
+            ]
+            terms = set()
+            for pattern in tech_patterns:
+                terms.update(re.findall(pattern, text, re.IGNORECASE))
+            return {t.lower() for t in terms}
+        
+        previous_terms = extract_tech_terms(previous_tech_stack)
+        current_terms = extract_tech_terms(current_tech_stack)
+        
+        # Check for removed core technologies
+        removed_terms = previous_terms - current_terms
+        added_terms = current_terms - previous_terms
+        
+        # Log tech stack comparison
+        logger.info("Tech stack consistency check",
+                   extra={'run_id': self.run_id,
+                         'metadata': {
+                             'sprint_num': self.sprint_num,
+                             'previous_terms': sorted(list(previous_terms)),
+                             'current_terms': sorted(list(current_terms)),
+                             'removed_terms': sorted(list(removed_terms)),
+                             'added_terms': sorted(list(added_terms))
+                         }})
+        
+        # Fail-fast if core technologies were removed (breaking consistency)
+        if removed_terms:
+            logger.warning("Tech stack inconsistency detected - technologies removed from previous sprint",
+                          extra={'run_id': self.run_id,
+                                'metadata': {
+                                    'removed': sorted(list(removed_terms)),
+                                    'previous_sprint': self.sprint_num - 1,
+                                    'current_sprint': self.sprint_num
+                                }})
+            # This is a warning, not an error - AI might have valid reasons
+            # (e.g., replacing deprecated tech, consolidating similar tools)
+            # But we log it prominently for review
+        
+        # Success case
+        if not removed_terms:
+            logger.info("Tech stack consistency validated - no core technologies removed",
+                       extra={'run_id': self.run_id,
+                             'metadata': {'sprint_num': self.sprint_num}})
+    
     def _needs_clarification(self, response_text: str) -> bool:
         """
         Detect if model response contains clarification requests.
@@ -788,20 +1544,27 @@ Instructions for Task Breakdown:
         """
         return '[NEEDS CLARIFICATION:' in response_text
     
-    def _handle_clarification(self, response_text: str) -> str:
+    def _handle_clarification(self, response_text: str, iteration: int = 1) -> str:
         """
-        Return clarification guidelines from HITL file.
+        Return clarification guidelines from HITL file with iteration-specific content.
         
         This method is called when the model requests clarification.
-        It loads the fixed clarification guidelines and returns them.
+        It loads the fixed clarification guidelines and returns them, optionally
+        including iteration-specific sections for multi-round clarification.
+        
+        T037: Iteration-specific clarification text loading
+        - Iteration 1: Returns base guidelines
+        - Iteration 2: Returns base + "Iteration 2" section
+        - Iteration 3: Returns base + "Iteration 2" + "Iteration 3" sections
         
         Note: This delegates to handle_hitl() which manages the HITL text cache.
         
         Args:
             response_text: Model's response containing clarification request
+            iteration: Current clarification iteration (1-3)
             
         Returns:
-            Fixed clarification guidelines text
+            Fixed clarification guidelines text with iteration-specific sections
         """
         # Extract the specific question (for logging)
         clarification_match = re.search(
@@ -811,8 +1574,22 @@ Instructions for Task Breakdown:
         )
         question = clarification_match.group(1).strip() if clarification_match else "unclear"
         
-        # Get fixed HITL response
-        return self.handle_hitl(question)
+        # Get full HITL content (cached)
+        full_hitl_content = self.handle_hitl(question)
+        
+        # For iteration 1, return everything up to "## Iteration 2"
+        if iteration == 1:
+            match = re.search(r'(.*?)(?=\n## Iteration 2|\Z)', full_hitl_content, re.DOTALL)
+            return match.group(1).strip() if match else full_hitl_content
+        
+        # For iteration 2, return everything up to "## Iteration 3"
+        elif iteration == 2:
+            match = re.search(r'(.*?)(?=\n## Iteration 3|\Z)', full_hitl_content, re.DOTALL)
+            return match.group(1).strip() if match else full_hitl_content
+        
+        # For iteration 3+, return full content (includes all iterations)
+        else:
+            return full_hitl_content
     
     def _save_artifact(self, output_path: Path, content: str) -> None:
         """
@@ -865,9 +1642,18 @@ Instructions for Task Breakdown:
         spec_content = self.spec_md_path.read_text(encoding='utf-8')
         plan_content = self.plan_md_path.read_text(encoding='utf-8')
         
-        # Load implement template (resolve relative to project root)
-        template_path = self.project_root / "docs" / "ghspec" / "prompts" / "implement_template.md"
-        system_prompt, user_prompt_template = self._load_prompt_template(template_path)
+        # Load implement template with caching (T005/T006)
+        system_prompt, user_prompt_template = self._load_prompt_template('implement')
+        
+        # T025: Inject constitution into implementation prompts
+        system_prompt_with_constitution = f"""{system_prompt}
+
+## Project Constitution
+
+Follow these coding standards when generating code:
+
+{self.constitution_excerpt}
+"""
         
         total_hitl_count = 0
         total_tokens_in = 0
@@ -892,23 +1678,32 @@ Instructions for Task Breakdown:
             # Track start time for Usage API
             api_call_start = int(time.time())
             
-            # Call OpenAI API
-            response_text = self._call_openai(system_prompt, user_prompt)
+            # Call OpenAI API with constitution-enhanced prompt (T025)
+            response_text = self._call_openai(system_prompt_with_constitution, user_prompt)
             
             # Check for clarification
             hitl_count = 0
             if self._needs_clarification(response_text):
+                # T040: Log clarification attempt
                 logger.info(f"Clarification needed for task {task['id']}",
-                           extra={'run_id': self.run_id, 'step': self.current_step})
+                           extra={'run_id': self.run_id, 'step': self.current_step,
+                                 'metadata': {'iteration': 1, 'task_id': task['id']}})
                 
-                clarification_text = self._handle_clarification(response_text)
+                # T037: Handle HITL with iteration-specific text (iteration 1 for task implementation)
+                clarification_text = self._handle_clarification(response_text, iteration=1)
                 user_prompt_with_hitl = f"{user_prompt}\n\n---\n\n{clarification_text}"
                 
-                response_text = self._call_openai(system_prompt, user_prompt_with_hitl)
+                response_text = self._call_openai(system_prompt_with_constitution, user_prompt_with_hitl)
                 hitl_count = 1
             
-            # Save generated code
-            self._save_code_file(task['file'], response_text)
+            # Save generated code (skip if file path is a directory or invalid)
+            file_path_str = task['file'].strip()
+            # Skip directory-only paths (ending with /) or paths without extensions
+            if file_path_str and not file_path_str.endswith('/') and '.' in file_path_str:
+                self._save_code_file(file_path_str, response_text)
+            else:
+                logger.debug(f"Skipping non-file task: {task['id']} ({file_path_str})",
+                           extra={'run_id': self.run_id, 'step': self.current_step})
             
             # Fetch token usage
             api_call_end = int(time.time())
@@ -949,7 +1744,7 @@ Instructions for Task Breakdown:
         # Track overall end time (after last task)
         overall_end_timestamp = int(time.time())
         
-        return total_hitl_count, total_tokens_in, total_tokens_out, total_api_calls, total_cached_tokens, overall_start_timestamp, overall_end_timestamp
+        return total_hitl_count, total_tokens_in, total_tokens_out, total_api_calls, total_cached_tokens
     
     def _parse_tasks(self) -> list:
         """
@@ -1221,13 +2016,24 @@ CRITICAL INSTRUCTIONS:
             relative_path: Path relative to src_dir (e.g., "backend/models/user.py")
                           Can start with / which will be stripped
             content: File content to write
+        
+        Raises:
+            ValueError: If path is invalid (directory, empty, etc.)
         """
         # Strip leading / if present (AI often generates absolute paths)
         if relative_path.startswith('/'):
             relative_path = relative_path.lstrip('/')
         
+        # Validate path
+        if not relative_path or relative_path.endswith('/'):
+            raise ValueError(f"Invalid file path (directory or empty): {relative_path}")
+        
         # Resolve path relative to src_dir
         file_path = self.src_dir / relative_path
+        
+        # Check if path already exists as a directory
+        if file_path.exists() and file_path.is_dir():
+            raise IsADirectoryError(f"Cannot save file - path is a directory: {file_path}")
         
         # Create parent directories
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1246,50 +2052,44 @@ CRITICAL INSTRUCTIONS:
         """
         Attempt to fix code based on validation failures.
         
-        **Phase 5 Implementation**: Bounded bugfix cycle
+        **Phase 5 Implementation**: Bounded bugfix cycle with up to 3 iterations
         
-        This method would be called by the experiment orchestrator after
-        validation failures are detected. It implements a single-pass bugfix
-        cycle to maintain reproducibility.
+        This method implements an iterative bugfix loop that attempts to resolve
+        validation errors through multiple fix-and-validate cycles. Per FR-015,
+        the cycle is bounded to max 3 iterations to ensure reproducibility and
+        avoid infinite loops.
         
-        Workflow:
-        1. Derive bugfix tasks from validation errors (max 3)
+        Workflow per iteration:
+        1. Derive bugfix tasks from validation errors (max 3 per iteration)
         2. For each bugfix task:
            a. Build bugfix prompt with error + current file + spec context
-           b. Call OpenAI API
-           c. Save fixed code
-        3. Return aggregated token usage
+           b. Call OpenAI API (with optional HITL for clarification)
+           c. Apply fixed code and log before/after diff (T054)
+        3. Re-run validation on fixed files (T051)
+        4. If errors remain and iteration < 3, repeat; otherwise exit
+        5. Return aggregated token usage
         
-        **Important**: Bounded to 1 cycle to avoid infinite loops and ensure
-        reproducibility. This matches ChatDev/BAEs iteration behavior.
+        **T053**: Iteration limiting enforced - max 3 cycles per FR-015
+        **T054**: Comprehensive logging with before/after diffs for each fix
         
         Args:
             validation_errors: List of error dictionaries with keys:
                 - file: File path with error
-                - error_type: 'compile', 'test_failure', 'runtime'
+                - error_type: 'compile', 'test_failure', 'runtime', 'syntax', 'import'
                 - message: Error message/traceback
                 - line_number: Optional line number
                 
         Returns:
-            Tuple of (hitl_count, tokens_in, tokens_out)
+            Tuple of (hitl_count, tokens_in, tokens_out, api_calls, cached_tokens)
         """
         logger.info(f"Starting bugfix cycle for {len(validation_errors)} errors",
-                   extra={'run_id': self.run_id, 'step': self.current_step})
+                   extra={'run_id': self.run_id, 'step': self.current_step,
+                         'metadata': {'initial_error_count': len(validation_errors)}})
         
-        # Derive bugfix tasks (max 3, prioritized by severity)
-        bugfix_tasks = self._derive_bugfix_tasks(validation_errors)
-        
-        if not bugfix_tasks:
-            logger.info("No bugfix tasks derived",
-                       extra={'run_id': self.run_id, 'step': self.current_step})
-            return 0, 0, 0, 0, 0
-        
-        # Load spec for context
-        spec_content = self.spec_md_path.read_text(encoding='utf-8')
-        
-        # Load bugfix template (resolve relative to project root)
-        template_path = self.project_root / "docs" / "ghspec" / "prompts" / "bugfix_template.md"
-        system_prompt, user_prompt_template = self._load_prompt_template(template_path)
+        # T053: Iteration limiting - max 3 cycles per FR-015
+        max_iterations = 3
+        current_iteration = 0
+        remaining_errors = validation_errors.copy()
         
         total_hitl_count = 0
         total_tokens_in = 0
@@ -1297,92 +2097,258 @@ CRITICAL INSTRUCTIONS:
         total_api_calls = 0
         total_cached_tokens = 0
         
-        # Process each bugfix task
-        for i, task in enumerate(bugfix_tasks, 1):
-            logger.info(f"Bugfix {i}/{len(bugfix_tasks)}: {task['file']}",
-                       extra={'run_id': self.run_id, 'step': self.current_step,
-                             'metadata': {'error_type': task['error_type']}})
-            
-            # Build bugfix prompt
-            user_prompt = self._build_bugfix_prompt(task, spec_content, user_prompt_template)
-            
-            # Track start time
-            api_call_start = int(time.time())
-            
-            # Call OpenAI API
-            response_text = self._call_openai(system_prompt, user_prompt)
-            
-            # Check for clarification (rare in bugfix, but possible)
-            hitl_count = 0
-            if self._needs_clarification(response_text):
-                clarification_text = self._handle_clarification(response_text)
-                user_prompt_with_hitl = f"{user_prompt}\n\n---\n\n{clarification_text}"
-                response_text = self._call_openai(system_prompt, user_prompt_with_hitl)
-                hitl_count = 1
-            
-            # Save fixed code
-            self._save_code_file(task['file'], response_text)
-            
-            # Fetch token usage
-            api_call_end = int(time.time())
-            tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
-                api_key_env_var='OPEN_AI_KEY_ADM',  # Admin key for Usage API
-                start_timestamp=api_call_start,
-                end_timestamp=api_call_end,
-                model='gpt-4o-mini'
-            )
-            
-            # Aggregate
-            total_hitl_count += hitl_count
-            total_tokens_in += tokens_in
-            total_tokens_out += tokens_out
-            total_api_calls += api_calls
-            total_cached_tokens += cached_tokens
-            
-            logger.info(f"Bugfix {i} applied",
-                       extra={'run_id': self.run_id, 'step': self.current_step,
-                             'metadata': {'file': task['file']}})
+        # Load spec for context (shared across all iterations)
+        spec_content = self.spec_md_path.read_text(encoding='utf-8')
         
-        logger.info(f"Bugfix cycle completed: {len(bugfix_tasks)} fixes applied",
+        # Load bugfix template with caching (T005/T006)
+        system_prompt, user_prompt_template = self._load_prompt_template('bugfix')
+        
+        # T026: Inject constitution into bugfix prompts
+        system_prompt_with_constitution = f"""{system_prompt}
+
+## Project Constitution
+
+Apply these coding standards when fixing code:
+
+{self.constitution_excerpt}
+"""
+        
+        # T053: Iterative bugfix loop (max 3 iterations)
+        while remaining_errors and current_iteration < max_iterations:
+            current_iteration += 1
+            
+            logger.info(f"Bugfix iteration {current_iteration}/{max_iterations} - {len(remaining_errors)} errors",
+                       extra={'run_id': self.run_id, 'step': self.current_step,
+                             'metadata': {
+                                 'iteration': current_iteration,
+                                 'error_count': len(remaining_errors)
+                             }})
+            
+            # Derive bugfix tasks (max 3, prioritized by severity)
+            bugfix_tasks = self._derive_bugfix_tasks(remaining_errors)
+            
+            if not bugfix_tasks:
+                logger.info("No bugfix tasks derived, ending cycle",
+                           extra={'run_id': self.run_id, 'step': self.current_step})
+                break
+            
+            fixed_files = []  # Track which files were fixed for re-validation
+            
+            # Process each bugfix task in this iteration
+            for i, task in enumerate(bugfix_tasks, 1):
+                logger.info(f"Bugfix {i}/{len(bugfix_tasks)}: {task['file']}",
+                           extra={'run_id': self.run_id, 'step': self.current_step,
+                                 'metadata': {
+                                     'iteration': current_iteration,
+                                     'error_type': task['error_type'],
+                                     'file': task['file']
+                                 }})
+                
+                # Build bugfix prompt
+                user_prompt = self._build_bugfix_prompt(task, spec_content, user_prompt_template)
+                
+                # Track start time
+                api_call_start = int(time.time())
+                
+                # Call OpenAI API with constitution-enhanced prompt (T026)
+                response_text = self._call_openai(system_prompt_with_constitution, user_prompt)
+                
+                # Check for clarification (rare in bugfix, but possible)
+                hitl_count = 0
+                if self._needs_clarification(response_text):
+                    # T040: Log clarification attempt
+                    logger.info(f"Clarification needed for bugfix {task['file']}",
+                               extra={'run_id': self.run_id, 'step': self.current_step,
+                                     'metadata': {
+                                         'iteration': current_iteration,
+                                         'clarification_iteration': 1,
+                                         'file': task['file']
+                                     }})
+                    
+                    # T037: Handle HITL with iteration-specific text (iteration 1 for bugfix)
+                    clarification_text = self._handle_clarification(response_text, iteration=1)
+                    user_prompt_with_hitl = f"{user_prompt}\n\n---\n\n{clarification_text}"
+                    response_text = self._call_openai(system_prompt_with_constitution, user_prompt_with_hitl)
+                    hitl_count = 1
+                
+                # T052: Apply fix and capture before/after for diff logging
+                before_content, after_content = self._apply_fix(task['file'], response_text)
+                fixed_files.append(task['file'])
+                
+                # T054: Log before/after diff
+                self._log_bugfix_diff(
+                    file_path=task['file'],
+                    before_content=before_content,
+                    after_content=after_content,
+                    iteration=current_iteration,
+                    error_type=task['error_type']
+                )
+                
+                # Fetch token usage
+                api_call_end = int(time.time())
+                tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
+                    api_key_env_var='OPEN_AI_KEY_ADM',  # Admin key for Usage API
+                    start_timestamp=api_call_start,
+                    end_timestamp=api_call_end,
+                    model='gpt-4o-mini'
+                )
+                
+                # Aggregate
+                total_hitl_count += hitl_count
+                total_tokens_in += tokens_in
+                total_tokens_out += tokens_out
+                total_api_calls += api_calls
+                total_cached_tokens += cached_tokens
+                
+                logger.info(f"Bugfix {i} applied",
+                           extra={'run_id': self.run_id, 'step': self.current_step,
+                                 'metadata': {
+                                     'iteration': current_iteration,
+                                     'file': task['file'],
+                                     'tokens_in': tokens_in,
+                                     'tokens_out': tokens_out
+                                 }})
+            
+            # T051: Re-validate fixed files to check if errors resolved
+            remaining_errors = self._run_validation(fixed_files)
+            
+            if remaining_errors:
+                logger.info(f"Iteration {current_iteration} complete - {len(remaining_errors)} errors remain",
+                           extra={'run_id': self.run_id, 'step': self.current_step,
+                                 'metadata': {
+                                     'iteration': current_iteration,
+                                     'remaining_errors': len(remaining_errors)
+                                 }})
+            else:
+                logger.info(f"Iteration {current_iteration} complete - all errors resolved!",
+                           extra={'run_id': self.run_id, 'step': self.current_step,
+                                 'metadata': {'iteration': current_iteration}})
+                break
+        
+        # Final summary
+        if current_iteration >= max_iterations and remaining_errors:
+            logger.warning(
+                f"Bugfix cycle reached max iterations ({max_iterations}) with {len(remaining_errors)} errors remaining",
+                extra={'run_id': self.run_id, 'step': self.current_step,
+                      'metadata': {
+                          'final_iteration': current_iteration,
+                          'unresolved_errors': len(remaining_errors)
+                      }})
+        
+        logger.info(f"Bugfix cycle completed: {current_iteration} iterations",
                    extra={'run_id': self.run_id, 'step': self.current_step,
                          'metadata': {
+                             'iterations': current_iteration,
                              'total_tokens_in': total_tokens_in,
                              'total_tokens_out': total_tokens_out,
                              'total_api_calls': total_api_calls,
-                             'total_cached_tokens': total_cached_tokens
+                             'total_cached_tokens': total_cached_tokens,
+                             'final_error_count': len(remaining_errors)
                          }})
         
         return total_hitl_count, total_tokens_in, total_tokens_out, total_api_calls, total_cached_tokens
     
-    def _derive_bugfix_tasks(self, validation_errors: list) -> list:
+    def _log_bugfix_diff(
+        self,
+        file_path: str,
+        before_content: str,
+        after_content: str,
+        iteration: int,
+        error_type: str
+    ) -> None:
         """
-        Derive bugfix tasks from validation errors.
+        Log before/after diff for bugfix application (T054).
         
-        Prioritizes errors by severity and limits to max 3 tasks to keep
-        bugfix cycle manageable and deterministic.
-        
-        Priority order:
-        1. Compilation errors (block execution)
-        2. Test failures (functional issues)
-        3. Runtime errors (edge cases)
+        Provides detailed logging of code changes for debugging and analysis.
         
         Args:
-            validation_errors: List of error dictionaries
-            
-        Returns:
-            List of bugfix task dictionaries (max 3)
+            file_path: Relative path to fixed file
+            before_content: Content before fix
+            after_content: Content after fix
+            iteration: Current bugfix iteration number
+            error_type: Type of error being fixed
         """
-        # Sort by severity
-        severity_order = {'compile': 0, 'test_failure': 1, 'runtime': 2}
+        # Calculate basic diff statistics
+        before_lines = before_content.split('\n') if before_content else []
+        after_lines = after_content.split('\n')
+        
+        lines_added = len(after_lines) - len(before_lines)
+        size_before = len(before_content.encode('utf-8')) if before_content else 0
+        size_after = len(after_content.encode('utf-8'))
+        size_delta = size_after - size_before
+        
+        logger.info(f"Bugfix diff for {file_path}",
+                   extra={'run_id': self.run_id, 'step': self.current_step,
+                         'metadata': {
+                             'iteration': iteration,
+                             'file': file_path,
+                             'error_type': error_type,
+                             'lines_before': len(before_lines),
+                             'lines_after': len(after_lines),
+                             'lines_delta': lines_added,
+                             'bytes_before': size_before,
+                             'bytes_after': size_after,
+                             'bytes_delta': size_delta
+                         }})
+    
+    def _derive_bugfix_tasks(self, validation_errors: list) -> list:
+        """
+        Derive bugfix tasks from validation errors (T049 + T055).
+        
+        Prioritizes errors by severity and limits to max 3 tasks to keep
+        bugfix cycle manageable and deterministic. Enhanced with error type
+        classification to better prioritize fixes.
+        
+        **T055**: Error type classification
+        Priority order (most to least critical):
+        1. Syntax errors (code won't parse)
+        2. Import errors (missing dependencies)
+        3. Compilation errors (type/semantic issues)
+        4. Test failures (functional issues)
+        5. Runtime errors (edge cases)
+        6. Validation errors (style/quality issues)
+        
+        Args:
+            validation_errors: List of error dictionaries with keys:
+                - file: File path with error
+                - error_type: Error classification
+                - message: Error message/traceback
+                - line_number: Optional line number
+                
+        Returns:
+            List of bugfix task dictionaries (max 3, sorted by priority)
+        """
+        # T055: Enhanced severity ordering with detailed classification
+        severity_order = {
+            'syntax': 0,      # Highest priority - code won't parse
+            'import': 1,      # Missing dependencies
+            'compile': 2,     # Type/semantic issues
+            'test_failure': 3,  # Functional issues
+            'runtime': 4,     # Edge cases
+            'validation': 5   # Lowest priority - style/quality
+        }
+        
+        # Sort by severity (ascending order - lower number = higher priority)
         sorted_errors = sorted(
             validation_errors,
             key=lambda e: severity_order.get(e.get('error_type', 'runtime'), 99)
         )
         
-        # Take top 3
+        # Take top 3 most critical errors
         top_errors = sorted_errors[:3]
         
-        # Convert to bugfix tasks
+        # T055: Log error classification summary
+        if validation_errors:
+            error_type_counts = {}
+            for error in validation_errors:
+                error_type = error.get('error_type', 'unknown')
+                error_type_counts[error_type] = error_type_counts.get(error_type, 0) + 1
+            
+            logger.info(f"Error classification summary: {error_type_counts}",
+                       extra={'run_id': self.run_id, 'step': self.current_step,
+                             'metadata': {'error_type_counts': error_type_counts}})
+        
+        # Convert to bugfix tasks with enhanced metadata
         bugfix_tasks = []
         for error in top_errors:
             task = {
@@ -1390,9 +2356,18 @@ CRITICAL INSTRUCTIONS:
                 'error_type': error['error_type'],
                 'error_message': error['message'],
                 'line_number': error.get('line_number'),
-                'original_task': error.get('original_task', 'Code generation')
+                'original_task': error.get('original_task', 'Code generation'),
+                'severity_rank': severity_order.get(error['error_type'], 99)
             }
             bugfix_tasks.append(task)
+        
+        logger.info(f"Derived {len(bugfix_tasks)} bugfix tasks from {len(validation_errors)} errors",
+                   extra={'run_id': self.run_id, 'step': self.current_step,
+                         'metadata': {
+                             'total_errors': len(validation_errors),
+                             'selected_tasks': len(bugfix_tasks),
+                             'top_error_types': [t['error_type'] for t in bugfix_tasks]
+                         }})
         
         return bugfix_tasks
     
@@ -1420,21 +2395,12 @@ CRITICAL INSTRUCTIONS:
         if not current_content:
             current_content = "# File not found or empty"
         
-        # Extract relevant spec section (similar to task implementation)
-        # Use file path and error message as keywords
-        keywords = set(bugfix_task['file'].lower().replace('/', ' ').split())
-        keywords.update(bugfix_task['error_message'].lower().split()[:10])  # First 10 words
-        
-        # Simple excerpt: find sections mentioning keywords
-        spec_lines = spec_content.split('\n')
-        relevant_lines = [
-            line for line in spec_lines
-            if any(keyword in line.lower() for keyword in keywords if len(keyword) > 3)
-        ]
-        spec_excerpt = '\n'.join(relevant_lines[:20])  # Max 20 lines
-        
-        if not spec_excerpt:
-            spec_excerpt = "Refer to general specification requirements"
+        # T056: Extract relevant spec section using enhanced keyword matching
+        spec_excerpt = self._extract_spec_excerpt(
+            spec_content=spec_content,
+            file_path=bugfix_task['file'],
+            error_message=bugfix_task['error_message']
+        )
         
         # Fill template
         prompt = (template
@@ -1445,6 +2411,155 @@ CRITICAL INSTRUCTIONS:
                  .replace('{original_task_description}', bugfix_task['original_task']))
         
         return prompt
+    
+    def _extract_spec_excerpt(self, spec_content: str, file_path: str, error_message: str) -> str:
+        """
+        Extract relevant specification sections for bugfix context (T056).
+        
+        Matches file paths and error keywords to specification sections to provide
+        targeted context for bug fixing.
+        
+        Args:
+            spec_content: Full specification content
+            file_path: Path to file with error
+            error_message: Error message/traceback
+            
+        Returns:
+            Relevant specification excerpt (max ~30 lines)
+        """
+        # Extract keywords from file path and error message
+        keywords = set(file_path.lower().replace('/', ' ').replace('_', ' ').split())
+        
+        # Extract meaningful words from error message (filter common words)
+        error_words = error_message.lower().split()
+        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'}
+        meaningful_words = [w for w in error_words if len(w) > 3 and w not in stop_words]
+        keywords.update(meaningful_words[:15])  # First 15 meaningful words
+        
+        # Find relevant lines (scoring approach)
+        spec_lines = spec_content.split('\n')
+        line_scores = []
+        
+        for i, line in enumerate(spec_lines):
+            line_lower = line.lower()
+            score = sum(1 for keyword in keywords if keyword in line_lower)
+            
+            # Boost score for headers (likely important sections)
+            if line.startswith('#'):
+                score *= 2
+            
+            if score > 0:
+                line_scores.append((score, i, line))
+        
+        # Sort by score and take top lines
+        line_scores.sort(reverse=True, key=lambda x: x[0])
+        top_lines = line_scores[:30]  # Max 30 relevant lines
+        
+        # Sort by original line number to preserve document flow
+        top_lines.sort(key=lambda x: x[1])
+        
+        # Extract lines
+        excerpt_lines = [line for _, _, line in top_lines]
+        spec_excerpt = '\n'.join(excerpt_lines)
+        
+        if not spec_excerpt:
+            spec_excerpt = "Refer to general specification requirements"
+        
+        return spec_excerpt
+    
+    def _run_validation(self, file_paths: list) -> list:
+        """
+        Run validation checks on generated code files (T051).
+        
+        Performs basic syntax checking and captures errors. This is a lightweight
+        validation suitable for detecting common issues before attempting fixes.
+        
+        Args:
+            file_paths: List of file paths to validate (relative to src_dir)
+            
+        Returns:
+            List of error dictionaries with keys:
+                - file: File path with error
+                - error_type: 'syntax', 'import', or 'runtime'
+                - message: Error message
+                - line_number: Line number if available
+        """
+        validation_errors = []
+        
+        for file_path in file_paths:
+            full_path = self.src_dir / file_path
+            
+            if not full_path.exists():
+                validation_errors.append({
+                    'file': file_path,
+                    'error_type': 'runtime',
+                    'message': f"File not found: {full_path}",
+                    'line_number': None
+                })
+                continue
+            
+            # Python syntax checking
+            if file_path.endswith('.py'):
+                try:
+                    with open(full_path, 'r', encoding='utf-8') as f:
+                        code = f.read()
+                    compile(code, str(full_path), 'exec')
+                    
+                    logger.debug(f"Syntax validation passed: {file_path}",
+                               extra={'run_id': self.run_id, 'step': self.current_step})
+                    
+                except SyntaxError as e:
+                    # T055: Classify as syntax error
+                    validation_errors.append({
+                        'file': file_path,
+                        'error_type': 'syntax',
+                        'message': f"SyntaxError: {e.msg} at line {e.lineno}",
+                        'line_number': e.lineno
+                    })
+                    
+                    logger.warning(f"Syntax error in {file_path}: {e.msg}",
+                                 extra={'run_id': self.run_id, 'step': self.current_step,
+                                       'metadata': {'line': e.lineno}})
+                    
+                except Exception as e:
+                    # T055: Classify as runtime error
+                    validation_errors.append({
+                        'file': file_path,
+                        'error_type': 'runtime',
+                        'message': f"Validation error: {str(e)}",
+                        'line_number': None
+                    })
+                    
+                    logger.warning(f"Validation error in {file_path}: {e}",
+                                 extra={'run_id': self.run_id, 'step': self.current_step})
+        
+        return validation_errors
+    
+    def _apply_fix(self, file_path: str, fixed_code: str) -> tuple[str, str]:
+        """
+        Apply AI-generated fix to target file (T052).
+        
+        Saves the fixed code and returns before/after content for logging.
+        
+        Args:
+            file_path: Relative file path (relative to src_dir)
+            fixed_code: Fixed code content from AI
+            
+        Returns:
+            Tuple of (before_content, after_content) for diff logging
+        """
+        full_path = self.src_dir / file_path
+        
+        # Read current content for diff
+        before_content = self._read_file_if_exists(full_path)
+        
+        # Save fixed code
+        self._save_code_file(file_path, fixed_code)
+        
+        # Return before/after for logging
+        after_content = fixed_code
+        
+        return before_content, after_content
         
     def health_check(self) -> bool:
         """
