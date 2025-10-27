@@ -930,6 +930,46 @@ try:
     print(f"Message: {{report['verification_message']}}")
     print()
     
+    # BACKWARD COMPATIBILITY: Remove redundant metrics files from old runs
+    run_dir = Path('runs') / "$FRAMEWORK" / "$RUN_ID"
+    removed_files = []
+    
+    # Remove sprint-level metrics.json files
+    sprint_dirs = sorted(run_dir.glob('sprint_*'))
+    for sprint_dir in sprint_dirs:
+        sprint_metrics = sprint_dir / 'metrics.json'
+        if sprint_metrics.exists():
+            try:
+                sprint_metrics.unlink()
+                removed_files.append(str(sprint_metrics.relative_to(run_dir)))
+            except Exception:
+                pass
+    
+    # Remove cumulative metrics file
+    summary_dir = run_dir / 'summary'
+    if summary_dir.exists():
+        cumulative_metrics = summary_dir / 'metrics_cumulative.json'
+        if cumulative_metrics.exists():
+            try:
+                cumulative_metrics.unlink()
+                removed_files.append(str(cumulative_metrics.relative_to(run_dir)))
+            except Exception:
+                pass
+        
+        # Remove summary dir if empty
+        try:
+            if not any(summary_dir.iterdir()):
+                summary_dir.rmdir()
+                removed_files.append('summary/')
+        except Exception:
+            pass
+    
+    if removed_files:
+        print(f"🧹 Cleaned up {{len(removed_files)}} redundant file(s):")
+        for f in removed_files:
+            print(f"   - {{f}}")
+        print()
+    
     if report['status'] == 'verified':
         print("🎉 Data verified and stable!")
     elif report['status'] == 'pending':
@@ -1124,6 +1164,45 @@ try:
             msg = report.get('verification_message', '')
             if msg:
                 print(f"   {{msg}}")
+            
+            # BACKWARD COMPATIBILITY: Remove redundant metrics files from old runs
+            # This cleanup ensures pre-existing runs don't have duplicate metrics files
+            run_dir = Path('runs') / framework / run_id
+            removed_files = []
+            
+            # Remove sprint-level metrics.json files (redundant with root metrics.json)
+            sprint_dirs = sorted(run_dir.glob('sprint_*'))
+            for sprint_dir in sprint_dirs:
+                sprint_metrics = sprint_dir / 'metrics.json'
+                if sprint_metrics.exists():
+                    try:
+                        sprint_metrics.unlink()
+                        removed_files.append(str(sprint_metrics.relative_to(run_dir)))
+                    except Exception:
+                        pass  # Ignore deletion errors
+            
+            # Remove cumulative metrics file (redundant with root metrics.json)
+            summary_dir = run_dir / 'summary'
+            if summary_dir.exists():
+                cumulative_metrics = summary_dir / 'metrics_cumulative.json'
+                if cumulative_metrics.exists():
+                    try:
+                        cumulative_metrics.unlink()
+                        removed_files.append(str(cumulative_metrics.relative_to(run_dir)))
+                    except Exception:
+                        pass  # Ignore deletion errors
+                
+                # Remove summary dir if empty
+                try:
+                    if not any(summary_dir.iterdir()):
+                        summary_dir.rmdir()
+                        removed_files.append('summary/')
+                except Exception:
+                    pass  # Ignore if not empty or other errors
+            
+            if removed_files:
+                print(f"   🧹 Cleaned up {{len(removed_files)}} redundant file(s)")
+            
             print()
             
         except Exception as e:

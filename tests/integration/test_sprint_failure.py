@@ -36,15 +36,6 @@ def test_sprint_2_failure_preserves_sprint_1(mock_run_dir):
     with open(sprint_1_dir / "metadata.json", 'w') as f:
         json.dump(metadata_1, f, indent=2)
     
-    # Save sprint 1 metrics
-    metrics_1 = {
-        "tokens": {"input": 100, "output": 200, "cached": 0, "total": 300},
-        "api_calls": 5,
-        "execution_time": 10.5
-    }
-    with open(sprint_1_dir / "metrics.json", 'w') as f:
-        json.dump(metrics_1, f, indent=2)
-    
     # Create failed sprint 2
     sprint_2_dir, workspace_2 = create_sprint_workspace(mock_run_dir, 2)
     
@@ -79,7 +70,6 @@ def test_sprint_2_failure_preserves_sprint_1(mock_run_dir):
     assert sprint_1_dir.exists()
     assert (sprint_1_dir / "generated_artifacts" / "app.py").exists()
     assert (sprint_1_dir / "metadata.json").exists()
-    assert (sprint_1_dir / "metrics.json").exists()
     
     # Verify sprint 1 artifacts are unchanged
     assert artifact_1.read_text() == "# Sprint 1 successful code"

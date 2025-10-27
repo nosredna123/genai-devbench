@@ -279,36 +279,6 @@ class OrchestratorRunner:
         logger.debug(f"Saved sprint {sprint_num} metadata",
                     extra={'run_id': self.run_id, 'sprint': sprint_num})
     
-    def _save_sprint_metrics(
-        self,
-        sprint_dir: Path,
-        result: Dict[str, Any]
-    ) -> None:
-        """
-        Save sprint metrics to sprint_NNN/metrics.json.
-        
-        Args:
-            sprint_dir: Path to sprint directory
-            result: Step execution result containing tokens and api_calls
-        """
-        metrics = {
-            "tokens": {
-                "input": result.get('tokens_in', 0),
-                "output": result.get('tokens_out', 0),
-                "cached": result.get('cached_tokens', 0),
-                "total": result.get('tokens_in', 0) + result.get('tokens_out', 0)
-            },
-            "api_calls": result.get('api_calls', 0),
-            "execution_time": result.get('duration_seconds', 0)
-        }
-        
-        metrics_path = sprint_dir / "metrics.json"
-        with open(metrics_path, 'w', encoding='utf-8') as f:
-            json.dump(metrics, f, indent=2)
-        
-        logger.debug(f"Saved sprint metrics",
-                    extra={'run_id': self.run_id})
-    
     def _save_sprint_validation(
         self,
         sprint_dir: Path,
@@ -327,81 +297,6 @@ class OrchestratorRunner:
         
         logger.debug(f"Saved sprint validation",
                     extra={'run_id': self.run_id})
-    
-    def _create_cumulative_metrics(
-        self,
-        run_dir: Path,
-        sprint_results: List[Dict[str, Any]]
-    ) -> None:
-        """
-        Create cumulative metrics aggregation and save to summary/metrics_cumulative.json.
-        
-        Args:
-            run_dir: Run directory path
-            sprint_results: List of sprint result dictionaries
-        """
-        if not sprint_results:
-            logger.warning("No sprint results to aggregate",
-                         extra={'run_id': self.run_id})
-            return
-        
-        # Calculate cumulative totals
-        total_tokens_in = sum(s.get('tokens_in', 0) for s in sprint_results)
-        total_tokens_out = sum(s.get('tokens_out', 0) for s in sprint_results)
-        total_api_calls = sum(s.get('api_calls', 0) for s in sprint_results)
-        total_execution_time = sum(s.get('execution_time', 0) for s in sprint_results)
-        
-        # Calculate trends (increasing/decreasing/stable)
-        def calculate_trend(values: List[float]) -> str:
-            """Calculate trend from a list of values."""
-            if len(values) < 2:
-                return "stable"
-            
-            # Simple trend: compare first half avg vs second half avg
-            mid = len(values) // 2
-            first_half_avg = sum(values[:mid]) / len(values[:mid]) if mid > 0 else 0
-            second_half_avg = sum(values[mid:]) / len(values[mid:]) if len(values[mid:]) > 0 else 0
-            
-            if second_half_avg > first_half_avg * 1.1:  # 10% threshold
-                return "increasing"
-            elif second_half_avg < first_half_avg * 0.9:
-                return "decreasing"
-            else:
-                return "stable"
-        
-        tokens_per_sprint = [s.get('tokens_in', 0) + s.get('tokens_out', 0) for s in sprint_results]
-        tokens_trend = calculate_trend(tokens_per_sprint)
-        
-        cumulative = {
-            "total_sprints": len(sprint_results),
-            "cumulative": {
-                "tokens_in": total_tokens_in,
-                "tokens_out": total_tokens_out,
-                "tokens_total": total_tokens_in + total_tokens_out,
-                "api_calls": total_api_calls,
-                "execution_time": total_execution_time
-            },
-            "per_sprint": sprint_results,
-            "sprint_efficiency": {
-                "tokens_per_sprint_avg": (total_tokens_in + total_tokens_out) / len(sprint_results),
-                "api_calls_per_sprint_avg": total_api_calls / len(sprint_results),
-                "execution_time_per_sprint_avg": total_execution_time / len(sprint_results),
-                "tokens_trend": tokens_trend
-            }
-        }
-        
-        # Create summary directory if it doesn't exist
-        summary_dir = run_dir / "summary"
-        summary_dir.mkdir(exist_ok=True)
-        
-        # Save cumulative metrics
-        cumulative_path = summary_dir / "metrics_cumulative.json"
-        with open(cumulative_path, 'w', encoding='utf-8') as f:
-            json.dump(cumulative, f, indent=2)
-        
-        logger.info("Created cumulative metrics",
-                   extra={'run_id': self.run_id, 'event': 'cumulative_metrics_created',
-                         'metadata': {'total_sprints': len(sprint_results)}})
     
     def _generate_run_readme(
         self,
@@ -456,14 +351,11 @@ class OrchestratorRunner:
 │   ├── generated_artifacts/
 │   ├── logs/
 │   ├── metadata.json
-│   ├── metrics.json
 │   └── validation.json
 ├── sprint_002/          # Second sprint artifacts
 │   └── ...
 ├── final/               # Symlink to last successful sprint
-└── summary/             # Run-level aggregations
-    ├── metrics_cumulative.json
-    └── ...
+└── metrics.json         # Run-level metrics (single source of truth)
 ```
 
 ## Accessing Results
@@ -478,15 +370,14 @@ cd final/generated_artifacts/managed_system/
 diff -r sprint_001/generated_artifacts sprint_002/generated_artifacts
 ```
 
-### View cumulative metrics
+### View metrics (single source of truth)
 ```bash
-cat summary/metrics_cumulative.json | jq
+cat metrics.json | jq
 ```
 
 ### Check specific sprint
 ```bash
 cat sprint_001/metadata.json
-cat sprint_001/metrics.json
 ```
 """
         
@@ -732,10 +623,6 @@ cat sprint_001/metrics.json
                         "completed",
                         None
                     )
-                    self._save_sprint_metrics(
-                        sprint_dir_path,
-                        result
-                    )
                     self._save_sprint_validation(
                         sprint_dir_path,
                         {"overall_status": "passed", "checks": {}, "issues": [], "completeness": 1.0}
@@ -851,10 +738,8 @@ cat sprint_001/metrics.json
                 logger.info(f"Created final symlink to sprint {last_successful_sprint}",
                            extra={'run_id': self.run_id, 'event': 'final_symlink_created'})
             
-            # Create cumulative metrics aggregation (T013, US1)
+            # Generate run README (T014, US1)
             if sprint_results:
-                self._create_cumulative_metrics(run_dir, sprint_results)
-                # Generate run README (T014, US1)
                 self._generate_run_readme(run_dir, sprint_results, run_start_time, run_end_time)
                     
             # End metrics collection

@@ -50,21 +50,6 @@ def test_three_sprint_run(mock_run_dir):
         metadata_path = sprint_dir / "metadata.json"
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
-        
-        # Save sprint metrics
-        metrics = {
-            "tokens": {
-                "input": data["tokens_in"],
-                "output": data["tokens_out"],
-                "cached": 0,
-                "total": data["tokens_in"] + data["tokens_out"]
-            },
-            "api_calls": data["api_calls"],
-            "execution_time": 10.5 + sprint_num
-        }
-        metrics_path = sprint_dir / "metrics.json"
-        with open(metrics_path, 'w') as f:
-            json.dump(metrics, f, indent=2)
     
     # Create final symlink
     create_final_symlink(mock_run_dir, 3)
@@ -74,7 +59,6 @@ def test_three_sprint_run(mock_run_dir):
         sprint_dir = mock_run_dir / f"sprint_{sprint_num:03d}"
         assert sprint_dir.exists(), f"Sprint {sprint_num} directory missing"
         assert (sprint_dir / "metadata.json").exists()
-        assert (sprint_dir / "metrics.json").exists()
         assert (sprint_dir / "generated_artifacts").exists()
     
     # Verify final symlink points to last sprint
@@ -119,51 +103,9 @@ def test_final_symlink_points_to_last_sprint(mock_run_dir):
     assert marker_via_link.read_text() == "Sprint 2"
 
 
-def test_cumulative_metrics_generation(mock_run_dir):
-    """Test that cumulative metrics are correctly aggregated."""
-    from src.orchestrator.runner import OrchestratorRunner
-    
-    # Create a runner instance
-    runner = OrchestratorRunner("baes", run_id="test-run-123")
-    
-    # Mock sprint results
-    sprint_results = [
-        {"sprint_num": 1, "step_id": "1", "status": "completed", 
-         "tokens_in": 100, "tokens_out": 200, "api_calls": 5, "execution_time": 10.0},
-        {"sprint_num": 2, "step_id": "2", "status": "completed",
-         "tokens_in": 150, "tokens_out": 250, "api_calls": 7, "execution_time": 12.0},
-        {"sprint_num": 3, "step_id": "3", "status": "completed",
-         "tokens_in": 120, "tokens_out": 220, "api_calls": 6, "execution_time": 11.0},
-    ]
-    
-    # Generate cumulative metrics
-    runner._create_cumulative_metrics(mock_run_dir, sprint_results)
-    
-    # Verify summary directory and file exist
-    summary_dir = mock_run_dir / "summary"
-    assert summary_dir.exists()
-    
-    cumulative_file = summary_dir / "metrics_cumulative.json"
-    assert cumulative_file.exists()
-    
-    # Load and verify cumulative metrics
-    with open(cumulative_file, 'r') as f:
-        cumulative = json.load(f)
-    
-    assert cumulative["total_sprints"] == 3
-    assert cumulative["cumulative"]["tokens_in"] == 370  # 100+150+120
-    assert cumulative["cumulative"]["tokens_out"] == 670  # 200+250+220
-    assert cumulative["cumulative"]["tokens_total"] == 1040
-    assert cumulative["cumulative"]["api_calls"] == 18  # 5+7+6
-    assert cumulative["cumulative"]["execution_time"] == 33.0  # 10+12+11
-    
-    # Verify averages
-    assert cumulative["sprint_efficiency"]["tokens_per_sprint_avg"] == pytest.approx(1040/3)
-    assert cumulative["sprint_efficiency"]["api_calls_per_sprint_avg"] == pytest.approx(18/3)
-    
-    # Verify trend is calculated
-    assert "tokens_trend" in cumulative["sprint_efficiency"]
-    assert cumulative["sprint_efficiency"]["tokens_trend"] in ["increasing", "decreasing", "stable"]
+# NOTE: Cumulative metrics test removed - metrics are now only stored in root metrics.json
+# The _create_cumulative_metrics method was removed as part of the single source of truth
+# implementation. All metrics data (per-step and aggregated) is now in runs/<framework>/<run-id>/metrics.json
 
 
 def test_adapters_receive_previous_sprint_artifacts(mock_run_dir):
