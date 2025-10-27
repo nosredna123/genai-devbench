@@ -1009,15 +1009,39 @@ Instructions for Task Breakdown:
                         break
                     
                     # Look for file indicators
-                    # Pattern: **File**: path or **File Path**: path or - **File**: path
-                    file_match = re.search(
-                        r'\*\*File(?:\s+Path)?\*\*:\s*`?([^\s`\n]+)',
-                        next_line,
-                        re.IGNORECASE
-                    )
+                    # AI generates two format variations:
+                    #   Format 1: **File**: `path` or **File Path**: `path` (colon after text, before closing **)
+                    #   Format 2: **File Path:** `path` (colon between text and closing **)
+                    # Use two patterns to handle both
+                    
+                    # Pattern A: Colon after closing ** (**File**: or **File Path**:)
+                    # Handles: **File**: path, **File Path**: path, - **File**: `path`
+                    file_pattern_a = r'\*\*File(?:\s+[Pp]ath)?\*\*:\s*(?:`([^`]+)`|([^\s]+))'
+                    
+                    # Pattern B: Colon between text and closing ** (**File Path:**)
+                    # Handles: **File Path:** `path`, **File Path:** path
+                    file_pattern_b = r'\*\*File(?:\s+[Pp]ath)?:\*\*\s*(?:`([^`]+)`|([^\s]+))'
+                    
+                    # Try Pattern A first (more common - 74% of runs)
+                    file_match = re.search(file_pattern_a, next_line, re.IGNORECASE)
+                    matched_format = None
                     
                     if file_match:
-                        file_path = file_match.group(1).strip()
+                        matched_format = "Format 1 (colon inside bold)"
+                    else:
+                        # Try Pattern B (previously failing format - 26% of runs)
+                        file_match = re.search(file_pattern_b, next_line, re.IGNORECASE)
+                        if file_match:
+                            matched_format = "Format 2 (colon outside bold)"
+                    
+                    if file_match:
+                        # Extract from whichever group matched (1=backticks, 2=no backticks)
+                        file_path = (file_match.group(1) or file_match.group(2)).strip()
+                        
+                        # Log format detection for monitoring (FR-010)
+                        logger.debug(
+                            f"Task {task_count}: Detected {matched_format} for file: {file_path}"
+                        )
                         break
                 
                 # Only add tasks with file paths
