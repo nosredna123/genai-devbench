@@ -4,12 +4,293 @@ Statistical analysis functions for multi-framework comparison.
 Implements non-parametric tests and effect size calculations.
 """
 
+import json
 import math
-from typing import List, Dict, Any, Tuple
+from pathlib import Path
+from typing import List, Dict, Any, Tuple, Set
 from collections import defaultdict
 from src.utils.logger import get_logger
+from src.utils.exceptions import ConfigValidationError, MetricsValidationError
+from src.analysis.types import MetricsDiscoveryResult
+from src.utils.metrics_config import MetricsConfig
 
 logger = get_logger(__name__)
+
+
+def _require_config_value(config: Dict, key: str, context: str) -> Any:
+    """
+    Get required config value with fail-fast validation.
+    
+    Args:
+        config: Configuration dictionary
+        key: Required key name
+        context: Human-readable context for error messages
+        
+    Returns:
+        Config value (guaranteed non-None)
+        
+    Raises:
+        ConfigValidationError: If key missing or value is None
+        
+    Example:
+        >>> name = _require_config_value(framework, 'name', 'frameworks.autogpt')
+        >>> # If missing, raises clear error with fix suggestion
+    """
+    if key not in config:
+        # Build helpful error message with fix suggestion
+        available_keys = list(config.keys()) if config else []
+        error_msg = [
+            f"Missing required configuration key: '{key}' in {context}",
+            "",
+            f"Available keys in {context}: {available_keys}",
+            "",
+            "To fix this error:",
+            "  1. Open config/experiment.yaml",
+            f"  2. Add '{key}' under {context}",
+            "",
+            "Example structure:"
+        ]
+        
+        # Add context-specific example
+        if 'framework' in context:
+            error_msg.extend([
+                f"  {context}:",
+                f"    {key}: <your_value>",
+                "    repo_url: https://github.com/...",
+                "    commit_hash: abc123...",
+            ])
+        elif context == 'root config':
+            error_msg.extend([
+                "  # Top level of experiment.yaml",
+                f"  {key}: <your_value>",
+            ])
+        else:
+            error_msg.extend([
+                f"  {context}:",
+                f"    {key}: <your_value>",
+            ])
+        
+        error_msg.extend([
+            "",
+            "For more information:",
+            "  - See docs/configuration_reference.md",
+            "  - See docs/CONFIG_MIGRATION_GUIDE.md for examples"
+        ])
+        
+        raise ConfigValidationError("\n".join(error_msg))
+    
+    value = config[key]
+    if value is None:
+        raise ConfigValidationError(
+            f"Configuration key '{key}' in {context} cannot be null.\n\n"
+            f"To fix this error:\n"
+            f"  1. Open config/experiment.yaml\n"
+            f"  2. Find '{key}' under {context}\n"
+            f"  3. Provide a valid non-null value\n\n"
+            f"Example: {key}: <your_value>\n\n"
+            f"See docs/configuration_reference.md for valid values."
+        )
+    
+    return value
+
+
+def _require_nested_config(config: Dict, path: List[str]) -> Any:
+    """
+    Get nested config value with path-aware error messages.
+    
+    Args:
+        config: Root configuration dictionary
+        path: List of keys forming path (e.g., ['metrics', 'TOK_IN', 'name'])
+        
+    Returns:
+        Value at specified path
+        
+    Raises:
+        ConfigValidationError: If any key in path missing
+        
+    Example:
+        >>> # Get experiment.frameworks[0].name
+        >>> name = _require_nested_config(
+        ...     config, 
+        ...     ['experiment', 'frameworks', 0, 'name']
+        ... )
+    """
+    current = config
+    for i, key in enumerate(path):
+        partial_path = '.'.join(str(k) for k in path[:i+1])
+        full_path = '.'.join(str(k) for k in path)
+        
+        if not isinstance(current, dict):
+            raise ConfigValidationError(
+                f"Invalid configuration structure at '{partial_path}'.\n\n"
+                f"Expected a dictionary, but found {type(current).__name__}.\n"
+                f"Cannot navigate to '{full_path}'.\n\n"
+                f"To fix this error:\n"
+                f"  1. Open config/experiment.yaml\n"
+                f"  2. Check the structure at '{partial_path}'\n"
+                f"  3. Ensure it's a nested dictionary (YAML object)\n\n"
+                f"Example structure:\n"
+                f"  {partial_path}:\n"
+                f"    {key}: <value>\n\n"
+                f"See docs/configuration_reference.md for correct structure."
+            )
+        current = _require_config_value(current, key, partial_path)
+    return current
+
+
+def _discover_metrics_with_data(run_files: List[Path], metrics_config: MetricsConfig) -> MetricsDiscoveryResult:
+    """
+    Auto-discover which metrics have collected data by scanning run files.
+    
+    This function implements the auto-discovery pattern: it examines actual
+    run data to determine which metrics have collected values versus which
+    are defined in config but unmeasured.
+    
+    Args:
+        run_files: List of paths to metrics.json files from experiment runs
+        metrics_config: MetricsConfig instance with metric definitions
+        
+    Returns:
+        MetricsDiscoveryResult with partitioned metric sets:
+            - metrics_with_data: Metrics found in at least one run file
+            - metrics_without_data: Configured metrics with no data
+            - unknown_metrics: Metrics in data but not in config (validation error)
+            - run_count: Number of run files scanned
+            
+    Raises:
+        MetricsValidationError: If unknown metrics found in run data
+        
+    Example:
+        >>> run_files = list(Path('experiments/exp1/runs').glob('*/metrics.json'))
+        >>> config = MetricsConfig('config/experiment.yaml')
+        >>> result = _discover_metrics_with_data(run_files, config)
+        >>> print(f"Measured: {result.metrics_with_data}")
+        >>> print(f"Unmeasured: {result.metrics_without_data}")
+    """
+    # Collect all metric keys found in run data
+    all_data_metrics: Set[str] = set()
+    
+    for run_file in run_files:
+        try:
+            with open(run_file, 'r', encoding='utf-8') as f:
+                run_data = json.load(f)
+            
+            # Validate presence of aggregate_metrics (fail-fast)
+            if 'aggregate_metrics' not in run_data:
+                raise MetricsValidationError(
+                    f"Missing 'aggregate_metrics' section in run file: {run_file}\n\n"
+                    f"Each metrics.json file must contain an 'aggregate_metrics' section.\n\n"
+                    f"Expected structure:\n"
+                    f"  {{\n"
+                    f"    \"aggregate_metrics\": {{\n"
+                    f"      \"TOK_IN\": <value>,\n"
+                    f"      \"TOK_OUT\": <value>,\n"
+                    f"      ...\n"
+                    f"    }}\n"
+                    f"  }}\n\n"
+                    f"This file may be corrupted or from an incompatible experiment version."
+                )
+            
+            # Extract metrics from aggregate_metrics section
+            aggregate_metrics = run_data['aggregate_metrics']
+            all_data_metrics.update(aggregate_metrics.keys())
+            
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.warning(f"Failed to read run file {run_file}: {e}")
+            continue
+    
+    # Get all configured metrics
+    config_metrics = set(metrics_config.get_all_metrics().keys())
+    
+    # Validate: all data metrics must exist in config (fail-fast)
+    unknown_metrics = all_data_metrics - config_metrics
+    
+    if unknown_metrics:
+        raise MetricsValidationError(
+            f"Unknown metrics found in run data: {unknown_metrics}\n\n"
+            f"These metrics appear in metrics.json but not in experiment.yaml metrics section.\n\n"
+            f"Options:\n"
+            f"  1. Add metric definitions to experiment.yaml\n"
+            f"  2. Remove metrics from run data files\n"
+            f"  3. Check for typos (metric keys are case-sensitive)\n\n"
+            f"Configured metrics: {sorted(config_metrics)}"
+        )
+    
+    # Partition metrics: with data vs without data
+    metrics_with_data = all_data_metrics & config_metrics
+    metrics_without_data = config_metrics - all_data_metrics
+    
+    return MetricsDiscoveryResult(
+        metrics_with_data=metrics_with_data,
+        metrics_without_data=metrics_without_data,
+        unknown_metrics=unknown_metrics,
+        run_count=len(run_files)
+    )
+
+
+def _generate_limitations_section(
+    metrics_config: MetricsConfig,
+    metrics_without_data: Set[str]
+) -> List[str]:
+    """
+    Generate limitations section listing unmeasured metrics.
+    
+    This section is dynamically generated based on which metrics are defined
+    in the config but have no collected data in the run files. It uses the
+    status and reason fields from MetricDefinition to explain why each metric
+    is unmeasured.
+    
+    Args:
+        metrics_config: MetricsConfig instance
+        metrics_without_data: Set of metric keys with no collected data
+        
+    Returns:
+        List of markdown lines for the limitations section
+        
+    Example Output:
+        ## Limitations
+        
+        **Unmeasured Metrics**: The following metrics are defined but have no collected data:
+        
+        - **Autonomy Rate** (`AUTR`): Requires HITL detection implementation
+        - **Code Quality** (`CODE_QUAL`): Static analyzer integration pending
+    """
+    lines = [
+        "## Limitations",
+        "",
+        "### Unmeasured Metrics",
+        ""
+    ]
+    
+    if not metrics_without_data:
+        lines.append("*All configured metrics have collected data in this experiment.*")
+        lines.append("")
+        return lines
+    
+    lines.append(
+        "The following metrics are defined in the configuration but have no collected data "
+        "in this experiment:"
+    )
+    lines.append("")
+    
+    # Get metric definitions for unmeasured metrics
+    all_metrics = metrics_config.get_all_metrics()
+    
+    for metric_key in sorted(metrics_without_data):
+        metric_def = all_metrics.get(metric_key)
+        
+        if metric_def:
+            name = metric_def.name
+            reason = metric_def.reason or "No data collected"
+            status = metric_def.status or "unmeasured"
+            
+            lines.append(f"- **{name}** (`{metric_key}`): {reason} (Status: {status})")
+        else:
+            lines.append(f"- `{metric_key}`: Metric definition not found")
+    
+    lines.append("")
+    
+    return lines
 
 
 def kruskal_wallis_test(groups: Dict[str, List[float]]) -> Dict[str, Any]:
@@ -376,77 +657,69 @@ def compute_composite_scores(metrics: Dict[str, float]) -> Dict[str, float]:
     }
 
 
-def _format_metric_value(metric: str, value: float, include_units: bool = True) -> str:
+def _format_metric_value(
+    metric: str,
+    value: float,
+    metrics_config: 'MetricsConfig',
+    include_units: bool = True
+) -> str:
     """
-    Format metric value with appropriate units and precision.
+    Format metric value using MetricDefinition.format_value().
     
     Args:
-        metric: Metric name
+        metric: Metric key
         value: Numeric value
-        include_units: Whether to include unit labels
+        metrics_config: MetricsConfig instance for looking up metric definitions
+        include_units: Whether to include unit labels (for backwards compatibility)
     
     Returns:
-        Formatted string with value and units
+        Formatted string with value (and optionally units)
     """
-    # Token metrics: thousands separator
-    if metric in ['TOK_IN', 'TOK_OUT']:
-        if include_units:
-            return f"{value:,.0f} tokens"
-        return f"{value:,.0f}"
+    # Get metric definition from config
+    all_metrics = metrics_config.get_all_metrics()
     
-    # Time metrics: seconds with minutes conversion if >60
-    elif metric == 'T_WALL_seconds':
-        if include_units:
-            if value >= 60:
-                minutes = value / 60
-                return f"{value:.1f}s ({minutes:.1f} min)"
-            return f"{value:.1f}s"
-        return f"{value:.1f}"
+    if metric not in all_metrics:
+        # Fallback for unknown metrics (shouldn't happen with validation)
+        return f"{value:.2f}"
     
-    # Percentages/rates (0-1 range) - display as is
-    elif metric in ['AUTR', 'ESR', 'MC', 'AEI']:
-        return f"{value:.3f}"
+    metric_def = all_metrics[metric]
     
-    # Quality star
-    elif metric in ['Q*', 'Q_star']:
-        return f"{value:.3f}"
+    # Use MetricDefinition's format_value method
+    formatted = metric_def.format_value(value)
     
-    # Counts (integers)
-    elif metric in ['UTT', 'HIT', 'HEU', 'CRUDe']:
-        return f"{int(value)}"
+    # Add units if requested and available
+    if include_units and metric_def.unit:
+        # Special handling for time metrics - format_value might already include units
+        if 'min)' in formatted or 'tokens' in formatted:
+            return formatted
+        return f"{formatted} {metric_def.unit}"
     
-    # Zero-downtime intervals (seconds)
-    elif metric == 'ZDI':
-        if include_units:
-            return f"{value:.0f}s"
-        return f"{value:.0f}"
-    
-    # Default: 2 decimal places
-    return f"{value:.2f}"
+    return formatted
 
 
-def _format_confidence_interval(lower: float, upper: float, metric: str) -> str:
+def _format_confidence_interval(
+    lower: float,
+    upper: float,
+    metric: str,
+    metrics_config: 'MetricsConfig'
+) -> str:
     """
-    Format confidence interval with appropriate precision.
+    Format confidence interval using MetricDefinition formatting.
     
     Args:
         lower: Lower bound
         upper: Upper bound
-        metric: Metric name for formatting context
+        metric: Metric key for formatting context
+        metrics_config: MetricsConfig instance for looking up metric definitions
     
     Returns:
         Formatted CI string like [lower, upper]
     """
-    if metric in ['TOK_IN', 'TOK_OUT']:
-        return f"[{lower:,.0f}, {upper:,.0f}]"
-    elif metric == 'T_WALL_seconds':
-        return f"[{lower:.1f}, {upper:.1f}]"
-    elif metric in ['AUTR', 'ESR', 'MC', 'AEI', 'Q*', 'Q_star']:
-        return f"[{lower:.3f}, {upper:.3f}]"
-    elif metric in ['UTT', 'HIT', 'HEU', 'CRUDe', 'ZDI']:
-        return f"[{int(lower)}, {int(upper)}]"
-    else:
-        return f"[{lower:.2f}, {upper:.2f}]"
+    # Format both bounds using metric definition
+    lower_str = _format_metric_value(metric, lower, metrics_config, include_units=False)
+    upper_str = _format_metric_value(metric, upper, metrics_config, include_units=False)
+    
+    return f"[{lower_str}, {upper_str}]"
 
 
 def _get_performance_indicator(metric: str, value: float, all_values: List[float]) -> str:
@@ -578,47 +851,48 @@ def _generate_relative_performance(framework_means: Dict[str, Dict[str, Dict[str
     return lines
 
 
-def _generate_executive_summary(frameworks_data: Dict[str, List[Dict[str, float]]], run_counts: Dict[str, int]) -> List[str]:
+def _generate_executive_summary(
+    frameworks_data: Dict[str, List[Dict[str, float]]],
+    run_counts: Dict[str, int],
+    metrics_with_data: Set[str]
+) -> List[str]:
     """
-    Generate executive summary section with key findings (reliable metrics only).
+    Generate executive summary section with key findings.
+    
+    Uses only metrics that have actual collected data (determined by auto-discovery).
     
     Args:
         frameworks_data: Dict mapping framework names to lists of run metrics
         run_counts: Dict mapping framework names to number of runs
+        metrics_with_data: Set of metric keys that have collected data
     
     Returns:
         List of markdown lines for the executive summary section
     """
     lines = [
-        "## Executive Summary (Reliable Metrics Only)",
+        "## Executive Summary",
         "",
-        f"*Based on {sum(run_counts.values())} VERIFIED runs across {len(run_counts)} frameworks: {', '.join([f'{fw} (n={n})' for fw, n in run_counts.items()])}*",
+        f"*Based on {sum(run_counts.values())} runs across {len(run_counts)} frameworks: {', '.join([f'{fw} (n={n})' for fw, n in run_counts.items()])}*",
         "",
-        "**Analysis Scope**: This summary focuses on **reliably measured metrics only** with consistent data sources across all frameworks.",
-        "",
-        "**Excluded from Summary:**",
-        "- ❌ **Unmeasured**: Q*, ESR, CRUDe, MC (applications not executed)",
-        "- ⚠️ **Partially Measured**: AUTR, AEI, HIT, HEU (inconsistent HITL detection)",
-        "",
-        "See 'Limitations and Future Work' section for discussion of excluded metrics.",
+        f"**Measured Metrics**: {len(metrics_with_data)} metrics with collected data",
         ""
     ]
     
-    # Calculate aggregate statistics for summary (reliable metrics only)
+    # Calculate aggregate statistics for summary (only metrics with data)
     aggregated = {}
-    RELIABLE_METRICS = {'TOK_IN', 'TOK_OUT', 'API_CALLS', 'CACHED_TOKENS', 'T_WALL_seconds', 'ZDI', 'UTT'}
     
     for framework, runs in frameworks_data.items():
         aggregated[framework] = {}
         
-        for metric in RELIABLE_METRICS:
+        # Only aggregate metrics that have collected data
+        for metric in metrics_with_data:
             values = [run[metric] for run in runs if metric in run]
             if values:
                 aggregated[framework][metric] = sum(values) / len(values)
     
     # Best performers section
     lines.extend([
-        "### 🏆 Best Performers (Reliable Metrics)",
+        "### 🏆 Best Performers",
         ""
     ])
     
@@ -810,8 +1084,15 @@ def _generate_cost_analysis(
         from src.utils.cost_calculator import CostCalculator
         from src.utils.metrics_config import get_metrics_config
         
-        # Get model from config
-        model = config.get('model', 'gpt-4o-mini')
+        # Get model from config (strict validation)
+        if 'model' not in config:
+            raise ConfigValidationError(
+                "Missing 'model' in cost analysis config. "
+                "Model name is required for cost calculations. "
+                "This should be passed from the main config."
+            )
+        model = config['model']
+        
         try:
             calc = CostCalculator(model)
             
@@ -943,214 +1224,6 @@ def _generate_cost_analysis(
     return lines
 
 
-def _generate_limitations_section(
-    config: Dict[str, Any],
-    run_counts: Dict[str, int],
-    metrics_config
-) -> List[str]:
-    """
-    Generate limitations section with auto-generated metric lists.
-    
-    Reads excluded_metrics from metrics config to auto-generate
-    lists of unmeasured and partially measured metrics.
-    
-    Args:
-        config: Section configuration from experiment.yaml
-        run_counts: Dictionary of run counts per framework
-        metrics_config: MetricsConfig instance
-        
-    Returns:
-        List of markdown lines for limitations section
-    """
-    lines = []
-    
-    # Read configuration
-    title = config.get('title', '## 8. Limitations and Future Work')
-    subsections = config.get('subsections', [])
-    
-    lines.extend([
-        title,
-        "",
-        "### 🔬 Scientific Honesty Statement",
-        "",
-        "This report focuses on **reliably measured metrics only** to maintain scientific integrity. Several metrics are excluded from analysis due to measurement limitations:",
-        ""
-    ])
-    
-    # Get excluded metrics from config
-    excluded_metrics = metrics_config.get_excluded_metrics()
-    
-    # Separate by status
-    unmeasured = {k: v for k, v in excluded_metrics.items() if v.get('status') == 'not_measured'}
-    partial = {k: v for k, v in excluded_metrics.items() if v.get('status') == 'partial_measurement'}
-    
-    # Generate subsections based on config
-    for subsection in subsections:
-        subsection_name = subsection.get('name', '')
-        subsection_title = subsection.get('title', '')
-        
-        if subsection_name == 'unmeasured_metrics' and unmeasured:
-            lines.extend([
-                f"### {subsection_title}",
-                ""
-            ])
-            
-            # List metric names
-            metric_names = [f"**{v.get('name', k)}** ({k})" for k, v in unmeasured.items()]
-            lines.append(", ".join(metric_names))
-            lines.extend(["", "**Status**: Always show zero values", ""])
-            
-            # Group by common reason if possible
-            quality_metrics = {k: v for k, v in unmeasured.items() 
-                              if 'quality' in v.get('reason', '').lower() or 
-                              'server' in v.get('reason', '').lower()}
-            
-            if quality_metrics:
-                lines.extend([
-                    "**Reason**: Generated applications are **not executed** during experiments. These metrics require:",
-                    "- Starting application servers (`uvicorn`, `flask run`, etc.)",
-                    "- Testing CRUD endpoints via HTTP requests",
-                    "- Measuring runtime behavior and error rates",
-                    "",
-                    "**Current Scope**: This experiment measures **code generation efficiency** (tokens, time, API usage), not **runtime code quality**.",
-                    "",
-                    "**Implementation Required**: Server startup automation, endpoint testing framework, error detection (estimated 20-40 hours)",
-                    "",
-                    "**Documentation**: See `docs/QUALITY_METRICS_INVESTIGATION.md` for complete analysis",
-                    ""
-                ])
-            else:
-                # Generic explanation for other unmeasured metrics
-                lines.extend([
-                    "**Reason**: Measurement infrastructure not yet implemented.",
-                    ""
-                ])
-                for k, v in unmeasured.items():
-                    lines.append(f"- **{k}**: {v.get('reason', 'Not measured')}")
-                lines.append("")
-        
-        elif subsection_name == 'partially_measured' and partial:
-            lines.extend([
-                f"### {subsection_title}",
-                ""
-            ])
-            
-            # List metric names
-            metric_names = [f"**{v.get('name', k)}** ({k})" for k, v in partial.items()]
-            lines.append(", ".join(metric_names))
-            lines.extend(["", "**Status**: Measured for ChatDev/GHSpec, NOT measured for BAEs", ""])
-            
-            lines.extend([
-                "**Reason**: These metrics depend on Human-in-the-Loop (HITL) event detection:",
-                "",
-                "| Framework | Detection Method | Status |",
-                "|-----------|-----------------|---------|",
-                "| ChatDev | 5 regex patterns in logs | ✅ Reliable |",
-                "| GHSpec | `[NEEDS CLARIFICATION:]` marker | ✅ Reliable |",
-                "| BAEs | Hardcoded to zero (no detection) | ❌ Unreliable |",
-                "",
-                "**Scientific Implication**: Comparisons involving BAEs for these metrics are **methodologically unsound**. BAEs values (AUTR=1.0, HIT=0) are assumptions, not measurements.",
-                "",
-                "**Validation**: Manual investigation of 23 BAEs runs confirmed zero HITL events for this specific experiment (see `docs/baes/BAES_HITL_INVESTIGATION.md`), but future experiments with ambiguous requirements may miss HITL events.",
-                "",
-                "**Implementation Required**: BAEs HITL detection mechanism (estimated 8-12 hours)",
-                ""
-            ])
-        
-        elif subsection_name == 'future_work':
-            lines.extend([
-                f"### {subsection_title}",
-                ""
-            ])
-            
-            # Priority 1: Quality metrics (if unmeasured)
-            if unmeasured:
-                lines.extend([
-                    "**Priority 1: Quality Metrics Implementation (High Impact)**",
-                    "- Implement automated server startup for generated applications",
-                    "- Create endpoint testing framework for CRUD validation",
-                ])
-                unmeasured_names = [k for k in unmeasured.keys()]
-                lines.append(f"- Enable {', '.join(unmeasured_names)} measurement")
-                lines.extend([
-                    "- **Benefit**: Enables runtime quality comparison",
-                    "- **Effort**: 20-40 hours",
-                    ""
-                ])
-            
-            # Priority 2: HITL detection (if partial)
-            if partial:
-                lines.extend([
-                    "**Priority 2: BAEs HITL Detection (Scientific Integrity)**",
-                    "- Implement HITL detection in BAEs adapter",
-                ])
-                partial_names = [k for k in partial.keys()]
-                lines.append(f"- Enable reliable {', '.join(partial_names)} measurement")
-                lines.extend([
-                    "- **Benefit**: Methodologically sound autonomy comparisons",
-                    "- **Effort**: 8-12 hours",
-                    ""
-                ])
-            
-            # Priority 3 & 4: Generic
-            lines.extend([
-                "**Priority 3: Extended Metrics (Additional Insights)**",
-                "- Cost efficiency: Dollar cost per task (tokens × pricing)",
-                "- Latency analysis: P50/P95/P99 response times",
-                "- Resource efficiency: Memory/CPU usage",
-                "- **Benefit**: Practical deployment considerations",
-                "- **Effort**: 12-20 hours",
-                "",
-                "**Priority 4: Experiment Scaling (Statistical Power)**",
-                f"- Increase sample size beyond current {sum(run_counts.values())} runs",
-                "- Achieve statistical significance (current p-values > 0.05 for most comparisons)",
-                "- Narrow confidence intervals",
-                "- **Benefit**: Conclusive statistical evidence",
-                "- **Effort**: Compute time only (automated)",
-                ""
-            ])
-        
-        elif subsection_name == 'conclusions':
-            lines.extend([
-                f"### {subsection_title}",
-                "",
-                "**From Reliable Metrics (High Confidence):**",
-                "- Token consumption patterns (TOK_IN, TOK_OUT)",
-                "- Execution time characteristics (T_WALL, ZDI)",
-                "- API call efficiency (API_CALLS, batching strategies)",
-                "- Cache adoption (CACHED_TOKENS, hit rates)",
-                "",
-                "**What We CANNOT Conclude:**",
-            ])
-            
-            if unmeasured:
-                unmeasured_names = [k for k in unmeasured.keys()]
-                lines.append(f"- Runtime code quality ({', '.join(unmeasured_names)} not measured)")
-            
-            if partial:
-                lines.append("- BAEs autonomy level (AUTR, HIT hardcoded, not detected)")
-                lines.append("- Framework automation efficiency involving BAEs (AEI unreliable)")
-            
-            lines.extend([
-                "",
-                "**Recommendations for Users:**",
-                "1. **Use reliable metrics** (tokens, time, API calls) for framework comparison",
-            ])
-            
-            if partial:
-                lines.append("2. **Do not compare AUTR/AEI** across frameworks until BAEs detection implemented")
-            
-            if unmeasured:
-                lines.append("3. **Validate quality manually** if runtime correctness is critical")
-            
-            lines.extend([
-                "4. **Monitor future updates** as quality metrics implementation progresses",
-                ""
-            ])
-    
-    lines.extend(["---", ""])
-    
-    return lines
 
 
 def _is_section_enabled(section_name: str, report_sections: List[Dict[str, Any]]) -> bool:
@@ -1221,14 +1294,57 @@ def generate_statistical_report(
     from pathlib import Path
     from src.utils.metrics_config import get_metrics_config
     
-    # Load metrics config for section ordering
+    # Load metrics config (singleton - shared across calls)
+    metrics_config = get_metrics_config()
+    
+    # Load report sections ordering
     try:
-        metrics_config = get_metrics_config()
         report_sections = metrics_config.get_report_sections()
         logger.info(f"Loaded {len(report_sections)} enabled report sections from config")
     except Exception as e:
         logger.warning(f"Failed to load report sections from config: {e}. Using default ordering.")
         report_sections = []  # Will generate all sections in default order
+    
+    # ============================================================================
+    # PHASE 5 (User Story 3): Fail-Fast Validation - Early Metrics Discovery
+    # ============================================================================
+    # Validate metrics immediately after loading config to fail fast on mismatches.
+    # This blocks all report generation if unknown metrics found in data.
+    # ============================================================================
+    
+    # Auto-discover metrics from frameworks_data to validate early
+    all_data_metrics: Set[str] = set()
+    for runs in frameworks_data.values():
+        for run in runs:
+            all_data_metrics.update(run.keys())
+    
+    # Get configured metrics
+    config_metrics = set(metrics_config.get_all_metrics().keys())
+    
+    # Fail-fast validation: all data metrics must exist in config
+    unknown_metrics = all_data_metrics - config_metrics
+    if unknown_metrics:
+        raise MetricsValidationError(
+            f"Unknown metrics found in run data: {sorted(unknown_metrics)}\n\n"
+            f"These metrics appear in the data but are not defined in experiment.yaml metrics section.\n\n"
+            f"Possible causes:\n"
+            f"  1. Typo in metric key (keys are case-sensitive)\n"
+            f"  2. Missing metric definition in config/experiment.yaml\n"
+            f"  3. Outdated run data from different experiment\n\n"
+            f"To fix:\n"
+            f"  1. Add missing metric definitions to experiment.yaml under 'metrics:'\n"
+            f"  2. Or remove these metrics from run data files\n"
+            f"  3. Or check for spelling errors\n\n"
+            f"Configured metrics: {sorted(config_metrics)}\n\n"
+            f"See docs/CONFIG_MIGRATION_GUIDE.md for metric definition examples."
+        )
+    
+    # Partition metrics: with data vs without data
+    metrics_with_data = all_data_metrics & config_metrics
+    metrics_without_data = config_metrics - all_data_metrics
+    
+    logger.info(f"Early validation passed: {len(metrics_with_data)} metrics with data, "
+                f"{len(metrics_without_data)} without data")
     
     # ============================================================================
     # PHASE 9: Strict Configuration Validation Helpers
@@ -1382,15 +1498,15 @@ def generate_statistical_report(
         fw_desc = framework_descriptions.get(fw_key, {})
         
         # Extract repo URL (STRICT - required)
-        repo_url = fw_config['repo_url']
+        repo_url = _require_config_value(fw_config, 'repo_url', f'frameworks.{fw_key}')
         repo_display = repo_url.replace('https://github.com/', '').replace('.git', '') if repo_url else 'N/A'
         
         # Extract commit hash (STRICT - required)
-        commit_hash = fw_config['commit_hash']
+        commit_hash = _require_config_value(fw_config, 'commit_hash', f'frameworks.{fw_key}')
         commit_short = commit_hash[:7] if len(commit_hash) >= 7 else commit_hash
         
         # Extract API key env var (STRICT - required)
-        api_key_env = fw_config['api_key_env']
+        api_key_env = _require_config_value(fw_config, 'api_key_env', f'frameworks.{fw_key}')
         
         framework_metadata[fw_key] = {
             'key': fw_key,
@@ -1472,6 +1588,9 @@ def generate_statistical_report(
     total_runs = sum(run_counts.values())
     run_counts_str = ', '.join([f"{fw}: {count}" for fw, count in run_counts.items()])
     
+    # Note: Metrics discovery and validation already performed at function start (Phase 5)
+    # Variables available: metrics_with_data, metrics_without_data, all_data_metrics
+    
     # Start markdown document
     lines = [
         "# Statistical Analysis Report",
@@ -1481,6 +1600,8 @@ def generate_statistical_report(
         f"**Frameworks:** {', '.join(frameworks_data.keys())}",
         "",
         f"**Sample Size:** {total_runs} total runs ({run_counts_str})",
+        f"",
+        f"**Measured Metrics:** {len(metrics_with_data)} metrics with collected data",
         "",
         "---",
         ""
@@ -1912,141 +2033,24 @@ def generate_statistical_report(
         ""
     ])
     
-    # Add Metric Glossary - Split into 3 Tables for Clarity
+    # Add Metric Glossary - Unified Table with Auto-Discovered Limitations
     lines.extend([
         "## Metric Definitions",
         "",
-        "### ✅ Reliably Measured Metrics",
+        "### ✅ Measured Metrics (Collected Data)",
         "",
-        "These metrics have consistent measurement across all frameworks with authoritative data sources:",
+        "These metrics have data collected during this experiment:",
         ""
     ])
     
-    # Generate reliable metrics table from config
-    lines.extend(_generate_metric_table_from_config(metrics_config, 'reliable'))
+    # Generate table for metrics with data
+    lines.extend(_generate_metric_table_from_config(metrics_config, metrics_with_data))
+    
+    # Add dynamic limitations section for metrics without data
+    if metrics_without_data:
+        lines.extend(_generate_limitations_section(metrics_config, metrics_without_data))
     
     lines.extend([
-        "",
-        "**New Metrics Added (Oct 2025)**:",
-        "- **API_CALLS**: Measures call efficiency - lower values indicate better batching and fewer retries",
-        "- **CACHED_TOKENS**: Represents cost savings (~50% discount on cached tokens)",
-        "- **Cache Hit Rate**: Calculated as `(CACHED_TOKENS / TOK_IN) × 100%` - measures prompt reuse efficiency",
-        "",
-        "### ⚠️ Partially Measured Metrics",
-        "",
-        "These metrics have **inconsistent measurement** across frameworks due to implementation gaps:",
-        "",
-        "| Metric | Full Name | ChatDev | GHSpec | BAEs | Issue |",
-        "|--------|-----------|---------|--------|------|-------|",
-        "| **AUTR** | Automated User Testing Rate | ✅ | ✅ | ❌ | BAEs: No HITL detection |",
-        "| **AEI** | Automation Efficiency Index | ✅ | ✅ | ❌ | Depends on AUTR |",
-        "| **HIT** | Human-in-the-Loop Count | ✅ | ✅ | ❌ | BAEs: Hardcoded to 0 |",
-        "| **HEU** | Human Effort Units | ✅ | ✅ | ❌ | Depends on HIT |",
-        "",
-        "**HITL Detection Methods:**",
-        "- **ChatDev**: 5 regex patterns detect clarification requests in logs (lines 821-832 in adapter)",
-        "- **GHSpec**: Explicit `[NEEDS CLARIFICATION:]` marker detection (line 544 in adapter)",
-        "- **BAEs**: ❌ No detection implemented - hardcoded to zero (lines 330, 348 in adapter)",
-        "",
-        "**Scientific Implication**: AUTR and AEI values for **BAEs are not reliable**. HITL events (if they occur) would not be detected. Current values (AUTR=1.0, HIT=0) may be accurate for this specific experiment but cannot be verified. Manual investigation of 23 BAEs runs confirmed zero HITL events (see `docs/baes/BAES_HITL_INVESTIGATION.md`), but future experiments with ambiguous requirements may miss HITL events.",
-        "",
-        "### ❌ Unmeasured Metrics",
-        "",
-        "These metrics **always show zero values** because runtime validation is not performed:",
-        ""
-    ])
-    
-    # Generate unmeasured metrics table from config
-    lines.extend(_generate_metric_table_from_config(metrics_config, 'excluded'))
-    
-    lines.extend([
-        "",
-        "**Why Unmeasured?** Generated applications are not started during experiments (`auto_restart_servers: false` in config). Validation requires:",
-        "1. Running application servers (`uvicorn`, `flask run`, etc.)",
-        "2. Testing CRUD endpoints (`http://localhost:8000-8002`)",
-        "3. Measuring runtime behavior and error rates",
-        "",
-        "**Current Experiment Scope**: Measures **code generation efficiency** (tokens, time, automation), not **runtime code quality**. See `docs/QUALITY_METRICS_INVESTIGATION.md` for implementation details and `docs/RELIABLE_METRICS_IMPLEMENTATION_PLAN.md` for future work roadmap.",
-        "",
-        "### 🔍 HITL Detection Implementation Notes",
-        "",
-        "**Human-in-the-Loop (HITL) Detection** varies significantly across frameworks due to architectural differences:",
-        "",
-        "#### **ChatDev Adapter** ✅ Active Detection",
-        "- **Method**: Pattern-based log analysis with 5 regex patterns",
-        "- **Patterns Detected**:",
-        "  - `clarif(y|ication)` - Explicit clarification requests",
-        "  - `ambiguous|unclear` - Ambiguity indicators",
-        "  - `need.*input|require.*input` - Direct input requests",
-        "  - `cannot proceed|blocked` - Execution blockers",
-        "  - `manual.*intervention` - Manual intervention flags",
-        "- **Implementation**: `src/adapters/chatdev_adapter.py` (lines 821-832)",
-        "- **Status**: ✅ Actively detecting HITL events in ChatDev logs",
-        "",
-        "#### **GHSpec Adapter** ✅ Active Detection",
-        "- **Method**: Explicit marker detection",
-        "- **Pattern**: `[NEEDS CLARIFICATION:]` in framework output",
-        "- **Rationale**: GHSpec uses standardized markers for human interaction points",
-        "- **Implementation**: `src/adapters/ghspec_adapter.py` (line 544)",
-        "- **Status**: ✅ Actively detecting HITL events via GHSpec markers",
-        "",
-        "#### **BAEs Adapter** ❌ No Detection Implemented",
-        "- **Current Implementation**: `hitl_count` hardcoded to `0` (lines 330 & 348 in `src/adapters/baes_adapter.py`)",
-        "- **Scientific Implication**: **HITL-based metrics (HIT, AUTR, AEI, HEU) are not reliably measured for BAEs**",
-        "  - Cannot detect if HITL events occur during execution",
-        "  - Current values (HIT=0, AUTR=1.0) are **assumptions**, not measurements",
-        "  - Results may appear artificially high (perfect autonomy) regardless of actual behavior",
-        "",
-        "- **Observational Evidence** (October 2025 - Informational Only):",
-        "  - Manual review of 23 BAEs runs found no clarification patterns in logs",
-        "  - Suggests BAEs likely operates autonomously for this specific task domain",
-        "  - However, this is **not a substitute for proper instrumentation**",
-        "",
-        "- **Why Hardcoded Zero Is Insufficient**:",
-        "  - ❌ Not scientifically verifiable - no measurement mechanism",
-        "  - ❌ Cannot distinguish \"no HITL events\" from \"events not detected\"",
-        "  - ❌ Prevents valid comparison with ChatDev and GHSpec (which have detection)",
-        "  - ❌ May hide issues in future experiments with different task types",
-        "",
-        "- **Required Future Work**: Implement BAEs-specific HITL detection:",
-        "  - Add pattern matching for: `clarification`, `ambiguous`, `cannot determine`, `unclear`",
-        "  - Search kernel output logs for entity communication failures",
-        "  - Track request-response validation errors",
-        "  - Update lines 330 & 348 to use detected count instead of hardcoded zero",
-        "",
-        "#### **Impact on Experimental Validity**",
-        "",
-        "**Metric Reliability by Framework**:",
-        "",
-        "| Framework | HITL Detection | HIT Reliability | AUTR Reliability | AEI Reliability |",
-        "|-----------|----------------|-----------------|------------------|-----------------|",
-        "| ChatDev   | ✅ Implemented | ✅ Measured     | ✅ Measured      | ✅ Measured     |",
-        "| GHSpec    | ✅ Implemented | ✅ Measured     | ✅ Measured      | ✅ Measured     |",
-        "| BAEs      | ❌ Not Implemented | ❌ Hardcoded (0) | ❌ Assumed (1.0) | ❌ Unreliable |",
-        "",
-        "**Interpretation Guidelines**:",
-        "",
-        "1. **For ChatDev and GHSpec**: AUTR=1.0 is a **verified measurement** (active detection confirmed no HITL events)",
-        "",
-        "2. **For BAEs**: AUTR=1.0 is an **unverified assumption** (no detection mechanism)",
-        "   - May be accurate (manual review suggests it is for current tasks)",
-        "   - Cannot be scientifically confirmed without proper instrumentation",
-        "   - **Should not be directly compared** with ChatDev/GHSpec AUTR values",
-        "",
-        "3. **Cross-Framework Comparisons**:",
-        "   - ✅ **Valid**: TOK_IN, TOK_OUT, T_WALL, API_CALLS, CACHED_TOKENS (all properly measured)",
-        "   - ⚠️ **Questionable**: AUTR, AEI comparisons involving BAEs (measurement method inconsistent)",
-        "   - ❌ **Invalid**: Claims about BAEs autonomy superiority (not measured, only assumed)",
-        "",
-        "**Critical Limitation for This Experiment**:",
-        "- AUTR and AEI comparisons are **methodologically unsound** when BAEs is included",
-        "- Recommendation: **Report BAEs AUTR/AEI as \"Not Measured\"** or clearly mark as estimated",
-        "- Alternative: Focus comparisons on **reliably measured metrics** (tokens, time, API calls)",
-        "",
-        "**Documentation References**:",
-        "- Full adapter analysis: `AUTR_ADAPTER_ANALYSIS.md`",
-        "- BAEs investigation report: `BAES_HITL_INVESTIGATION.md`",
-        "- Adapter implementations: `src/adapters/` (all three adapters)",
         "",
         "---",
         ""
@@ -2126,37 +2130,28 @@ def generate_statistical_report(
     ])
     
     # Add Executive Summary
-    lines.extend(_generate_executive_summary(frameworks_data, run_counts))
-    
-    # Collect all metrics
-    all_metrics = set()
-    for runs in frameworks_data.values():
-        for run in runs:
-            all_metrics.update(run.keys())
-    
-    all_metrics = sorted(all_metrics)
+    lines.extend(_generate_executive_summary(frameworks_data, run_counts, metrics_with_data))
     
     # Get metrics for analysis from config
-    # Read from aggregate_statistics section config, fallback to reliable metrics from MetricsConfig
+    # Read from aggregate_statistics section config, fallback to all metrics with data
     aggregate_stats_section = metrics_config.get_report_section('aggregate_statistics')
     if aggregate_stats_section and 'metrics' in aggregate_stats_section:
         # Use metrics list from aggregate_statistics section
         metrics_for_analysis = aggregate_stats_section['metrics']
         logger.info(f"Using metrics from aggregate_statistics config: {metrics_for_analysis}")
     else:
-        # Fallback: use all reliable metrics from MetricsConfig
-        reliable_metrics = metrics_config.get_reliable_metrics()
-        metrics_for_analysis = sorted(reliable_metrics.keys())
-        logger.warning(
+        # Fallback: use all metrics that have data (auto-discovered)
+        metrics_for_analysis = sorted(metrics_with_data)
+        logger.info(
             f"No metrics list in aggregate_statistics config, "
-            f"using all reliable metrics: {metrics_for_analysis}"
+            f"using all metrics with data: {metrics_for_analysis}"
         )
     
     # Filter to only include metrics that exist in the data
-    metrics_for_analysis = [m for m in metrics_for_analysis if m in all_metrics]
+    metrics_for_analysis = [m for m in metrics_for_analysis if m in metrics_with_data]
     
     logger.info(f"Metrics for analysis (filtered by availability): {metrics_for_analysis}")
-    logger.info(f"Excluded metrics (not in analysis list): {sorted(set(all_metrics) - set(metrics_for_analysis))}")
+    logger.info(f"Excluded metrics (not in analysis list): {sorted(metrics_with_data - set(metrics_for_analysis))}")
     
     # Section 1: Aggregate Statistics (Reliable Metrics Only)
     lines.extend([
@@ -2213,9 +2208,9 @@ def generate_statistical_report(
                 ci_lower = stats['ci_lower']
                 ci_upper = stats['ci_upper']
                 
-                # Format values with units
-                formatted_mean = _format_metric_value(metric, mean, include_units=False)
-                formatted_ci = _format_confidence_interval(ci_lower, ci_upper, metric)
+                # Format values with units using MetricDefinition
+                formatted_mean = _format_metric_value(metric, mean, metrics_config, include_units=False)
+                formatted_ci = _format_confidence_interval(ci_lower, ci_upper, metric, metrics_config)
                 
                 # Add performance indicator if enabled
                 indicator = ""
@@ -2238,8 +2233,8 @@ def generate_statistical_report(
     cost_config = metrics_config.get_report_section('cost_analysis')
     if cost_config and cost_config.get('enabled', False):
         logger.info("Generating cost analysis section")
-        # Pass the full config dict to access model pricing
-        cost_config_with_model = {**cost_config, 'model': config.get('model', 'gpt-4o-mini')}
+        # Pass model_name with section config for pricing calculations
+        cost_config_with_model = {**cost_config, 'model': model_name}
         cost_lines = _generate_cost_analysis(frameworks_data, cost_config_with_model)
         lines.extend(cost_lines)
     else:
@@ -2606,15 +2601,6 @@ def generate_statistical_report(
     
     lines.extend(["", ""])
     
-    # Section 8: Limitations and Future Work (Config-driven)
-    lim_config = metrics_config.get_report_section('limitations')
-    if not lim_config or not lim_config.get('enabled', True):
-        logger.info("Limitations section disabled by config")
-    else:
-        logger.info("Generating limitations section from config")
-        limitations_lines = _generate_limitations_section(lim_config, run_counts, metrics_config)
-        lines.extend(limitations_lines)
-    
     # Write to file
     output_path_obj = Path(output_path)
     output_path_obj.parent.mkdir(parents=True, exist_ok=True)
@@ -2741,68 +2727,58 @@ def _mann_whitney_u_test(group1: List[float], group2: List[float]) -> float:
     return p_value
 
 
-def _generate_metric_table_from_config(metrics_config, category: str = 'reliable') -> List[str]:
+def _generate_metric_table_from_config(
+    metrics_config: MetricsConfig,
+    metrics_with_data: Set[str]
+) -> List[str]:
     """
     Generate metric definition table from MetricsConfig.
     
+    Only includes metrics that have collected data in the experiment.
+    Metrics are grouped by category with headers.
+    
     Args:
         metrics_config: MetricsConfig instance
-        category: 'reliable', 'derived', or 'excluded'
+        metrics_with_data: Set of metric keys that have collected data
         
     Returns:
         List of markdown lines for the metric table
     """
     lines = []
     
-    if category == 'reliable':
-        metrics = metrics_config.get_reliable_metrics()
+    # Get all metrics and filter to only those with data
+    all_metrics = metrics_config.get_all_metrics()
+    metrics_to_show = {
+        key: metric for key, metric in all_metrics.items()
+        if key in metrics_with_data
+    }
+    
+    # Group by category
+    by_category = defaultdict(dict)
+    for key, metric in metrics_to_show.items():
+        by_category[metric.category][key] = metric
+    
+    # Generate table with category headers
+    for category in sorted(by_category.keys()):
+        # Add category header
         lines.extend([
-            "| Metric | Full Name | Description | Range | Ideal | Data Source |",
-            "|--------|-----------|-------------|-------|-------|-------------|"
+            "",
+            f"**{category.title()} Metrics**",
+            "",
+            "| Metric | Full Name | Description | Unit | Ideal | Data Source |",
+            "|--------|-----------|-------------|------|-------|-------------|"
         ])
         
-        for key, metric in sorted(metrics.items()):
+        # Add metrics in this category (sorted by key)
+        for key in sorted(by_category[category].keys()):
+            metric = by_category[category][key]
+            
             # Determine ideal direction symbol
             ideal_symbol = "Lower ↓" if metric.ideal_direction == 'minimize' else "Higher ↑"
             
-            # Determine range based on unit
-            range_str = "0-∞" if metric.unit in ['tokens', 'seconds', 'count', 'USD'] else "0-1"
-            if key == 'UTT':
-                range_str = "Fixed"
-            
             lines.append(
                 f"| **{key}** | {metric.name} | {metric.description} | "
-                f"{range_str} | {ideal_symbol} | {metric.data_source} |"
-            )
-    
-    elif category == 'excluded':
-        excluded = metrics_config.get_excluded_metrics()
-        lines.extend([
-            "| Metric | Full Name | Status | Reason |",
-            "|--------|-----------|--------|--------|"
-        ])
-        
-        for key, info in sorted(excluded.items()):
-            lines.append(
-                f"| **{key}** | {info.get('name', key)} | "
-                f"{info.get('status', 'Excluded')} | {info.get('reason', 'Not measured')} |"
-            )
-    
-    elif category == 'derived':
-        metrics = metrics_config.get_derived_metrics()
-        lines.extend([
-            "| Metric | Full Name | Description | Calculation | Unit |",
-            "|--------|-----------|-------------|-------------|------|"
-        ])
-        
-        for key, metric in sorted(metrics.items()):
-            calc_formula = ""
-            if metric.calculation:
-                calc_formula = metric.calculation.get('formula', 'See description')
-            
-            lines.append(
-                f"| **{key}** | {metric.name} | {metric.description} | "
-                f"{calc_formula} | {metric.unit} |"
+                f"{metric.unit} | {ideal_symbol} | {metric.data_source} |"
             )
     
     return lines
