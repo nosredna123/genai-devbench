@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import yaml
 
+from .exceptions import ConfigMigrationError
+
 
 @dataclass
 class MetricDefinition:
@@ -31,6 +33,8 @@ class MetricDefinition:
         stopping_rule_eligible: Whether to use in stopping rule evaluation
         visualization_types: List of chart types that can display this metric
         calculation: Optional calculation details for derived metrics
+        status: Optional status (e.g., 'not_implemented') for documentation
+        reason: Optional reason for status (e.g., why metric is not measured)
     """
     key: str
     name: str
@@ -45,6 +49,8 @@ class MetricDefinition:
     stopping_rule_eligible: bool
     visualization_types: List[str] = field(default_factory=list)
     calculation: Optional[Dict[str, Any]] = None
+    status: Optional[str] = None
+    reason: Optional[str] = None
     
     def format_value(self, value: Any) -> str:
         """
@@ -113,13 +119,55 @@ class MetricsConfig:
         # Parse metrics into MetricDefinition objects
         self._parse_metrics()
     
+    def _detect_old_config_format(self) -> bool:
+        """
+        Detect if config uses old 3-subsection format.
+        
+        Returns:
+            True if old format detected (has reliable_metrics, derived_metrics,
+            or excluded_metrics subsections), False otherwise
+        """
+        metrics_section = self._config.get('metrics', {})
+        old_keys = {'reliable_metrics', 'derived_metrics', 'excluded_metrics'}
+        return bool(old_keys & set(metrics_section.keys()))
+    
+    def _validate_config_format(self) -> None:
+        """
+        Validate config uses new unified format.
+        
+        Raises:
+            ConfigMigrationError: If old 3-subsection format is detected
+        """
+        if self._detect_old_config_format():
+            raise ConfigMigrationError(
+                "Detected old config format with reliable_metrics/derived_metrics/excluded_metrics subsections.\n"
+                "Please migrate to new unified format. See docs/CONFIG_MIGRATION_GUIDE.md\n\n"
+                "Quick migration:\n"
+                "  OLD: metrics:\n"
+                "         reliable_metrics:\n"
+                "           TOK_IN: {...}\n"
+                "  NEW: metrics:\n"
+                "         TOK_IN: {...}\n"
+            )
+    
     def _parse_metrics(self) -> None:
-        """Parse metrics section into MetricDefinition objects."""
+        """
+        Parse unified metrics section into MetricDefinition objects.
+        
+        Raises:
+            ConfigMigrationError: If old 3-subsection format detected
+        """
+        # Validate format first
+        self._validate_config_format()
+        
         metrics_section = self._config.get('metrics', {})
         
-        # Parse reliable metrics
-        reliable = metrics_section.get('reliable_metrics', {})
-        for key, data in reliable.items():
+        # Parse unified metrics section (not subsections)
+        for key, data in metrics_section.items():
+            # Skip non-dict entries (like categories list if present)
+            if not isinstance(data, dict):
+                continue
+                
             self._metrics[key] = MetricDefinition(
                 key=key,
                 name=data.get('name', key),
@@ -132,53 +180,15 @@ class MetricsConfig:
                 display_format=data.get('display_format', '{:.2f}'),
                 statistical_test=data.get('statistical_test', False),
                 stopping_rule_eligible=data.get('stopping_rule_eligible', False),
-                visualization_types=data.get('visualization_types', [])
-            )
-        
-        # Parse derived metrics
-        derived = metrics_section.get('derived_metrics', {})
-        for key, data in derived.items():
-            self._metrics[key] = MetricDefinition(
-                key=key,
-                name=data.get('name', key),
-                description=data.get('description', ''),
-                unit=data.get('unit', ''),
-                category=data.get('category', 'unknown'),
-                ideal_direction=data.get('ideal_direction', 'minimize'),
-                data_source=data.get('data_source', 'calculated'),
-                aggregation=data.get('aggregation', 'calculated'),
-                display_format=data.get('display_format', '{:.2f}'),
-                statistical_test=data.get('statistical_test', False),
-                stopping_rule_eligible=data.get('stopping_rule_eligible', False),
                 visualization_types=data.get('visualization_types', []),
-                calculation=data.get('calculation')
+                calculation=data.get('calculation'),
+                status=data.get('status'),
+                reason=data.get('reason')
             )
-    
-    def get_reliable_metrics(self) -> Dict[str, MetricDefinition]:
-        """
-        Get all reliable metrics (directly measured).
-        
-        Returns:
-            Dictionary mapping metric keys to definitions
-        """
-        metrics_section = self._config.get('metrics', {})
-        reliable_keys = metrics_section.get('reliable_metrics', {}).keys()
-        return {k: v for k, v in self._metrics.items() if k in reliable_keys}
-    
-    def get_derived_metrics(self) -> Dict[str, MetricDefinition]:
-        """
-        Get all derived metrics (calculated from other metrics).
-        
-        Returns:
-            Dictionary mapping metric keys to definitions
-        """
-        metrics_section = self._config.get('metrics', {})
-        derived_keys = metrics_section.get('derived_metrics', {}).keys()
-        return {k: v for k, v in self._metrics.items() if k in derived_keys}
     
     def get_all_metrics(self) -> Dict[str, MetricDefinition]:
         """
-        Get all metrics (reliable + derived).
+        Get all metrics (unified section).
         
         Returns:
             Dictionary mapping metric keys to definitions
@@ -236,6 +246,32 @@ class MetricsConfig:
             if metric.category == category
         }
     
+    def get_metrics_by_filter(self, **filters) -> Dict[str, MetricDefinition]:
+        """
+        Flexible filtering by any MetricDefinition attribute.
+        
+        Args:
+            **filters: Attribute name/value pairs to filter by
+            
+        Returns:
+            Dictionary of metrics matching all filters
+            
+        Examples:
+            >>> config.get_metrics_by_filter(statistical_test=True)
+            >>> config.get_metrics_by_filter(category='efficiency', aggregation='sum')
+            >>> config.get_metrics_by_filter(data_source='calculated')
+        """
+        result = {}
+        for key, metric in self._metrics.items():
+            # Check if metric matches all filter criteria
+            matches = all(
+                getattr(metric, attr, None) == value
+                for attr, value in filters.items()
+            )
+            if matches:
+                result[key] = metric
+        return result
+    
     def get_visualization_config(self, viz_name: str) -> Optional[Dict[str, Any]]:
         """
         Get configuration for a specific visualization.
@@ -257,35 +293,6 @@ class MetricsConfig:
             Dictionary mapping visualization names to their configurations
         """
         return self._config.get('visualizations', {})
-    
-    def get_excluded_metrics(self) -> Dict[str, Dict[str, Any]]:
-        """
-        Get all excluded metrics (unmeasured or partially measured).
-        
-        Returns:
-            Dictionary mapping metric keys to their metadata:
-            {
-                'AUTR': {
-                    'name': 'Autonomy Rate',
-                    'reason': 'Hardcoded HITL detection...',
-                    'status': 'partial_measurement',
-                    'original_formula': '1 - (HIT / 6)'
-                },
-                ...
-            }
-        """
-        metrics_section = self._config.get('metrics', {})
-        return metrics_section.get('excluded_metrics', {})
-    
-    def get_excluded_metrics(self) -> Dict[str, Dict[str, str]]:
-        """
-        Get all excluded metrics with their exclusion reasons.
-        
-        Returns:
-            Dictionary mapping metric keys to exclusion information
-        """
-        metrics_section = self._config.get('metrics', {})
-        return metrics_section.get('excluded_metrics', {})
     
     def get_categories(self) -> List[Dict[str, str]]:
         """

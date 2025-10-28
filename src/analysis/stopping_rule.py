@@ -5,20 +5,22 @@ Implements bootstrap confidence intervals to determine convergence.
 """
 
 import random
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Stopping rule configuration
+# Stopping rule configuration defaults
 MIN_RUNS = 5
 MAX_RUNS = 25
 CI_LEVEL = 0.95
 HALF_WIDTH_THRESHOLD = 0.10  # 10% of mean
 BOOTSTRAP_SAMPLES = 10000
 
-# Metrics to check for convergence
-CONVERGENCE_METRICS = ['AUTR', 'TOK_IN', 'T_WALL', 'CRUDe', 'ESR', 'MC']
+# Default metrics to check for convergence (if not specified in config)
+# NOTE: Prefer passing metrics explicitly via convergence_metrics parameter
+# This list is deprecated and maintained only for backward compatibility
+DEFAULT_CONVERGENCE_METRICS = ['AUTR', 'TOK_IN', 'T_WALL', 'CRUDe', 'ESR', 'MC']
 
 
 def bootstrap_ci(data: List[float], n_bootstrap: int = BOOTSTRAP_SAMPLES, 
@@ -68,7 +70,8 @@ def check_convergence(
     framework: str,
     min_runs: int = MIN_RUNS,
     max_runs: int = MAX_RUNS,
-    half_width_threshold: float = HALF_WIDTH_THRESHOLD
+    half_width_threshold: float = HALF_WIDTH_THRESHOLD,
+    convergence_metrics: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Check if stopping rule is satisfied for a framework.
@@ -84,6 +87,9 @@ def check_convergence(
         min_runs: Minimum number of runs required
         max_runs: Maximum number of runs allowed
         half_width_threshold: Max allowed half-width as fraction of mean
+        convergence_metrics: List of metric keys to check for convergence.
+                           If None, uses DEFAULT_CONVERGENCE_METRICS.
+                           Recommended: pass metrics from config (stopping_rule.metrics)
         
     Returns:
         Dictionary with convergence status:
@@ -98,6 +104,11 @@ def check_convergence(
             }
         }
     """
+    # Use provided metrics or fall back to defaults
+    metrics_to_check = convergence_metrics if convergence_metrics is not None else DEFAULT_CONVERGENCE_METRICS
+    # Use provided metrics or fall back to defaults
+    metrics_to_check = convergence_metrics if convergence_metrics is not None else DEFAULT_CONVERGENCE_METRICS
+    
     n_runs = len(metrics_history)
     
     # Check minimum runs
@@ -124,7 +135,7 @@ def check_convergence(
     convergence_details = {}
     all_converged = True
     
-    for metric in CONVERGENCE_METRICS:
+    for metric in metrics_to_check:
         # Extract metric values from history
         values = []
         for run_metrics in metrics_history:

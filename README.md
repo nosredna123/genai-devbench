@@ -97,6 +97,63 @@ cat runs/latest/summary.json
 
 **See [Config Sets Quick Start](docs/configurable_steps/QUICKSTART_CONFIG_SETS.md) for detailed guide.**
 
+---
+
+## ⚠️ Breaking Changes - Metrics Configuration (v2.0+)
+
+**If you have existing experiment configs**, you need to migrate your metrics configuration to the new unified format.
+
+### What Changed?
+
+The old 3-subsection metrics format has been replaced with a simpler unified format:
+
+**OLD (deprecated):**
+```yaml
+metrics:
+  reliable_metrics:
+    TOK_IN: { name: "Input Tokens", ... }
+  derived_metrics:
+    COST_USD: { name: "Cost", ... }
+  excluded_metrics:
+    MC: { name: "Maintainability", ... }
+```
+
+**NEW (required):**
+```yaml
+metrics:
+  TOK_IN: 
+    name: "Input Tokens"
+    status: measured  # or 'derived', 'unmeasured'
+    reason: "Direct from OpenAI API"  # optional
+    # ... other fields
+  COST_USD:
+    name: "Cost"
+    status: derived
+    reason: "Calculated from token counts"
+  MC:
+    name: "Maintainability"
+    status: unmeasured
+    reason: "Requires static analysis tool integration"
+```
+
+### Migration Required
+
+If you see this error:
+```
+ConfigMigrationError: Old metrics format detected. Found subsections: reliable_metrics, derived_metrics
+```
+
+**→ See [CONFIG_MIGRATION_GUIDE.md](docs/CONFIG_MIGRATION_GUIDE.md)** for step-by-step migration instructions.
+
+### Benefits of New Format
+
+- ✅ **Simpler**: One section instead of three
+- ✅ **More flexible**: `status` field replaces rigid subsections
+- ✅ **Better documentation**: `reason` field explains why metrics are unmeasured
+- ✅ **Auto-generated limitations**: Reports automatically document unmeasured metrics
+
+---
+
 ### Compare Multiple Experiments
 
 ```bash
