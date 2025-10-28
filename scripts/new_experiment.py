@@ -447,6 +447,7 @@ def _merge_experiment_updates(temp_dir: Path, target_dir: Path) -> None:
     Updates:
     - src/ (source code)
     - config/ (configuration and prompts)
+    - analysis/ (analysis notebooks and visualizations)
     - setup.sh, run.sh, reconcile_usage.sh (scripts)
     - requirements.txt (dependencies)
     - README.md (documentation)
@@ -472,6 +473,7 @@ def _merge_experiment_updates(temp_dir: Path, target_dir: Path) -> None:
     items_to_update = [
         'src',
         'config',
+        'analysis',  # Analysis notebooks and visualizations
         'config.yaml',  # Main configuration file with experiment settings
         'setup.sh',
         'run.sh',
