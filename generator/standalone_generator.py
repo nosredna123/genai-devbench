@@ -117,6 +117,10 @@ class StandaloneGenerator:
         print("🔑 Checking for .env file...")
         self._copy_env_file(output_dir)
         
+        # Step 10.5: Generate analysis notebook
+        print("📊 Generating analysis notebook...")
+        self._generate_analysis_notebook(output_dir)
+        
         # Step 11: Initialize git repository
         print("🔄 Initializing git repository...")
         self._initialize_git_repo(output_dir, name)
@@ -607,6 +611,17 @@ if __name__ == '__main__':
             print("  ℹ️  API keys and configuration preserved")
         else:
             print("  ℹ️  No .env file found in generator (will use .env.example)")
+    
+    def _generate_analysis_notebook(self, output_dir: Path) -> None:
+        """Copy run_analysis.ipynb notebook to analysis directory."""
+        source_notebook = self.project_root / 'src' / 'analysis' / 'run_analysis.ipynb'
+        dest_notebook = output_dir / 'analysis' / 'run_analysis.ipynb'
+        
+        if source_notebook.exists():
+            shutil.copy2(source_notebook, dest_notebook)
+            print("  ✓ analysis/run_analysis.ipynb")
+        else:
+            print("  ⚠️  Warning: src/analysis/run_analysis.ipynb not found, skipping")
     
     def _initialize_git_repo(self, output_dir: Path, name: str) -> None:
         """Initialize git repository."""
