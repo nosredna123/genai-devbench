@@ -222,11 +222,12 @@ Each user story phase is independently testable and deliverable.
 
 **Independent Test**: Run a framework execution, wait for reconciliation, verify `metrics.json` aggregate_metrics match OpenAI dashboard
 
-### T005: Fix bucket_width in UsageReconciler [US1]
+### T005: Fix bucket_width in UsageReconciler [US1] ✅
 
 **File**: `src/orchestrator/usage_reconciler.py`  
 **Story**: US1 (Accurate Run-Level Tokens)  
 **Parallelizable**: No (core logic change)
+**Status**: COMPLETE
 
 **Description**: Change `bucket_width` from "1d" to "1m" for minute-level granularity in Usage API queries.
 
@@ -255,11 +256,12 @@ Each user story phase is independently testable and deliverable.
 
 ---
 
-### T006: Add API Key Filtering to UsageReconciler [US1]
+### T006: Add API Key Filtering to UsageReconciler [US1] ✅
 
 **File**: `src/orchestrator/usage_reconciler.py` (same as T005)  
 **Story**: US1 (Accurate Run-Level Tokens)  
 **Parallelizable**: No (sequential after T005, same file)
+**Status**: COMPLETE
 
 **Description**: Add `api_key_ids` parameter to Usage API queries to prevent cross-contamination.
 
@@ -306,11 +308,12 @@ Each user story phase is independently testable and deliverable.
 
 ---
 
-### T007: Remove _reconcile_steps Method [US1]
+### T007: Remove _reconcile_steps Method [US1] ✅
 
 **File**: `src/orchestrator/usage_reconciler.py` (same as T005-T006)  
 **Story**: US1 (Accurate Run-Level Tokens)  
 **Parallelizable**: No (sequential after T006, same file)
+**Status**: COMPLETE
 
 **Description**: Delete deprecated `_reconcile_steps()` method since reconciliation is now run-level only.
 
@@ -635,11 +638,12 @@ Each user story phase is independently testable and deliverable.
 
 ---
 
-### T015: Add Progress Indicators to Reconciliation Script [US3]
+### T015: Add Progress Indicators to Reconciliation Script [US3] ✅
 
 **File**: `scripts/reconcile_usage.py`  
 **Story**: US3 (Clear Status Reporting)  
 **Parallelizable**: Yes [P] (different file from T014)
+**Status**: COMPLETE (already implemented with excellent output)
 
 **Description**: Add console output showing reconciliation progress and summary.
 
