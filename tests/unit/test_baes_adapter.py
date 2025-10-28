@@ -319,11 +319,10 @@ class TestStepExecution:
         # Should return a dictionary
         assert isinstance(result, dict)
         
-        # Check all required fields
+        # BREAKING CHANGE v2.0.0: No token fields in execute_step result
+        # Tokens are reconciled post-run, not returned per-step
         assert 'success' in result
         assert 'duration_seconds' in result
-        assert 'tokens_in' in result
-        assert 'tokens_out' in result
         assert 'start_timestamp' in result
         assert 'end_timestamp' in result
         assert 'hitl_count' in result
@@ -332,14 +331,18 @@ class TestStepExecution:
         # Check types
         assert isinstance(result['success'], bool)
         assert isinstance(result['duration_seconds'], float)
-        assert isinstance(result['tokens_in'], int)
-        assert isinstance(result['tokens_out'], int)
         assert isinstance(result['start_timestamp'], int)  # Integer timestamps for API compatibility
         assert isinstance(result['end_timestamp'], int)  # Integer timestamps for API compatibility
+        
+        # Verify NO token fields (breaking change)
+        assert 'tokens_in' not in result
+        assert 'tokens_out' not in result
+        assert 'api_calls' not in result
+        assert 'cached_tokens' not in result
     
     @patch.object(BAeSAdapter, '_execute_kernel_request')
-    def test_execute_step_token_placeholders(self, mock_execute_kernel, adapter):
-        """execute_step should return (0, 0) token placeholders."""
+    def test_execute_step_no_token_fields(self, mock_execute_kernel, adapter):
+        """BREAKING CHANGE v2.0.0: execute_step no longer returns token fields."""
         mock_execute_kernel.return_value = {
             'success': True,
             'result': {}
@@ -347,9 +350,11 @@ class TestStepExecution:
         
         result = adapter.execute_step(1, "test command")
         
-        # Tokens should be placeholders for reconciliation
-        assert result['tokens_in'] == 0
-        assert result['tokens_out'] == 0
+        # Verify NO token fields (tokens reconciled post-run)
+        assert 'tokens_in' not in result
+        assert 'tokens_out' not in result
+        assert 'api_calls' not in result
+        assert 'cached_tokens' not in result
     
     @patch.object(BAeSAdapter, '_execute_kernel_request')
     def test_execute_step_sets_current_step(self, mock_execute_kernel, adapter):
