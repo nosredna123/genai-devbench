@@ -46,9 +46,14 @@ pip install -r requirements.txt
 # Configure API keys
 cp .env.example .env
 # Edit .env with your API keys:
-#   BAES_API_KEY=sk-your-openai-key
-#   CHATDEV_API_KEY=sk-your-openai-key
-#   GHSPEC_API_KEY=ghp_your-github-token
+#   OPENAI_API_KEY_BAES=sk-your-openai-key
+#   OPENAI_API_KEY_CHATDEV=sk-your-openai-key
+#   OPENAI_API_KEY_GHSPEC=sk-your-openai-key
+#
+# IMPORTANT: Also add API Key IDs for usage tracking (find in OpenAI Dashboard > Usage):
+#   OPENAI_API_KEY_BAES_ID=key_XXXXXXXXXXXX
+#   OPENAI_API_KEY_CHATDEV_ID=key_XXXXXXXXXXXX
+#   OPENAI_API_KEY_GHSPEC_ID=key_XXXXXXXXXXXX
 ```
 
 ### Your First Experiment (5 Minutes)

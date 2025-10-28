@@ -579,12 +579,12 @@ ENV/
 .env.local
 
 # Experiment Outputs
-runs/
-analysis/
-*.log
+# runs/
+# analysis/
+# *.log
 
 # Framework Checkouts
-frameworks/
+# frameworks/
 
 # IDE
 .vscode/

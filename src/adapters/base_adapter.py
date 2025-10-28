@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 import subprocess
 import time
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import Any, Dict, Tuple, Optional
@@ -97,63 +98,78 @@ class BaseAdapter(ABC):
         return sprint_path / "logs"
     
     # =============================================================================
-    # Token Metrics (Lazy Evaluation Pattern)
+    # API Key Validation (FR-011: Validate Unique API Keys)
     # =============================================================================
     
-    def fetch_usage_from_openai(
-        self,
-        api_key_env_var: str,
-        start_timestamp: int,
-        end_timestamp: Optional[int] = None,
-        model: Optional[str] = None
-    ) -> Tuple[int, int, int, int]:
+    def validate_api_key(self) -> None:
         """
-        Lazy evaluation stub for token usage collection.
+        Validate framework has unique API key and key ID configured.
         
-        LAZY EVALUATION PATTERN:
-        This method intentionally returns (0, 0, 0, 0) during step execution.
-        Token metrics are collected later by the reconciliation script, which:
-        1. Waits for OpenAI Usage API propagation delay (5-15 minutes)
-        2. Queries usage data for the entire run window
-        3. Attributes tokens to individual steps based on timestamps
-        4. Updates metrics.json with verified counts
+        FAIL-FAST PRINCIPLE: This method enforces strict validation of API key
+        configuration to prevent silent failures and cross-contamination issues.
         
-        This approach:
-        - Avoids silent failures from API propagation delays
-        - Centralizes data collection in one place (DRY principle)
-        - Ensures all metrics go through the same verification process
-        - Prevents blocking step execution on Usage API availability
+        Validates:
+        1. API key exists in environment (e.g., OPENAI_API_KEY_BAES)
+        2. API key ID exists in environment (e.g., OPENAI_API_KEY_BAES_ID)
+        3. API key ID has correct format: key_[A-Za-z0-9]{12,}
         
-        Args:
-            api_key_env_var: Environment variable name containing the OpenAI API key (unused)
-            start_timestamp: Unix timestamp (seconds) when step execution started (unused)
-            end_timestamp: Unix timestamp (seconds) when step execution ended (unused)
-            model: Optional model filter (unused)
+        Raises:
+            KeyError: If API key or API key ID environment variable not found
+            ValueError: If API key ID has invalid format
             
-        Returns:
-            Tuple of (0, 0, 0, 0) - indicating metrics need reconciliation
+        Example:
+            # In adapter's start() method:
+            self.validate_api_key()  # Fails immediately if misconfigured
             
         Note:
-            All adapters (BAeS, ChatDev, GHSpec) use this method for consistency.
-            The reconciliation script (scripts/reconcile_usage.sh) backfills actual data.
+            API key IDs are required for Usage API filtering to prevent
+            cross-contamination when multiple frameworks run simultaneously.
+            Find your API key IDs in OpenAI Dashboard > Usage > API Keys.
         """
-        # LAZY EVALUATION: Return zeros immediately
-        # Token metrics will be collected by reconciliation script after Usage API propagation
+        # Derive framework name from adapter class name
+        # e.g., "BaesAdapter" -> "BAES", "ChatDevAdapter" -> "CHATDEV"
+        framework = self.__class__.__name__.replace('Adapter', '').upper()
+        
+        key_var = f'OPENAI_API_KEY_{framework}'
+        key_id_var = f'OPENAI_API_KEY_{framework}_ID'
+        
+        # Check existence (fail-fast on missing variables)
+        if not os.getenv(key_var):
+            raise KeyError(
+                f"{key_var} environment variable required for {framework} framework. "
+                f"Set this in your .env file (see .env.example)."
+            )
+        
+        if not os.getenv(key_id_var):
+            raise KeyError(
+                f"{key_id_var} environment variable required for Usage API filtering. "
+                f"Find your API key ID in OpenAI Dashboard > Usage > API Keys section."
+            )
+        
+        # Validate key ID format (fail-fast on invalid format)
+        key_id = os.getenv(key_id_var)
+        if not re.match(r'^key_[A-Za-z0-9]{12,}$', key_id):
+            raise ValueError(
+                f"{key_id_var} has invalid format: {key_id}. "
+                f"Expected format: key_[A-Za-z0-9]{{12,}} (e.g., key_ABC123XYZ456)"
+            )
+        
         logger.debug(
-            "Lazy evaluation: returning zero metrics (reconciliation required)",
+            "API key validation successful",
             extra={
                 'run_id': self.run_id,
-                'step': self.current_step,
                 'metadata': {
-                    'start_timestamp': start_timestamp,
-                    'end_timestamp': end_timestamp or int(time.time()),
-                    'window_seconds': (end_timestamp or int(time.time())) - start_timestamp,
-                    'note': 'Metrics will be backfilled by reconciliation script'
+                    'framework': framework,
+                    'key_var': key_var,
+                    'key_id_var': key_id_var,
+                    'key_id': key_id
                 }
             }
         )
-        
-        return 0, 0, 0, 0
+    
+    # =============================================================================
+    # OpenAI API Integration
+    # =============================================================================
     
     def call_openai_chat_completion(
         self,

@@ -47,58 +47,45 @@ class MetricsCollector:
     def record_step(
         self,
         step_num: int,
-        command: str,
         duration_seconds: float,
-        success: bool,
-        retry_count: int,
-        hitl_count: int,
-        tokens_in: int,
-        tokens_out: int,
-        api_calls: int = 0,
-        cached_tokens: int = 0,
-        start_timestamp: Optional[int] = None,
-        end_timestamp: Optional[int] = None
+        start_timestamp: int,
+        end_timestamp: int,
+        hitl_count: int = 0,
+        retry_count: int = 0,
+        success: bool = True
     ) -> None:
         """
         Record metrics for a single step.
         
-        LAZY EVALUATION PATTERN:
-        Token metrics (tokens_in, tokens_out, api_calls, cached_tokens) will be 0 initially.
-        These are backfilled later by the reconciliation script after OpenAI Usage API
-        propagation delay (5-15 minutes). All steps are marked with verification_status='pending'.
+        BREAKING CHANGE (v2.0.0): Token fields removed from step records.
+        Token metrics are now collected only at run level via post-run reconciliation.
+        This eliminates the 36-50% zero-token error caused by OpenAI Usage API's
+        bucket-based attribution system.
         
         Args:
-            step_num: Step number (1-6)
-            command: Natural language command text
-            duration_seconds: Step execution time
-            success: Whether step completed successfully
-            retry_count: Number of retries attempted
-            hitl_count: Number of HITL interventions
-            tokens_in: Input tokens consumed (will be 0 initially, backfilled by reconciliation)
-            tokens_out: Output tokens generated (will be 0 initially, backfilled by reconciliation)
-            api_calls: Number of API calls made to OpenAI (will be 0 initially)
-            cached_tokens: Number of cached input tokens (will be 0 initially)
-            start_timestamp: Unix timestamp when step started (for Usage API reconciliation)
-            end_timestamp: Unix timestamp when step ended (for Usage API reconciliation)
+            step_num: Step number (1-indexed)
+            duration_seconds: Step execution time in seconds
+            start_timestamp: Unix timestamp (seconds) when step started
+            end_timestamp: Unix timestamp (seconds) when step ended
+            hitl_count: Number of HITL interventions (default: 0)
+            retry_count: Number of retries attempted (default: 0)
+            success: Whether step completed successfully (default: True)
+            
+        Note:
+            Token metrics (TOK_IN, TOK_OUT, API_CALLS, CACHED_TOKENS) are now
+            stored only in aggregate_metrics and populated by UsageReconciler
+            after the run completes.
         """
-        # LAZY EVALUATION: Accept zeros for token metrics during execution
-        # Validation is handled by reconciliation script, not during execution
-        
         self.steps_data[step_num] = {
-            'step_number': step_num,
-            'command': command,
+            'step': step_num,
             'duration_seconds': duration_seconds,
-            'success': success,
-            'retry_count': retry_count,
-            'hitl_count': hitl_count,
-            'tokens_in': tokens_in,
-            'tokens_out': tokens_out,
-            'api_calls': api_calls,
-            'cached_tokens': cached_tokens,
             'start_timestamp': start_timestamp,
             'end_timestamp': end_timestamp,
-            'verification_status': 'pending'  # Will be updated by reconciliation script
+            'hitl_count': hitl_count,
+            'retry_count': retry_count,
+            'success': success
         }
+
         
     def compute_interaction_metrics(self) -> Dict[str, float]:
         """
@@ -132,14 +119,18 @@ class MetricsCollector:
         """
         Compute efficiency metrics: TOK_IN, TOK_OUT, API_CALLS, CACHED_TOKENS, T_WALL.
         
+        BREAKING CHANGE (v2.0.0): Token metrics are initialized to zero and populated
+        by post-run reconciliation. Step-level token aggregation removed.
+        
         Returns:
-            Dictionary with efficiency metrics
+            Dictionary with efficiency metrics (tokens will be 0 until reconciliation)
         """
-        # Total tokens
-        tok_in = sum(step['tokens_in'] for step in self.steps_data.values())
-        tok_out = sum(step['tokens_out'] for step in self.steps_data.values())
-        api_calls = sum(step.get('api_calls', 0) for step in self.steps_data.values())
-        cached_tokens = sum(step.get('cached_tokens', 0) for step in self.steps_data.values())
+        # BREAKING CHANGE: Tokens no longer aggregated from steps
+        # Token metrics initialized to 0 (reconciled post-run)
+        tok_in = 0  # Reconciled post-run
+        tok_out = 0  # Reconciled post-run
+        api_calls = 0  # Reconciled post-run
+        cached_tokens = 0  # Reconciled post-run
         
         # Wall-clock time
         if self.start_time and self.end_time:
@@ -276,3 +267,79 @@ class MetricsCollector:
             },
             'cost_breakdown': cost['COST_BREAKDOWN']
         }
+    
+    def save_metrics(
+        self,
+        output_path,
+        run_id: str,
+        framework: str,
+        start_timestamp: int,
+        end_timestamp: int,
+        crude_score: int = 0,
+        esr: float = 0.0,
+        mc: float = 0.0,
+        zdi: int = 0
+    ) -> None:
+        """
+        Save metrics to JSON file with schema validation.
+        
+        BREAKING CHANGE (v2.0.0): Enforces clean schema with fail-fast validation.
+        Steps array MUST NOT contain token fields. Token metrics are stored only
+        in aggregate_metrics and populated by UsageReconciler post-run.
+        
+        Args:
+            output_path: Path to save metrics.json file
+            run_id: Unique run identifier
+            framework: Framework name (baes, chatdev, ghspec)
+            start_timestamp: Run start Unix timestamp
+            end_timestamp: Run end Unix timestamp
+            crude_score: CRUD coverage score (default: 0)
+            esr: Endpoint success rate (default: 0.0)
+            mc: Migration continuity (default: 0.0)
+            zdi: Zero-downtime incidents (default: 0)
+            
+        Raises:
+            ValueError: If steps array contains forbidden token fields
+            
+        Note:
+            Validation runs BEFORE file write (fail-fast principle).
+            No partial writes on validation failure.
+        """
+        import json
+        from pathlib import Path
+        
+        # Get metrics with quality scores
+        metrics = self.get_aggregate_metrics(crude_score, esr, mc, zdi)
+        
+        # Validate schema (fail-fast on violations)
+        forbidden_fields = {'tokens_in', 'tokens_out', 'api_calls', 'cached_tokens'}
+        for step in metrics['steps']:
+            violations = forbidden_fields & step.keys()
+            if violations:
+                raise ValueError(
+                    f"Step {step.get('step', '?')} contains forbidden token fields: {violations}. "
+                    f"Token metrics must be stored only in aggregate_metrics (not in steps array). "
+                    f"This is enforced to prevent the 36-50% zero-token error caused by "
+                    f"OpenAI Usage API's bucket-based attribution system."
+                )
+        
+        # Validation passed - safe to write
+        output_file = Path(output_path)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(metrics, f, indent=2)
+        
+        logger.info(
+            "Metrics saved with clean schema validation",
+            extra={
+                'run_id': run_id,
+                'framework': framework,
+                'metadata': {
+                    'output_path': str(output_path),
+                    'steps_count': len(metrics['steps']),
+                    'schema_version': '2.0.0'
+                }
+            }
+        )
+

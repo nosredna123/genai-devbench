@@ -396,9 +396,6 @@ cat sprint_001/metadata.json
             Dictionary with run results and metadata
         """
 
-        # ensure 1s delay before starting the run to avoid log overlap
-        time.sleep(1)
-
         try:
             # Load configuration
             self.config = load_config(self.config_path)
@@ -597,19 +594,16 @@ cat sprint_001/metadata.json
                                        extra={'run_id': self.run_id, 'sprint': sprint_num})
                     
                     # Record metrics (use original step ID)
+                    # BREAKING CHANGE (v2.0.0): Tokens removed from record_step
+                    # Tokens reconciled post-run via Usage API
                     self.metrics_collector.record_step(
                         step_num=step_config.id,
-                        command=command_text,
                         duration_seconds=result.get('duration_seconds', 0),
-                        success=result.get('success', True),
-                        retry_count=retries,
-                        hitl_count=result.get('hitl_count', 0),
-                        tokens_in=result.get('tokens_in', 0),
-                        tokens_out=result.get('tokens_out', 0),
-                        api_calls=result.get('api_calls', 0),
-                        cached_tokens=result.get('cached_tokens', 0),
                         start_timestamp=result.get('start_timestamp'),
-                        end_timestamp=result.get('end_timestamp')
+                        end_timestamp=result.get('end_timestamp'),
+                        hitl_count=result.get('hitl_count', 0),
+                        retry_count=retries,
+                        success=result.get('success', True)
                     )
                     
                     # Save sprint metadata, metrics, and validation (T012)
@@ -644,9 +638,6 @@ cat sprint_001/metadata.json
                         'execution_time': (sprint_end_time - sprint_start_time).total_seconds()
                     })
                     
-                    # Add a sleep time between sprints to avoid overlap usage data
-                    time.sleep(1)
-                                     
                 except StepTimeoutError as e:
                     step_status = "timeout"
                     step_error = str(e)

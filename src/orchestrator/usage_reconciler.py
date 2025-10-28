@@ -57,19 +57,35 @@ class UsageReconciler:
         framework: Optional[str] = None
     ) -> tuple[int, int, int, int]:
         """
-        Fetch usage data from OpenAI Usage API.
+        Fetch usage data from OpenAI Usage API with minute-level granularity.
+        
+        BREAKING CHANGE (v2.0.0): Uses bucket_width="1m" for minute-level buckets
+        instead of "1d" daily buckets. This eliminates the zero-token bug caused
+        by all sprints on the same day seeing identical daily totals.
+        
+        API KEY FILTERING (v2.0.0): When framework is specified, filters results
+        by framework-specific API key ID to prevent cross-contamination when
+        multiple frameworks run simultaneously.
         
         Uses OPEN_AI_KEY_ADM (which has api.usage.read permission) to query the Usage API.
-        Attribution to specific frameworks is achieved through time window isolation,
-        not API key filtering (api_key_id is null in OpenAI responses).
+        Attribution to specific frameworks is achieved through api_key_ids filtering.
         
         Args:
             start_timestamp: Unix timestamp for start of window
             end_timestamp: Unix timestamp for end of window
-            framework: Framework name (baes, chatdev, ghspec) - for logging only
+            framework: Framework name (baes, chatdev, ghspec) - required for filtering
             
         Returns:
             Tuple of (input_tokens, output_tokens, api_calls, cached_tokens)
+            
+        Raises:
+            KeyError: If framework specified but OPENAI_API_KEY_{FRAMEWORK}_ID not found
+            
+        Note:
+            - bucket_width="1m" provides minute-level granularity (finest available)
+            - limit=1440 allows up to 24 hours of minute buckets per query
+            - Tokens are attributed by completion time (not request time)
+            - api_key_ids parameter filters to framework-specific usage
         """
         # Use OPEN_AI_KEY_ADM for authorization (it has api.usage.read permission)
         # Framework-specific keys (OPENAI_API_KEY_{FRAMEWORK}) are used during generation,
@@ -78,6 +94,20 @@ class UsageReconciler:
         if not api_key:
             logger.warning("OPEN_AI_KEY_ADM not found in environment")
             return 0, 0, 0, 0
+        
+        # Get framework-specific API key ID for filtering (FR-010)
+        # This prevents cross-contamination when multiple frameworks run simultaneously
+        if framework:
+            framework_upper = framework.upper()
+            api_key_id = os.getenv(f'OPENAI_API_KEY_{framework_upper}_ID')
+            if not api_key_id:
+                raise KeyError(
+                    f"OPENAI_API_KEY_{framework_upper}_ID environment variable required for "
+                    f"Usage API filtering. Find your API key ID in OpenAI Dashboard > Usage > API Keys."
+                )
+        else:
+            # Legacy path (no framework specified) - no filtering
+            api_key_id = None
         
         url = "https://api.openai.com/v1/organization/usage/completions"
         headers = {
@@ -89,9 +119,13 @@ class UsageReconciler:
         params = {
             "start_time": int(start_timestamp),
             "end_time": int(end_timestamp),
-            "bucket_width": "1d",
-            "limit": 31
+            "bucket_width": "1m",  # Changed from "1d" - minute-level granularity (FR-005)
+            "limit": 1440  # 24 hours of minute buckets (max for 1m bucket_width)
         }
+        
+        # Add API key filtering if framework specified (FR-010)
+        if api_key_id:
+            params["api_key_ids"] = [api_key_id]
         
         try:
             response = requests.get(url, headers=headers, params=params, timeout=30)
@@ -198,8 +232,63 @@ class UsageReconciler:
                 'verified_at': reconciliation.get('verified_at')
             }
         
-        # 2. Query Usage API for current token counts
-        current_attempt = self._reconcile_steps(metrics, run_id, framework, force)
+        # 2. Query Usage API for run-level token counts (BREAKING CHANGE v2.0.0)
+        # Changed from per-step reconciliation to per-run reconciliation
+        # This eliminates the 36-50% zero-token error caused by bucket misalignment
+        
+        # Get run time window from metrics
+        start_timestamp = None
+        end_timestamp = None
+        
+        # Try to get from steps (use earliest start and latest end)
+        if metrics.get('steps'):
+            timestamps = [
+                (step.get('start_timestamp'), step.get('end_timestamp'))
+                for step in metrics['steps']
+                if step.get('start_timestamp') and step.get('end_timestamp')
+            ]
+            if timestamps:
+                start_timestamp = min(t[0] for t in timestamps)
+                end_timestamp = max(t[1] for t in timestamps)
+        
+        # Fallback to aggregate metrics timestamps
+        if not start_timestamp:
+            start_ts_str = metrics.get('start_timestamp')
+            end_ts_str = metrics.get('end_timestamp')
+            if start_ts_str and end_ts_str:
+                from dateutil import parser
+                start_timestamp = int(parser.parse(start_ts_str).timestamp())
+                end_timestamp = int(parser.parse(end_ts_str).timestamp())
+        
+        if not start_timestamp or not end_timestamp:
+            raise ValueError(f"Cannot determine run time window for {framework}/{run_id}")
+        
+        # Extend query window by 5 minutes on each end (FR-013)
+        # This accounts for OpenAI Usage API's async processing delay
+        BUFFER_SECONDS = 300  # 5 minutes
+        query_start = start_timestamp - BUFFER_SECONDS
+        query_end = end_timestamp + BUFFER_SECONDS
+        
+        # Query Usage API once for entire run
+        tokens_in, tokens_out, api_calls, cached_tokens = self._fetch_usage_from_openai(
+            start_timestamp=query_start,
+            end_timestamp=query_end,
+            framework=framework
+        )
+        
+        # Create current attempt record
+        current_attempt = {
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'total_tokens_in': tokens_in,
+            'total_tokens_out': tokens_out,
+            'total_api_calls': api_calls,
+            'total_cached_tokens': cached_tokens,
+            'query_window': {
+                'start': query_start,
+                'end': query_end,
+                'buffer_seconds': BUFFER_SECONDS
+            }
+        }
         
         # 3. Check verification status against previous attempts
         verification_result = self._check_verification_status(
@@ -264,8 +353,6 @@ class UsageReconciler:
             'status': verification_result['status'],
             'total_tokens_in': total_tokens_in,
             'total_tokens_out': total_tokens_out,
-            'steps_with_tokens': current_attempt['steps_with_tokens'],
-            'total_steps': current_attempt['total_steps'],
             'verification_message': verification_result['message'],
             'attempt_number': len(metrics['usage_api_reconciliation']['attempts'])
         }
@@ -300,110 +387,6 @@ class UsageReconciler:
         )
         
         return report
-    
-    def _reconcile_steps(
-        self,
-        metrics: Dict[str, Any],
-        run_id: str,
-        framework: str,
-        force: bool = False
-    ) -> Dict[str, Any]:
-        """
-        Query Usage API and update step token counts.
-        
-        Returns:
-            Attempt data with timestamp and token counts
-        """
-        attempt = {
-            'timestamp': datetime.now(timezone.utc).isoformat(),
-            'steps': [],
-            'total_tokens_in': 0,
-            'total_tokens_out': 0,
-            'total_api_calls': 0,
-            'total_cached_tokens': 0,
-            'steps_with_tokens': 0,
-            'total_steps': len(metrics.get('steps', []))
-        }
-        
-        for step in metrics.get('steps', []):
-            step_num = step['step_number']
-            
-            # Get time window from step
-            start_timestamp = step.get('start_timestamp')
-            end_timestamp = step.get('end_timestamp')
-            
-            if not start_timestamp or not end_timestamp:
-                logger.warning(
-                    f"Step {step_num} missing timestamps, cannot reconcile",
-                    extra={'run_id': run_id, 'step': step_num}
-                )
-                attempt['steps'].append({
-                    'step': step_num,
-                    'status': 'missing_timestamps',
-                    'tokens_in': 0,
-                    'tokens_out': 0
-                })
-                continue
-            
-            # Query Usage API for this time window
-            logger.debug(
-                f"Querying Usage API for step {step_num}",
-                extra={
-                    'run_id': run_id,
-                    'step': step_num,
-                    'metadata': {
-                        'start_timestamp': start_timestamp,
-                        'end_timestamp': end_timestamp
-                    }
-                }
-            )
-            
-            try:
-                tokens_in, tokens_out, api_calls, cached_tokens = self._fetch_usage_from_openai(
-                    start_timestamp=start_timestamp,
-                    end_timestamp=end_timestamp,
-                    framework=framework
-                )
-                
-                # Update step
-                step['tokens_in'] = tokens_in
-                step['tokens_out'] = tokens_out
-                step['api_calls'] = api_calls
-                step['cached_tokens'] = cached_tokens
-                
-                attempt['total_tokens_in'] += tokens_in
-                attempt['total_tokens_out'] += tokens_out
-                attempt['total_api_calls'] += api_calls
-                attempt['total_cached_tokens'] += cached_tokens
-                
-                if tokens_in > 0 or tokens_out > 0:
-                    attempt['steps_with_tokens'] += 1
-                
-                attempt['steps'].append({
-                    'step': step_num,
-                    'status': 'success',
-                    'tokens_in': tokens_in,
-                    'tokens_out': tokens_out,
-                    'api_calls': api_calls,
-                    'cached_tokens': cached_tokens
-                })
-                
-            except Exception as e:
-                logger.error(
-                    f"Failed to fetch usage for step {step_num}: {e}",
-                    extra={'run_id': run_id, 'step': step_num, 'metadata': {'error': str(e)}}
-                )
-                attempt['steps'].append({
-                    'step': step_num,
-                    'status': 'error',
-                    'error': str(e),
-                    'tokens_in': 0,
-                    'tokens_out': 0,
-                    'api_calls': 0,
-                    'cached_tokens': 0
-                })
-        
-        return attempt
     
     def _count_stable_verifications(
         self,
@@ -486,8 +469,10 @@ class UsageReconciler:
         
         current_in = current_attempt['total_tokens_in']
         current_out = current_attempt['total_tokens_out']
-        steps_with_tokens = current_attempt.get('steps_with_tokens', 0)
-        total_steps = current_attempt.get('total_steps', 0)
+        
+        # BREAKING CHANGE v2.0.0: Removed steps_with_tokens/total_steps tracking
+        # We now only track aggregate run-level tokens, not per-step tokens
+        # Coverage analysis is no longer possible with the new schema
         
         # No previous attempts - this is the first
         if len(attempts) == 0:
@@ -540,29 +525,16 @@ class UsageReconciler:
         
         # Check if we have enough stable verifications
         if stable_count >= min_stable_verifications:
-            # Calculate token coverage rate
-            coverage_rate = steps_with_tokens / total_steps if total_steps > 0 else 0
-            
             # ✅ VERIFIED - data is stable after N checks
-            if coverage_rate == 1.0:
-                # Perfect: all steps used LLM
-                return {
-                    'status': 'verified',
-                    'message': f'✅ Verified after {stable_count} stable checks: {current_in:,} in, {current_out:,} out (all {total_steps} steps used LLM)'
-                }
-            else:
-                # Partial: some steps didn't use LLM (acceptable for efficient frameworks)
-                return {
-                    'status': 'verified',
-                    'message': f'✅ Verified after {stable_count} stable checks: {current_in:,} in, {current_out:,} out ({steps_with_tokens}/{total_steps} steps used LLM, {coverage_rate:.0%} coverage)'
-                }
+            return {
+                'status': 'verified',
+                'message': f'✅ Verified after {stable_count} stable checks: {current_in:,} in, {current_out:,} out'
+            }
         else:
             # Need more stable verifications
-            need_more = min_stable_verifications - stable_count
-            coverage_note = f" ({steps_with_tokens}/{total_steps} steps with tokens)" if steps_with_tokens < total_steps else ""
             return {
                 'status': 'pending',
-                'message': f'⏳ Awaiting verification: {stable_count}/{min_stable_verifications} stable checks completed{coverage_note}'
+                'message': f'⏳ Awaiting verification: {stable_count}/{min_stable_verifications} stable checks completed'
             }
     
     def reconcile_all_pending(

@@ -94,6 +94,11 @@ class BAeSAdapter(BaseAdapter):
             logger.info("BAEs API key configured for token tracking",
                        extra={'run_id': self.run_id})
             
+            # Validate API key configuration (FR-011)
+            self.validate_api_key()
+            logger.info("BAeS API key validated",
+                       extra={'run_id': self.run_id})
+            
             logger.info("BAEs framework ready",
                        extra={
                            'run_id': self.run_id,
@@ -274,45 +279,22 @@ class BAeSAdapter(BaseAdapter):
             duration = time.time() - start_time  # Precise duration as float
             end_timestamp = int(time.time())  # Integer timestamp for API queries
             
-            # Fetch usage from OpenAI Usage API
-            tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
-                api_key_env_var='OPEN_AI_KEY_ADM',  # Admin key with usage.read scope
-                start_timestamp=start_timestamp,
-                end_timestamp=end_timestamp,
-                model=None  # Don't filter by model - time window is sufficient
-            )
-            
-            # Log warning if step completed but has no API calls (may indicate an issue)
-            if all_success and api_calls == 0:
-                logger.warning(
-                    f"⚠️ Step {step_num} completed successfully but recorded 0 API calls!",
-                    extra={
-                        'run_id': self.run_id,
-                        'step': step_num,
-                        'event': 'zero_api_calls',
-                        'metadata': {
-                            'duration': duration,
-                            'request': command_text,
-                            'note': 'BAeS framework may not have called OpenAI API, or calls happened outside time window'
-                        }
-                    }
-                )
+            # BREAKING CHANGE (v2.0.0): Token metrics removed from step execution
+            # Tokens are now reconciled post-run via UsageReconciler (eliminates zero-token bug)
             
             logger.info("BAEs step completed",
                        extra={'run_id': self.run_id, 'step': step_num, 'event': 'step_complete',
-                              'metadata': {'tokens_in': tokens_in, 'tokens_out': tokens_out,
-                                         'api_calls': api_calls, 'cached_tokens': cached_tokens}})
+                              'metadata': {
+                                  'duration': duration,
+                                  'note': 'Tokens will be reconciled post-run'
+                              }})
             
             return {
                 'success': all_success,
                 'duration_seconds': duration,
-                'hitl_count': 0,
-                'tokens_in': tokens_in,
-                'tokens_out': tokens_out,
-                'api_calls': api_calls,
-                'cached_tokens': cached_tokens,
                 'start_timestamp': start_timestamp,
                 'end_timestamp': end_timestamp,
+                'hitl_count': 0,
                 'retry_count': 0
             }
             
@@ -324,13 +306,9 @@ class BAeSAdapter(BaseAdapter):
             return {
                 'success': False,
                 'duration_seconds': duration,
-                'hitl_count': 0,
-                'tokens_in': 0,
-                'tokens_out': 0,
-                'api_calls': 0,
-                'cached_tokens': 0,
                 'start_timestamp': start_timestamp,
                 'end_timestamp': end_timestamp,
+                'hitl_count': 0,
                 'retry_count': 0
             }
     

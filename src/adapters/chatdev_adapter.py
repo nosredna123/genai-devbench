@@ -98,6 +98,11 @@ class ChatDevAdapter(BaseAdapter):
             if not run_py.exists():
                 raise RuntimeError(f"ChatDev entry point not found: {run_py}")
             
+            # Validate API key configuration (FR-011)
+            self.validate_api_key()
+            logger.info("ChatDev API key validated",
+                       extra={'run_id': self.run_id})
+            
             logger.info("ChatDev framework ready",
                        extra={
                            'run_id': self.run_id,
@@ -340,44 +345,8 @@ class ChatDevAdapter(BaseAdapter):
                                      'stdout_preview': result.stdout[:500] if result.stdout else ''
                                  }})
             
-            # Fetch token usage from OpenAI Usage API
-            # 
-            # IMPORTANT: Per-Framework Attribution Strategy
-            # =============================================
-            # We use TIME WINDOW ISOLATION instead of API key filtering because:
-            # 1. Framework keys (OPENAI_API_KEY_CHATDEV) lack api.usage.read scope
-            # 2. Usage API doesn't reliably populate api_key_id or model fields
-            # 3. Sequential execution ensures no concurrent API calls
-            # 4. Tight time window (step start → step end) = precise attribution
-            #
-            # How it works:
-            # - ChatDev MAKES API calls using OPENAI_API_KEY_CHATDEV
-            # - We MEASURE those calls using OPEN_AI_KEY_ADM (admin key with usage.read scope)
-            # - Time window filtering ensures we only count THIS framework's tokens
-            #
-            logger.info(
-                "Fetching token usage from OpenAI Usage API",
-                extra={
-                    'run_id': self.run_id,
-                    'step': step_num,
-                    'metadata': {
-                        'start_timestamp': self._step_start_time,
-                        'end_timestamp': end_timestamp,
-                        'duration_seconds': end_timestamp - self._step_start_time,
-                        'framework_api_key': api_key_env,  # Key used to MAKE API calls
-                        'usage_api_key': 'OPEN_AI_KEY_ADM'  # Key used to MEASURE API calls
-                    }
-                }
-            )
-            
-            # Query Usage API for tokens in this time window
-            # No model/API key filtering - time window isolation is sufficient
-            tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
-                api_key_env_var='OPEN_AI_KEY_ADM',  # Admin key with usage.read scope
-                start_timestamp=self._step_start_time,
-                end_timestamp=end_timestamp,
-                model=None  # Don't filter by model - time window is sufficient
-            )
+            # BREAKING CHANGE (v2.0.0): Token metrics removed from step execution
+            # Tokens are now reconciled post-run via UsageReconciler (eliminates zero-token bug)
             
             # T068: Detect HITL events (should be 0 with Default config)
             hitl_count = self._detect_hitl_events(result.stdout)
@@ -392,25 +361,18 @@ class ChatDevAdapter(BaseAdapter):
                              'metadata': {
                                  'success': success,
                                  'duration': duration,
-                                 'tokens_in': tokens_in,
-                                 'tokens_out': tokens_out,
-                                 'api_calls': api_calls,
-                                 'cached_tokens': cached_tokens,
                                  'hitl_count': hitl_count,
-                                 'exit_code': result.returncode
+                                 'exit_code': result.returncode,
+                                 'note': 'Tokens will be reconciled post-run'
                              }})
             
             return {
                 'success': success,
                 'duration_seconds': duration,
-                'hitl_count': hitl_count,
-                'tokens_in': tokens_in,
-                'tokens_out': tokens_out,
-                'api_calls': api_calls,
-                'cached_tokens': cached_tokens,
-                'retry_count': 0,
                 'start_timestamp': self._step_start_time,
-                'end_timestamp': end_timestamp
+                'end_timestamp': end_timestamp,
+                'hitl_count': hitl_count,
+                'retry_count': 0
             }
             
         except subprocess.TimeoutExpired:
@@ -422,13 +384,11 @@ class ChatDevAdapter(BaseAdapter):
             return {
                 'success': False,
                 'duration_seconds': duration,
-                'hitl_count': 0,
-                'tokens_in': 0,
-                'tokens_out': 0,
-                'retry_count': 0,
-                'error': 'timeout',
                 'start_timestamp': self._step_start_time,
-                'end_timestamp': int(time.time())
+                'end_timestamp': int(time.time()),
+                'hitl_count': 0,
+                'retry_count': 0,
+                'error': 'timeout'
             }
             
         except Exception as e:
@@ -440,9 +400,9 @@ class ChatDevAdapter(BaseAdapter):
             return {
                 'success': False,
                 'duration_seconds': duration,
+                'start_timestamp': self._step_start_time if hasattr(self, '_step_start_time') else int(time.time()),
+                'end_timestamp': int(time.time()),
                 'hitl_count': 0,
-                'tokens_in': 0,
-                'tokens_out': 0,
                 'retry_count': 0,
                 'error': str(e)
             }

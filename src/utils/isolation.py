@@ -20,8 +20,9 @@ def create_sprint_workspace(run_dir: Path, sprint_num: int) -> Tuple[Path, Path]
     sd.mkdir(parents=True, exist_ok=True)
     artifacts.mkdir(parents=True, exist_ok=True)
     logs.mkdir(parents=True, exist_ok=True)
-    # create placeholders for metadata/metrics/validation to indicate creation
-    for fname in ("metadata.json", "metrics.json", "validation.json"):
+    # create placeholders for metadata/validation to indicate creation
+    # Note: metrics.json is saved at run level, not sprint level
+    for fname in ("metadata.json", "validation.json"):
         fpath = sd / fname
         if not fpath.exists():
             fpath.write_text("{}")

@@ -220,6 +220,11 @@ class GHSpecAdapter(BaseAdapter):
             # No virtual environment needed - we call OpenAI API directly
             # No persistent services to start - we invoke bash scripts per phase
             
+            # Validate API key configuration (FR-011)
+            self.validate_api_key()
+            logger.info("GHSpec API key validated",
+                       extra={'run_id': self.run_id})
+            
             logger.info("GitHub Spec-kit framework ready",
                        extra={'run_id': self.run_id,
                              'metadata': {
@@ -518,14 +523,9 @@ Follow these coding standards and principles throughout the specification:
         # Save artifact
         self._save_artifact(self.spec_md_path, response_text)
         
-        # Fetch token usage
+        # BREAKING CHANGE (v2.0.0): Token collection removed (reconciled post-run)
         api_call_end = int(time.time())
-        tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
-            api_key_env_var='OPEN_AI_KEY_ADM',
-            start_timestamp=api_call_start,
-            end_timestamp=api_call_end,
-            model='gpt-4o-mini'
-        )
+        tokens_in, tokens_out, api_calls, cached_tokens = 0, 0, 0, 0
         
         logger.info("Specify phase completed",
                    extra={'run_id': self.run_id, 'step': self.current_step,
@@ -634,14 +634,9 @@ Follow these coding standards and principles in your technical plan:
         if self.sprint_num > 1:
             self._validate_tech_stack_consistency(response_text)
         
-        # Fetch token usage
+        # BREAKING CHANGE (v2.0.0): Token collection removed (reconciled post-run)
         api_call_end = int(time.time())
-        tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
-            api_key_env_var='OPEN_AI_KEY_ADM',
-            start_timestamp=api_call_start,
-            end_timestamp=api_call_end,
-            model='gpt-4o-mini'
-        )
+        tokens_in, tokens_out, api_calls, cached_tokens = 0, 0, 0, 0
         
         logger.info("Plan phase completed",
                    extra={'run_id': self.run_id, 'step': self.current_step,
@@ -725,14 +720,9 @@ Generate tasks that adhere to these coding standards:
         # Save artifact
         self._save_artifact(self.tasks_md_path, response_text)
         
-        # Fetch token usage
+        # BREAKING CHANGE (v2.0.0): Token collection removed (reconciled post-run)
         api_call_end = int(time.time())
-        tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
-            api_key_env_var='OPEN_AI_KEY_ADM',
-            start_timestamp=api_call_start,
-            end_timestamp=api_call_end,
-            model='gpt-4o-mini'
-        )
+        tokens_in, tokens_out, api_calls, cached_tokens = 0, 0, 0, 0
         
         logger.info("Tasks phase completed",
                    extra={'run_id': self.run_id, 'step': self.current_step,
@@ -783,22 +773,16 @@ Generate tasks that adhere to these coding standards:
                                     'note': 'Running all 5 GHSpec internal phases'}})
         
         # Aggregate metrics across all phases
+        # BREAKING CHANGE (v2.0.0): Token tracking removed (reconciled post-run)
         total_hitl_count = 0
-        total_tokens_in = 0
-        total_tokens_out = 0
-        total_api_calls = 0
-        total_cached_tokens = 0
         
         try:
             # Phase 1: Generate specification (T011: Use new _execute_specify_phase)
             logger.info("GHSpec Phase 1/5: Specify",
                        extra={'run_id': self.run_id, 'step': step_num})
-            hitl, tok_in, tok_out, calls, cached = self._execute_specify_phase(command_text)
+            hitl, _tok_in, _tok_out, _calls, _cached = self._execute_specify_phase(command_text)
             total_hitl_count += hitl
-            total_tokens_in += tok_in
-            total_tokens_out += tok_out
-            total_api_calls += calls
-            total_cached_tokens += cached
+            # Tokens ignored (reconciled post-run)
             
             # T017: Artifact validation
             if not self.spec_md_path.exists():
@@ -809,12 +793,9 @@ Generate tasks that adhere to these coding standards:
             # Phase 2: Generate technical plan (T012: Use new _execute_plan_phase)
             logger.info("GHSpec Phase 2/5: Plan",
                        extra={'run_id': self.run_id, 'step': step_num})
-            hitl, tok_in, tok_out, calls, cached = self._execute_plan_phase(command_text)
+            hitl, _tok_in, _tok_out, _calls, _cached = self._execute_plan_phase(command_text)
             total_hitl_count += hitl
-            total_tokens_in += tok_in
-            total_tokens_out += tok_out
-            total_api_calls += calls
-            total_cached_tokens += cached
+            # Tokens ignored (reconciled post-run)
             
             # T017: Artifact validation
             if not self.plan_md_path.exists():
@@ -825,12 +806,9 @@ Generate tasks that adhere to these coding standards:
             # Phase 3: Generate task breakdown (T013: Use new _execute_tasks_phase)
             logger.info("GHSpec Phase 3/5: Tasks",
                        extra={'run_id': self.run_id, 'step': step_num})
-            hitl, tok_in, tok_out, calls, cached = self._execute_tasks_phase(command_text)
+            hitl, _tok_in, _tok_out, _calls, _cached = self._execute_tasks_phase(command_text)
             total_hitl_count += hitl
-            total_tokens_in += tok_in
-            total_tokens_out += tok_out
-            total_api_calls += calls
-            total_cached_tokens += cached
+            # Tokens ignored (reconciled post-run)
             
             # T017: Artifact validation
             if not self.tasks_md_path.exists():
@@ -841,12 +819,9 @@ Generate tasks that adhere to these coding standards:
             # Phase 4: Implement code task-by-task (T014: Already exists, enhance with validation)
             logger.info("GHSpec Phase 4/5: Implement",
                        extra={'run_id': self.run_id, 'step': step_num})
-            hitl, tok_in, tok_out, calls, cached = self._execute_task_implementation(command_text)
+            hitl, _tok_in, _tok_out, _calls, _cached = self._execute_task_implementation(command_text)
             total_hitl_count += hitl
-            total_tokens_in += tok_in
-            total_tokens_out += tok_out
-            total_api_calls += calls
-            total_cached_tokens += cached
+            # Tokens ignored (reconciled post-run)
             
             # T017: Validate that implementation phase generated files
             python_files = list(self.src_dir.rglob("*.py"))
@@ -872,21 +847,15 @@ Generate tasks that adhere to these coding standards:
                              'metadata': {
                                  'success': True,
                                  'duration_seconds': duration,
-                                 'total_hitl_count': total_hitl_count,
-                                 'total_tokens_in': total_tokens_in,
-                                 'total_tokens_out': total_tokens_out,
-                                 'total_api_calls': total_api_calls,
-                                 'total_cached_tokens': total_cached_tokens
+                                 'total_hitl_count': total_hitl_count
                              }})
             
+            # BREAKING CHANGE (v2.0.0): Token fields removed from return
+            # Tokens reconciled post-run via Usage API
             return {
                 'success': True,
                 'duration_seconds': duration,
                 'hitl_count': total_hitl_count,
-                'tokens_in': total_tokens_in,
-                'tokens_out': total_tokens_out,
-                'api_calls': total_api_calls,
-                'cached_tokens': total_cached_tokens,
                 'start_timestamp': overall_start_timestamp,
                 'end_timestamp': overall_end_timestamp,
                 'retry_count': 0
@@ -1028,14 +997,9 @@ Generate tasks that adhere to these coding standards:
         
         self._save_artifact(output_path, response_text)
         
-        # Fetch token usage from OpenAI Usage API
+        # BREAKING CHANGE (v2.0.0): Token collection removed (reconciled post-run)
         api_call_end = int(time.time())
-        tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
-            api_key_env_var='OPEN_AI_KEY_ADM',  # Admin key for Usage API
-            start_timestamp=api_call_start,
-            end_timestamp=api_call_end,
-            model='gpt-4o-mini'  # From experiment.yaml
-        )
+        tokens_in, tokens_out, api_calls, cached_tokens = 0, 0, 0, 0
         
         logger.info(f"Phase {phase} completed",
                    extra={'run_id': self.run_id, 'step': self.current_step,
@@ -1705,14 +1669,9 @@ Follow these coding standards when generating code:
                 logger.debug(f"Skipping non-file task: {task['id']} ({file_path_str})",
                            extra={'run_id': self.run_id, 'step': self.current_step})
             
-            # Fetch token usage
+            # BREAKING CHANGE (v2.0.0): Token collection removed (reconciled post-run)
             api_call_end = int(time.time())
-            tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
-                api_key_env_var='OPEN_AI_KEY_ADM',  # Admin key for Usage API
-                start_timestamp=api_call_start,
-                end_timestamp=api_call_end,
-                model='gpt-4o-mini'
-            )
+            tokens_in, tokens_out, api_calls, cached_tokens = 0, 0, 0, 0
             
             # Aggregate totals
             total_hitl_count += hitl_count
@@ -2184,14 +2143,9 @@ Apply these coding standards when fixing code:
                     error_type=task['error_type']
                 )
                 
-                # Fetch token usage
+                # BREAKING CHANGE (v2.0.0): Token collection removed (reconciled post-run)
                 api_call_end = int(time.time())
-                tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
-                    api_key_env_var='OPEN_AI_KEY_ADM',  # Admin key for Usage API
-                    start_timestamp=api_call_start,
-                    end_timestamp=api_call_end,
-                    model='gpt-4o-mini'
-                )
+                tokens_in, tokens_out, api_calls, cached_tokens = 0, 0, 0, 0
                 
                 # Aggregate
                 total_hitl_count += hitl_count
