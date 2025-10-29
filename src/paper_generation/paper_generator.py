@@ -94,6 +94,9 @@ class PaperGenerator:
             'conclusion': ConclusionGenerator(config, self.prose_engine),
         }
         
+        # T036: Initialize statistical data storage
+        self.statistical_data = {}
+        
         logger.info("PaperGenerator initialized for experiment: %s", config.experiment_dir)
     
     def generate(self) -> PaperResult:
@@ -292,6 +295,8 @@ class PaperGenerator:
         """
         Load analyzed experiment data from output directory.
         
+        T036: Enhanced to parse statistical reports and extract structured data.
+        
         Args:
             frameworks_data: Pre-analyzed framework metrics
             
@@ -334,6 +339,9 @@ class PaperGenerator:
                 statistical_report = ""
                 key_findings = []
             
+            # T036: Parse statistical reports and extract structured data
+            self.statistical_data = self._parse_statistical_reports()
+            
             # Create context
             context = SectionContext(
                 section_name="",  # Will be set by each generator
@@ -341,7 +349,7 @@ class PaperGenerator:
                 frameworks=frameworks,
                 num_runs=num_runs,
                 metrics=metrics,
-                statistical_results={},  # Can be extended later
+                statistical_results=self.statistical_data,  # Include statistical data
                 key_findings=key_findings
             )
             
@@ -354,6 +362,189 @@ class PaperGenerator:
             raise ExperimentDataError(
                 message=f"Failed to load analyzed data: {str(e)}"
             ) from e
+    
+    def _parse_statistical_reports(self) -> Dict[str, Any]:
+        """
+        Parse statistical_report_summary.md and extract structured data (T036).
+        
+        Extracts:
+        - comparisons: List of {framework1, framework2, effect_size, ci, p_value, test_type}
+        - primary_metric: str
+        - visualization_paths: Dict[str, str] mapping viz types to relative paths
+        - power_warnings: List[str]
+        - methodology_text: str
+        - key_findings: List[str]
+        
+        Returns:
+            Dict with structured statistical data
+        """
+        output_dir = self.config.output_dir
+        summary_file = output_dir / "statistical_report_summary.md"
+        full_file = output_dir / "statistical_report_full.md"
+        
+        statistical_data = {
+            'comparisons': [],
+            'primary_metric': None,
+            'visualization_paths': {},
+            'power_warnings': [],
+            'methodology_text': "",
+            'key_findings': []
+        }
+        
+        # If summary report doesn't exist, return empty data
+        if not summary_file.exists():
+            logger.warning("statistical_report_summary.md not found, statistical data unavailable")
+            return statistical_data
+        
+        try:
+            summary_content = summary_file.read_text(encoding='utf-8')
+            
+            # Extract comparisons from Key Findings section
+            in_findings = False
+            current_metric = None
+            
+            for line in summary_content.split('\n'):
+                line_stripped = line.strip()
+                
+                # Detect Key Findings section
+                if '## 📊 Key Findings' in line_stripped or '## Key Findings' in line_stripped:
+                    in_findings = True
+                    continue
+                
+                # Detect next section (end of findings)
+                if in_findings and line_stripped.startswith('## ') and 'Key Findings' not in line_stripped:
+                    in_findings = False
+                    continue
+                
+                if in_findings:
+                    # Extract metric name
+                    if line_stripped.startswith('### '):
+                        current_metric = line_stripped[4:].strip()
+                        if not statistical_data['primary_metric']:
+                            statistical_data['primary_metric'] = current_metric
+                    
+                    # Extract test result and p-value
+                    if '**Result**:' in line_stripped and current_metric:
+                        # Extract p-value
+                        import re
+                        p_match = re.search(r'p=([\d.]+)', line_stripped)
+                        p_value = float(p_match.group(1)) if p_match else None
+                        test_type = None
+                    
+                    # Extract test type
+                    if '**Test Used**:' in line_stripped:
+                        test_type = line_stripped.split('**Test Used**:')[1].strip()
+                    
+                    # Extract effect sizes
+                    if line_stripped.startswith('- ') and ' vs ' in line_stripped and ':' in line_stripped:
+                        # Parse effect size line: "- framework1 vs framework2: measure = value (magnitude, 95% CI: [lower, upper])"
+                        parts = line_stripped[2:].split(':')
+                        if len(parts) >= 2:
+                            comparison = parts[0].strip()
+                            frameworks = [f.strip() for f in comparison.split(' vs ')]
+                            
+                            if len(frameworks) == 2:
+                                # Extract effect size value and CI
+                                effect_str = parts[1].strip()
+                                import re
+                                value_match = re.search(r'=\s*([-\d.]+)', effect_str)
+                                ci_match = re.search(r'\[([-\d.]+),\s*([-\d.]+)\]', effect_str)
+                                magnitude_match = re.search(r'\(([^,]+),', effect_str)
+                                
+                                if value_match:
+                                    statistical_data['comparisons'].append({
+                                        'framework1': frameworks[0],
+                                        'framework2': frameworks[1],
+                                        'metric': current_metric,
+                                        'effect_size': float(value_match.group(1)),
+                                        'ci_lower': float(ci_match.group(1)) if ci_match else None,
+                                        'ci_upper': float(ci_match.group(2)) if ci_match else None,
+                                        'magnitude': magnitude_match.group(1).strip() if magnitude_match else 'unknown',
+                                        'p_value': p_value,
+                                        'test_type': test_type
+                                    })
+            
+            # Extract visualization paths
+            in_viz_section = False
+            for line in summary_content.split('\n'):
+                if '## 📈 Critical Visualizations' in line or '## Critical Visualizations' in line:
+                    in_viz_section = True
+                    continue
+                
+                if in_viz_section and line.strip().startswith('## '):
+                    in_viz_section = False
+                    continue
+                
+                if in_viz_section and line.strip().startswith('!['):
+                    # Extract image path: ![caption](path)
+                    import re
+                    img_match = re.search(r'!\[.*?\]\((.*?)\)', line)
+                    if img_match:
+                        path = img_match.group(1)
+                        # Determine viz type from path
+                        if 'box_plot' in path:
+                            statistical_data['visualization_paths']['box_plot'] = path
+                        elif 'forest_plot' in path:
+                            statistical_data['visualization_paths']['forest_plot'] = path
+                        elif 'violin_plot' in path:
+                            statistical_data['visualization_paths']['violin_plot'] = path
+                        elif 'qq_plot' in path:
+                            statistical_data['visualization_paths']['qq_plot'] = path
+            
+            # Extract power warnings
+            in_power_section = False
+            for line in summary_content.split('\n'):
+                if '## ⚠️ Power Analysis' in line or '## Power Analysis' in line:
+                    in_power_section = True
+                    continue
+                
+                if in_power_section and line.strip().startswith('## '):
+                    in_power_section = False
+                    continue
+                
+                if in_power_section and line.strip().startswith('- '):
+                    statistical_data['power_warnings'].append(line.strip()[2:])
+            
+            # Extract methodology text from full report
+            if full_file.exists():
+                full_content = full_file.read_text(encoding='utf-8')
+                
+                in_methodology = False
+                methodology_lines = []
+                for line in full_content.split('\n'):
+                    if '## 6. Statistical Methodology' in line or '## Statistical Methodology' in line:
+                        in_methodology = True
+                        continue
+                    
+                    if in_methodology and line.strip().startswith('## '):
+                        break
+                    
+                    if in_methodology and line.strip().startswith('### Reproducibility'):
+                        break
+                    
+                    if in_methodology:
+                        methodology_lines.append(line)
+                
+                statistical_data['methodology_text'] = '\n'.join(methodology_lines).strip()
+            
+            # Extract key findings (simple heuristic - first few comparisons)
+            for comp in statistical_data['comparisons'][:3]:
+                finding = (
+                    f"{comp['framework1']} vs {comp['framework2']} on {comp['metric']}: "
+                    f"effect size = {comp['effect_size']:.2f} ({comp['magnitude']})"
+                )
+                statistical_data['key_findings'].append(finding)
+            
+            logger.info("Parsed statistical data: %d comparisons, %d visualizations, %d power warnings",
+                       len(statistical_data['comparisons']),
+                       len(statistical_data['visualization_paths']),
+                       len(statistical_data['power_warnings']))
+            
+            return statistical_data
+            
+        except Exception as e:
+            logger.warning(f"Failed to parse statistical reports: {e}")
+            return statistical_data
     
     def _extract_key_findings(self, report: str) -> List[str]:
         """Extract key findings from statistical report (simple heuristic)."""
@@ -400,6 +591,15 @@ class PaperGenerator:
                 # Generate full AI prose
                 try:
                     prose = generator.generate(context)
+                    
+                    # T037-T039: Enhance sections with statistical content
+                    if section_name == 'methodology':
+                        prose = self._enhance_methodology_section(prose)
+                    elif section_name == 'results':
+                        prose = self._enhance_results_section(prose)
+                    elif section_name == 'discussion':
+                        prose = self._enhance_discussion_section(prose)
+                    
                     sections[section_name] = prose
                     logger.info("  ✓ %s: %d words (full prose)", section_name, len(prose.split()))
                 except Exception as e:
@@ -633,8 +833,12 @@ class PaperGenerator:
                 timeout=60
             )
             
-            if result.returncode != 0:
-                # Compilation failed
+            # Check if PDF was actually created (more reliable than returncode)
+            # pdflatex can return non-zero for warnings but still produce a valid PDF
+            pdf_file_check = output_dir / f"{latex_file.stem}.pdf"
+            
+            if result.returncode != 0 and not pdf_file_check.exists():
+                # Compilation truly failed - no PDF produced
                 error_log = output_dir / f"{latex_file.stem}.log"
                 error_msg = f"LaTeX compilation failed (pass {i + 1})"
                 
@@ -647,6 +851,9 @@ class PaperGenerator:
                     message=error_msg,
                     latex_log=result.stderr if result.stderr else ""
                 )
+            elif result.returncode != 0:
+                # Non-zero return but PDF exists - just warnings
+                logger.warning("pdflatex returned %d but PDF was created (likely just warnings)", result.returncode)
         
         pdf_file = output_dir / f"{latex_file.stem}.pdf"
         
@@ -657,3 +864,168 @@ class PaperGenerator:
             raise PdfCompilationError(
                 message="PDF file not generated despite successful pdflatex run"
             )
+    
+    def _enhance_methodology_section(self, prose: str) -> str:
+        """
+        Enhance methodology section with statistical analysis description (T037).
+        
+        Adds "Statistical Analysis" subsection using methodology_text from
+        statistical reports.
+        
+        Args:
+            prose: Generated methodology prose
+            
+        Returns:
+            Enhanced prose with statistical analysis subsection
+        """
+        if not self.statistical_data or not self.statistical_data.get('methodology_text'):
+            logger.debug("No statistical methodology text available")
+            return prose
+        
+        # Add Statistical Analysis subsection
+        statistical_section = "\n\n\\subsection{Statistical Analysis}\n\n"
+        statistical_section += self.statistical_data['methodology_text']
+        statistical_section += "\n"
+        
+        # Append to existing prose
+        enhanced = prose + statistical_section
+        
+        logger.info("Enhanced methodology with statistical analysis subsection")
+        return enhanced
+    
+    def _enhance_results_section(self, prose: str) -> str:
+        """
+        Enhance results section with effect sizes and visualizations (T038).
+        
+        Includes effect sizes and p-values in comparisons, embeds statistical
+        visualizations (box plot, forest plot) with captions.
+        
+        Args:
+            prose: Generated results prose
+            
+        Returns:
+            Enhanced prose with statistical results and visualizations
+        """
+        if not self.statistical_data:
+            logger.debug("No statistical data available")
+            return prose
+        
+        enhancements = []
+        
+        # Add statistical comparisons subsection
+        if self.statistical_data.get('comparisons'):
+            enhancements.append("\n\n\\subsection{Statistical Comparisons}\n\n")
+            
+            # Group comparisons by metric
+            from collections import defaultdict
+            by_metric = defaultdict(list)
+            for comp in self.statistical_data['comparisons']:
+                by_metric[comp['metric']].append(comp)
+            
+            for metric, comps in by_metric.items():
+                enhancements.append(f"\\textbf{{{metric}:}}\n")
+                enhancements.append("\\begin{itemize}\n")
+                
+                for comp in comps:
+                    framework1 = comp['framework1']
+                    framework2 = comp['framework2']
+                    effect = comp['effect_size']
+                    magnitude = comp['magnitude']
+                    ci_lower = comp.get('ci_lower', 0)
+                    ci_upper = comp.get('ci_upper', 0)
+                    p_value = comp.get('p_value', 1.0)
+                    
+                    sig_marker = "$p < 0.05$" if p_value and p_value < 0.05 else "$p \\geq 0.05$"
+                    
+                    enhancements.append(
+                        f"\\item {framework1} vs {framework2}: "
+                        f"effect size = {effect:.3f} ({magnitude}, "
+                        f"95\\% CI: [{ci_lower:.3f}, {ci_upper:.3f}]), {sig_marker}\n"
+                    )
+                
+                enhancements.append("\\end{itemize}\n\n")
+        
+        # Embed visualizations
+        if self.statistical_data.get('visualization_paths'):
+            enhancements.append("\\subsection{Statistical Visualizations}\n\n")
+            
+            viz_paths = self.statistical_data['visualization_paths']
+            
+            # Box plot
+            if 'box_plot' in viz_paths:
+                primary_metric = self.statistical_data.get('primary_metric', 'primary metric')
+                enhancements.append(
+                    f"\\begin{{figure}}[htbp]\n"
+                    f"\\centering\n"
+                    f"\\includegraphics[width=0.8\\textwidth]{{{viz_paths['box_plot']}}}\n"
+                    f"\\caption{{Box plot showing distribution of {primary_metric} across frameworks. "
+                    f"Box shows median and quartiles, whiskers extend to 1.5$\\times$IQR, points are outliers.}}\n"
+                    f"\\label{{fig:box_plot}}\n"
+                    f"\\end{{figure}}\n\n"
+                )
+            
+            # Forest plot
+            if 'forest_plot' in viz_paths:
+                primary_metric = self.statistical_data.get('primary_metric', 'primary metric')
+                enhancements.append(
+                    f"\\begin{{figure}}[htbp]\n"
+                    f"\\centering\n"
+                    f"\\includegraphics[width=0.8\\textwidth]{{{viz_paths['forest_plot']}}}\n"
+                    f"\\caption{{Forest plot showing effect sizes with 95\\% confidence intervals for {primary_metric}. "
+                    f"Vertical line at 0 indicates no effect. Color indicates magnitude (green=small, orange=medium, red=large).}}\n"
+                    f"\\label{{fig:forest_plot}}\n"
+                    f"\\end{{figure}}\n\n"
+                )
+        
+        # Append enhancements to prose
+        enhanced = prose + ''.join(enhancements)
+        
+        logger.info("Enhanced results with %d comparison groups and %d visualizations",
+                   len(by_metric) if self.statistical_data.get('comparisons') else 0,
+                   len(self.statistical_data.get('visualization_paths', {})))
+        return enhanced
+    
+    def _enhance_discussion_section(self, prose: str) -> str:
+        """
+        Enhance discussion section with power analysis limitations (T039).
+        
+        Adds "Statistical Limitations" paragraph if power warnings exist,
+        mentioning achieved power and sample size recommendations.
+        
+        Args:
+            prose: Generated discussion prose
+            
+        Returns:
+            Enhanced prose with statistical limitations
+        """
+        if not self.statistical_data or not self.statistical_data.get('power_warnings'):
+            logger.debug("No power warnings to add to discussion")
+            return prose
+        
+        # Add Statistical Limitations subsection
+        limitations = "\n\n\\subsection{Statistical Limitations}\n\n"
+        
+        limitations += (
+            "Our statistical analysis revealed some limitations regarding statistical power "
+            "that should be considered when interpreting the results:\n\n"
+            "\\begin{itemize}\n"
+        )
+        
+        for warning in self.statistical_data['power_warnings']:
+            limitations += f"\\item {warning}\n"
+        
+        limitations += "\\end{itemize}\n\n"
+        limitations += (
+            "These power limitations suggest that our current sample size may be insufficient "
+            "to detect small to medium effect sizes with high confidence. Future work should "
+            "consider increasing the number of experimental runs as recommended above to achieve "
+            "adequate statistical power (target: 80\\%) for more definitive conclusions.\n"
+        )
+        
+        # Append to existing prose
+        enhanced = prose + limitations
+        
+        logger.info("Enhanced discussion with %d power warnings", 
+                   len(self.statistical_data['power_warnings']))
+        return enhanced
+

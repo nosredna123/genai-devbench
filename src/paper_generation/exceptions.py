@@ -151,6 +151,35 @@ class FigureExportError(PaperGenerationError):
         super().__init__(message, remediation)
 
 
+class StatisticalAnalysisError(PaperGenerationError):
+    """Statistical analysis failed due to insufficient data or computational errors."""
+    
+    def __init__(self, message: str, metric: str | None = None):
+        """
+        Initialize statistical analysis error.
+        
+        Args:
+            message: Description of statistical analysis failure
+            metric: Name of metric that caused the error (if applicable)
+        """
+        self.metric = metric
+        
+        remediation = (
+            "Possible causes:\n"
+            "  - Insufficient sample size (need n≥2 per framework)\n"
+            "  - All values identical (zero variance)\n"
+            "  - All values missing for a metric\n"
+            "  - Numerical computation failure in scipy/statsmodels\n"
+            "\n"
+            "Statistical analysis will continue for other metrics."
+        )
+        
+        if metric:
+            remediation = f"Failed for metric: {metric}\n\n" + remediation
+        
+        super().__init__(message, remediation)
+
+
 class LatexConversionError(PaperGenerationError):
     """Pandoc Markdown→LaTeX conversion failed."""
     
