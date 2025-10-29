@@ -277,12 +277,13 @@ class PaperGenerator:
                 message=f"Experiment directory does not exist: {exp_dir}"
             )
         
-        # Check for analysis subdirectory
-        analysis_dir = exp_dir / "analysis"
-        if not analysis_dir.exists():
+        # Check for runs subdirectory (required for analysis)
+        runs_dir = exp_dir / "runs"
+        if not runs_dir.exists():
             raise ExperimentDataError(
-                message=f"Experiment directory missing 'analysis/' subdirectory: {exp_dir}\n"
-                       f"Expected: {analysis_dir}"
+                message=f"Experiment directory missing 'runs/' subdirectory: {exp_dir}\n"
+                       f"Expected: {runs_dir}",
+                remediation="Ensure the experiment directory contains raw run data in runs/{framework}/{run_id}/"
             )
         
         logger.debug("Experiment directory validated: %s", exp_dir)

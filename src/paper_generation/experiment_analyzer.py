@@ -96,12 +96,22 @@ class ExperimentAnalyzer:
         run_dirs = [d for d in framework_dir.iterdir() if d.is_dir()]
         logger.debug("Found %d run directories for %s", len(run_dirs), framework_dir.name)
         
-        # Collect metrics from all runs
+        # Collect metrics from all runs with their run_ids
         all_runs = []
+        run_data = []  # Individual run data for statistical analysis
+        
         for run_dir in run_dirs:
             metrics = self._load_run_metrics(run_dir)
             if metrics:
                 all_runs.append(metrics)
+                # Extract individual run data
+                run_data.append({
+                    "run_id": run_dir.name,
+                    "execution_time": self._extract_metric_value(metrics, "duration_total"),
+                    "total_cost_usd": self._extract_metric_value(metrics, "cost_total"),
+                    "api_calls": self._extract_metric_value(metrics, "api_calls_total"),
+                    "tokens_total": self._extract_metric_value(metrics, "tokens_total"),
+                })
         
         if not all_runs:
             logger.warning("No valid metrics found for %s", framework_dir.name)
@@ -112,6 +122,7 @@ class ExperimentAnalyzer:
         # Aggregate statistics
         aggregated = {
             "num_runs": len(all_runs),
+            "runs": run_data,  # Individual run data for statistical analysis
             "execution_time": self._aggregate_metric(all_runs, "duration_total"),
             "total_cost_usd": self._aggregate_metric(all_runs, "cost_total"),
             "api_calls": self._aggregate_metric(all_runs, "api_calls_total"),
@@ -133,6 +144,25 @@ class ExperimentAnalyzer:
         except Exception as e:
             logger.warning("Failed to load %s: %s", metrics_file, str(e))
             return None
+    
+    def _extract_metric_value(self, metrics: Dict[str, Any], metric_name: str) -> float:
+        """Extract a single metric value from run data."""
+        value = None
+        
+        # Try to find the metric in the run data
+        if metric_name in metrics:
+            value = metrics[metric_name]
+        # Compute from steps if not at top level
+        elif metric_name == "duration_total" and "steps" in metrics:
+            value = sum(step.get("duration_seconds", 0) for step in metrics["steps"])
+        elif metric_name == "cost_total" and "steps" in metrics:
+            value = sum(step.get("cost", 0) for step in metrics["steps"])
+        elif metric_name == "api_calls_total" and "steps" in metrics:
+            value = sum(step.get("api_calls", 0) for step in metrics["steps"])
+        elif metric_name == "tokens_total" and "steps" in metrics:
+            value = sum(step.get("tokens_used", 0) for step in metrics["steps"])
+        
+        return value if value is not None else 0
     
     def _aggregate_metric(self, runs: List[Dict], metric_name: str) -> Dict[str, float]:
         """Calculate statistics for a specific metric across runs."""

@@ -100,7 +100,13 @@ class FigureExporter:
                     message=f"Framework '{sample_framework}' not found in metrics data"
                 )
             
-            metric_names = list(context.metrics[sample_framework].keys())
+            # Get all metric names, excluding non-plottable fields
+            all_keys = list(context.metrics[sample_framework].keys())
+            metric_names = [
+                key for key in all_keys 
+                if key not in ['num_runs', 'runs']  # Skip metadata and individual run data
+                and isinstance(context.metrics[sample_framework][key], dict)  # Only plot aggregate stats
+            ]
             
             # Generate a comparison chart for each metric
             for metric_name in metric_names:

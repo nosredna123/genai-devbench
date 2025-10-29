@@ -44,11 +44,11 @@ class PaperConfig:
                 field="experiment_dir"
             )
         
-        # Validate experiment has analysis directory
-        analysis_dir = self.experiment_dir / "analysis"
-        if not analysis_dir.exists():
+        # Validate experiment has runs directory (required for analysis)
+        runs_dir = self.experiment_dir / "runs"
+        if not runs_dir.exists():
             raise ConfigValidationError(
-                f"Experiment directory missing 'analysis/' subdirectory: {self.experiment_dir}",
+                f"Experiment directory missing 'runs/' subdirectory: {self.experiment_dir}",
                 field="experiment_dir"
             )
         
