@@ -129,7 +129,7 @@ The missing token data does **not affect** the core research findings:
 ### API Keys Used
 
 - **Chat Completion**: `OPENAI_API_KEY_GHSPEC` (framework-specific)
-- **Usage API**: `OPEN_AI_KEY_ADM` (admin key with api.usage.read scope)
+- **Usage API**: `OPENAI_API_KEY_USAGE_TRACKING` (admin key with api.usage.read scope)
 
 ### Usage API Calls Made
 

@@ -116,7 +116,7 @@ As a developer monitoring reconciliation, I need clear status messages explainin
 
 ## Dependencies *(optional)*
 
-- OpenAI Usage API availability and access via `OPEN_AI_KEY_ADM` with `api.usage.read` permission
+- OpenAI Usage API availability and access via `OPENAI_API_KEY_USAGE_TRACKING` with `api.usage.read` permission
 - Existing metrics.json schema with `aggregate_metrics`, `steps`, and `usage_api_reconciliation` sections
 - Existing reconciliation infrastructure: `UsageReconciler` class, `reconcile_usage.py` script, manifest manager
 - Python libraries: requests (API calls), json (data handling), datetime (timestamp parsing)

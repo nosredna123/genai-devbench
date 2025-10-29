@@ -14,7 +14,7 @@ This guide explains how to configure and use the enhanced GHSpecAdapter with ful
 
 - genai-devbench installed and configured
 - Python 3.11+ environment
-- OpenAI API key configured (OPEN_AI_KEY_ADM environment variable)
+- OpenAI API key configured (OPENAI_API_KEY_USAGE_TRACKING environment variable)
 - GHSpec framework cloned to `frameworks/ghspec/` (via setup scripts)
 
 ---
@@ -29,7 +29,7 @@ Edit `config/experiment.yaml` to include GHSpec runs:
 frameworks:
   - name: ghspec
     enabled: true
-    api_key_env: OPEN_AI_KEY_ADM
+    api_key_env: OPENAI_API_KEY_USAGE_TRACKING
     model: gpt-4o-mini
     workspace_base: workspaces/ghspec
 ```
@@ -124,7 +124,7 @@ frameworks:
 
 ```bash
 # Set API key
-export OPEN_AI_KEY_ADM="your-openai-api-key"
+export OPENAI_API_KEY_USAGE_TRACKING="your-openai-api-key"
 
 # Run experiment
 python -m src.orchestrator \
@@ -334,7 +334,7 @@ START_TIME=$(jq '.start_timestamp' runs/ghspec/<run-id>/metadata.json)
 END_TIME=$(jq '.end_timestamp' runs/ghspec/<run-id>/metadata.json)
 
 # Query OpenAI Usage API (requires admin key)
-curl -H "Authorization: Bearer $OPEN_AI_KEY_ADM" \
+curl -H "Authorization: Bearer $OPENAI_API_KEY_USAGE_TRACKING" \
      "https://api.openai.com/v1/usage?start_time=$START_TIME&end_time=$END_TIME"
 
 # Compare with logged metrics
@@ -388,7 +388,7 @@ grep "hitl_interaction" runs/ghspec/<run-id>/orchestrator.log
 frameworks:
   - name: ghspec
     enabled: true
-    api_key_env: OPEN_AI_KEY_ADM
+    api_key_env: OPENAI_API_KEY_USAGE_TRACKING
 ```
 
 ### Research Configuration (Reproducibility Focus)
@@ -396,7 +396,7 @@ frameworks:
 frameworks:
   - name: ghspec
     enabled: true
-    api_key_env: OPEN_AI_KEY_ADM
+    api_key_env: OPENAI_API_KEY_USAGE_TRACKING
     template_source: static
     tech_stack_constraints: "Python 3.11, FastAPI, PostgreSQL, pytest"
     constitution_text: |
@@ -411,7 +411,7 @@ frameworks:
 frameworks:
   - name: ghspec
     enabled: true
-    api_key_env: OPEN_AI_KEY_ADM
+    api_key_env: OPENAI_API_KEY_USAGE_TRACKING
     template_source: dynamic
     # No tech constraints - let AI explore options
 ```

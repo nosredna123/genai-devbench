@@ -289,7 +289,7 @@ Update all framework adapters to capture both new return values.
 **Current**:
 ```python
 tokens_in, tokens_out = self.fetch_usage_from_openai(
-    api_key_env_var='OPEN_AI_KEY_ADM',
+    api_key_env_var='OPENAI_API_KEY_USAGE_TRACKING',
     start_timestamp=self._step_start_time,
     end_timestamp=end_timestamp,
     model=model_config
@@ -299,7 +299,7 @@ tokens_in, tokens_out = self.fetch_usage_from_openai(
 **Updated**:
 ```python
 tokens_in, tokens_out, api_calls, cached_tokens = self.fetch_usage_from_openai(
-    api_key_env_var='OPEN_AI_KEY_ADM',
+    api_key_env_var='OPENAI_API_KEY_USAGE_TRACKING',
     start_timestamp=self._step_start_time,
     end_timestamp=end_timestamp,
     model=model_config
@@ -853,7 +853,7 @@ def test_usage_api_returns_api_calls():
     
     # Fetch usage (should return 3-tuple)
     result = adapter.fetch_usage_from_openai(
-        api_key_env_var='OPEN_AI_KEY_ADM',
+        api_key_env_var='OPENAI_API_KEY_USAGE_TRACKING',
         start_timestamp=start_time,
         end_timestamp=end_time,
         model=chatdev_config.get('model')

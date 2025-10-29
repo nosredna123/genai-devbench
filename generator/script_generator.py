@@ -374,7 +374,7 @@ update with accurate data from the Usage API.
 ### API Key Requirements
 
 The reconciliation script requires an API key with `api.usage.read` scope.
-Set `OPEN_AI_KEY_ADM` in your `.env` file. You can use the same key as one
+Set `OPENAI_API_KEY_USAGE_TRACKING` in your `.env` file. You can use the same key as one
 of your frameworks, or create a dedicated key.
 
 ## Analysis
@@ -414,7 +414,7 @@ python -m src.setup_frameworks
 1. Verify keys in `.env` are correct (start with `sk-`)
 2. Check API key permissions on OpenAI platform
 3. Verify different keys are used for each framework (if required)
-4. For reconciliation, ensure `OPEN_AI_KEY_ADM` has `api.usage.read` scope
+4. For reconciliation, ensure `OPENAI_API_KEY_USAGE_TRACKING` has `api.usage.read` scope
 
 ### Reconciliation Issues
 
@@ -426,7 +426,7 @@ python -m src.setup_frameworks
 **Reconciliation returns 0 tokens:**
 - Usage API delay may be longer than expected - wait and retry
 - API key may lack `api.usage.read` scope - check permissions
-- Verify the API key in `OPEN_AI_KEY_ADM` is correct
+- Verify the API key in `OPENAI_API_KEY_USAGE_TRACKING` is correct
 
 **Permission denied error:**
 ```bash
@@ -523,7 +523,7 @@ or check the source code comments.
 # This key is used to query the OpenAI Usage API for token reconciliation
 # It requires 'api.usage.read' scope
 # You can use the same key as one of the frameworks above, or a dedicated key
-OPEN_AI_KEY_ADM=sk-your-admin-api-key-here
+OPENAI_API_KEY_USAGE_TRACKING=sk-your-admin-api-key-here
 
 # Usage Reconciliation Configuration
 # How often to check for stable reconciliation (in minutes)
@@ -645,17 +645,17 @@ if [ -f ".env" ]; then
 fi
 
 # Check for required API key (for Usage API access)
-# Note: Uses OPEN_AI_KEY_ADM or falls back to first framework key
-if [ -z "${{OPEN_AI_KEY_ADM}}" ]; then
+# Note: Uses OPENAI_API_KEY_USAGE_TRACKING or falls back to first framework key
+if [ -z "${{OPENAI_API_KEY_USAGE_TRACKING}}" ]; then
     # Try to use first available framework key
     FIRST_KEY=""
 {self._generate_fallback_key_logic()}
     if [ -z "$FIRST_KEY" ]; then
-        echo "⚠️  Warning: No OPEN_AI_KEY_ADM found in .env"
+        echo "⚠️  Warning: No OPENAI_API_KEY_USAGE_TRACKING found in .env"
         echo "   Usage reconciliation requires an API key with usage read permissions"
         echo "   The script will attempt to use framework keys, but may fail"
     else
-        export OPEN_AI_KEY_ADM="$FIRST_KEY"
+        export OPENAI_API_KEY_USAGE_TRACKING="$FIRST_KEY"
     fi
 fi
 

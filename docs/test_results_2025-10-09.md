@@ -40,7 +40,7 @@ and if you're using a restricted API key, that it has the necessary scopes.
   "message": "API key lacks 'api.usage.read' scope for Usage API",
   "run_id": "test_usage_api",
   "metadata": {
-    "api_key_env_var": "OPEN_AI_KEY_ADM",
+    "api_key_env_var": "OPENAI_API_KEY_USAGE_TRACKING",
     "error": "You have insufficient permissions for this operation. Missing scopes: api.usage.read...",
     "fix": "Grant api.usage.read scope to the API key in OpenAI dashboard"
   }
@@ -49,7 +49,7 @@ and if you're using a restricted API key, that it has the necessary scopes.
 
 ### What's Working ✅
 
-1. **API Key Configuration**: Correctly uses `OPEN_AI_KEY_ADM`
+1. **API Key Configuration**: Correctly uses `OPENAI_API_KEY_USAGE_TRACKING`
 2. **Error Detection**: Identifies missing `api.usage.read` scope
 3. **Error Handling**: Non-blocking, returns (0, 0) gracefully
 4. **Logging**: Clear error messages with actionable fixes
@@ -60,7 +60,7 @@ and if you're using a restricted API key, that it has the necessary scopes.
 
 **User Action Required**: Grant API key permissions
 
-The `OPEN_AI_KEY_ADM` service account key needs the `api.usage.read` scope:
+The `OPENAI_API_KEY_USAGE_TRACKING` service account key needs the `api.usage.read` scope:
 
 1. **Go to**: https://platform.openai.com/settings/organization/api-keys
 2. **Find**: Service account key starting with `sk-svcacct-VziaonHkns7QevkViR0L...`
@@ -83,7 +83,7 @@ Querying usage for last hour:
   Start: 1760007962 (Thu Oct  9 08:06:02 2025)
   End:   1760011562 (Thu Oct  9 09:06:02 2025)
   Model: gpt-5-mini
-  API Key Env: OPEN_AI_KEY_ADM (admin key with org permissions)
+  API Key Env: OPENAI_API_KEY_USAGE_TRACKING (admin key with org permissions)
 
 Results:
   Input tokens:  12,345
@@ -102,7 +102,7 @@ Results:
 #### Test 1: Direct API Call
 ```bash
 curl "https://api.openai.com/v1/organization/usage/completions?start_time=1728476220&limit=1" \
-  -H "Authorization: Bearer $OPEN_AI_KEY_ADM"
+  -H "Authorization: Bearer $OPENAI_API_KEY_USAGE_TRACKING"
 ```
 
 **Current Result**: ❌ 401 Unauthorized (Missing scope)
@@ -142,7 +142,7 @@ python test_usage_api.py
 |---------|--------|-------|
 | API Key Architecture | ✅ Complete | Two-tier system documented |
 | Token Counting Method | ✅ Complete | `BaseAdapter.fetch_usage_from_openai()` |
-| ChatDev Integration | ✅ Complete | Uses `OPEN_AI_KEY_ADM` |
+| ChatDev Integration | ✅ Complete | Uses `OPENAI_API_KEY_USAGE_TRACKING` |
 | Error Handling | ✅ Complete | 401 scope error detection |
 | Non-blocking Design | ✅ Complete | Returns (0, 0) on error |
 | Documentation | ✅ Complete | 3 comprehensive guides |
@@ -152,7 +152,7 @@ python test_usage_api.py
 ### Next Steps
 
 #### Immediate (for user)
-1. Grant `api.usage.read` scope to `OPEN_AI_KEY_ADM`
+1. Grant `api.usage.read` scope to `OPENAI_API_KEY_USAGE_TRACKING`
 2. Re-run `python test_usage_api.py` to verify
 3. Run smoke test: `./run_tests.sh smoke`
 
@@ -167,10 +167,10 @@ python test_usage_api.py
 | File | Changes | Status |
 |------|---------|--------|
 | `src/adapters/base_adapter.py` | Added `fetch_usage_from_openai()` + scope error handling | ✅ Committed |
-| `src/adapters/chatdev_adapter.py` | Use `OPEN_AI_KEY_ADM` instead of framework key | ✅ Committed |
+| `src/adapters/chatdev_adapter.py` | Use `OPENAI_API_KEY_USAGE_TRACKING` instead of framework key | ✅ Committed |
 | `src/orchestrator/runner.py` | Pass model config to adapters | ✅ Committed |
 | `test_usage_api.py` | Test script using admin key | ✅ Committed |
-| `.env.example` | Added `OPEN_AI_KEY_ADM` | ✅ Committed |
+| `.env.example` | Added `OPENAI_API_KEY_USAGE_TRACKING` | ✅ Committed |
 
 ### Documentation Created
 
@@ -185,7 +185,7 @@ python test_usage_api.py
 ```
 0b0ed4e - fix: Improve API key permission error handling
 a0e4f16 - docs: Add comprehensive API key architecture guide
-b845f7a - fix: Use OPEN_AI_KEY_ADM for Usage API queries
+b845f7a - fix: Use OPENAI_API_KEY_USAGE_TRACKING for Usage API queries
 6205940 - docs: Add comprehensive token counting implementation guide
 ee9d71d - feat: Implement OpenAI Usage API token counting (DRY principle)
 ```
