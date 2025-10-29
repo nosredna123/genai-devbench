@@ -110,7 +110,10 @@ class ExperimentAnalyzer:
                     "execution_time": self._extract_metric_value(metrics, "duration_total"),
                     "total_cost_usd": self._extract_metric_value(metrics, "cost_total"),
                     "api_calls": self._extract_metric_value(metrics, "api_calls_total"),
+                    "tokens_in": self._extract_metric_value(metrics, "tokens_in"),
+                    "tokens_out": self._extract_metric_value(metrics, "tokens_out"),
                     "tokens_total": self._extract_metric_value(metrics, "tokens_total"),
+                    "cached_tokens": self._extract_metric_value(metrics, "cached_tokens"),
                 })
         
         if not all_runs:
@@ -126,7 +129,10 @@ class ExperimentAnalyzer:
             "execution_time": self._aggregate_metric(all_runs, "duration_total"),
             "total_cost_usd": self._aggregate_metric(all_runs, "cost_total"),
             "api_calls": self._aggregate_metric(all_runs, "api_calls_total"),
+            "tokens_in": self._aggregate_metric(all_runs, "tokens_in"),
+            "tokens_out": self._aggregate_metric(all_runs, "tokens_out"),
             "tokens_total": self._aggregate_metric(all_runs, "tokens_total"),
+            "cached_tokens": self._aggregate_metric(all_runs, "cached_tokens"),
         }
         
         return aggregated
@@ -152,15 +158,24 @@ class ExperimentAnalyzer:
         # Try to find the metric in the run data
         if metric_name in metrics:
             value = metrics[metric_name]
-        # Compute from steps if not at top level
+        # Compute from steps for duration
         elif metric_name == "duration_total" and "steps" in metrics:
             value = sum(step.get("duration_seconds", 0) for step in metrics["steps"])
-        elif metric_name == "cost_total" and "steps" in metrics:
-            value = sum(step.get("cost", 0) for step in metrics["steps"])
-        elif metric_name == "api_calls_total" and "steps" in metrics:
-            value = sum(step.get("api_calls", 0) for step in metrics["steps"])
-        elif metric_name == "tokens_total" and "steps" in metrics:
-            value = sum(step.get("tokens_used", 0) for step in metrics["steps"])
+        # Get from aggregate_metrics (primary source for API/token data)
+        elif "aggregate_metrics" in metrics:
+            agg = metrics["aggregate_metrics"]
+            if metric_name == "cost_total":
+                value = agg.get("COST_USD", 0)
+            elif metric_name == "api_calls_total":
+                value = agg.get("API_CALLS", 0)
+            elif metric_name == "tokens_in":
+                value = agg.get("TOK_IN", 0)
+            elif metric_name == "tokens_out":
+                value = agg.get("TOK_OUT", 0)
+            elif metric_name == "tokens_total":
+                value = agg.get("TOK_IN", 0) + agg.get("TOK_OUT", 0)
+            elif metric_name == "cached_tokens":
+                value = agg.get("CACHED_TOKENS", 0)
         
         return value if value is not None else 0
     
@@ -169,23 +184,9 @@ class ExperimentAnalyzer:
         values = []
         
         for run in runs:
-            value = None
-            
-            # Try to find the metric in the run data
-            if metric_name in run:
-                value = run[metric_name]
-            # Compute from steps if not at top level
-            elif metric_name == "duration_total" and "steps" in run:
-                value = sum(step.get("duration_seconds", 0) for step in run["steps"])
-            elif metric_name == "cost_total" and "steps" in run:
-                value = sum(step.get("cost", 0) for step in run["steps"])
-            elif metric_name == "api_calls_total" and "steps" in run:
-                value = sum(step.get("api_calls", 0) for step in run["steps"])
-            elif metric_name == "tokens_total" and "steps" in run:
-                value = sum(step.get("tokens_used", 0) for step in run["steps"])
-            
-            if value is not None:
-                values.append(value)
+            # Use _extract_metric_value for consistency
+            value = self._extract_metric_value(run, metric_name)
+            values.append(value)
         
         if not values:
             logger.debug("No values found for metric: %s", metric_name)
@@ -251,6 +252,15 @@ class ExperimentAnalyzer:
             if "api_calls" in data:
                 calls = data["api_calls"]
                 report.append(f"| {framework} | API Calls | {calls['mean']:.2f} | {calls['std']:.2f} |")
+            if "tokens_in" in data:
+                tokens_in = data["tokens_in"]
+                report.append(f"| {framework} | Tokens In | {tokens_in['mean']:.0f} | {tokens_in['std']:.0f} |")
+            if "tokens_out" in data:
+                tokens_out = data["tokens_out"]
+                report.append(f"| {framework} | Tokens Out | {tokens_out['mean']:.0f} | {tokens_out['std']:.0f} |")
+            if "cached_tokens" in data:
+                cached = data["cached_tokens"]
+                report.append(f"| {framework} | Cached Tokens | {cached['mean']:.0f} | {cached['std']:.0f} |")
             if "tokens_total" in data:
                 tokens = data["tokens_total"]
                 report.append(f"| {framework} | Total Tokens | {tokens['mean']:.0f} | {tokens['std']:.0f} |")
