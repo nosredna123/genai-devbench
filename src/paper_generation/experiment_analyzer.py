@@ -1,0 +1,238 @@
+"""
+ExperimentAnalyzer: Analyzes raw experiment run data.
+
+Reads raw run metrics from experiment_dir/runs/ and generates aggregated
+statistics and reports in the output directory.
+"""
+
+import json
+import logging
+import statistics
+from pathlib import Path
+from typing import Dict, List, Any
+from collections import defaultdict
+
+from .exceptions import ExperimentDataError
+
+logger = logging.getLogger(__name__)
+
+
+class ExperimentAnalyzer:
+    """
+    Analyzes raw experiment run data and generates aggregated statistics.
+    
+    Reads from: experiment_dir/runs/{framework}/{run_id}/metrics.json
+    Writes to: output_dir/metrics.json, output_dir/statistical_report.md
+    """
+    
+    def __init__(self, experiment_dir: Path, output_dir: Path):
+        """
+        Initialize analyzer.
+        
+        Args:
+            experiment_dir: Root experiment directory with runs/
+            output_dir: Where to write analysis results
+        """
+        self.experiment_dir = experiment_dir
+        self.output_dir = output_dir
+        self.runs_dir = experiment_dir / "runs"
+        
+        if not self.runs_dir.exists():
+            raise ExperimentDataError(
+                message=f"Runs directory not found: {self.runs_dir}",
+                remediation="Ensure experiment has completed and generated run data"
+            )
+    
+    def analyze(self) -> Dict[str, Any]:
+        """
+        Perform complete analysis of experiment runs.
+        
+        Returns:
+            Dict with aggregated metrics for all frameworks
+            
+        Raises:
+            ExperimentDataError: If no valid run data found
+        """
+        logger.info("Analyzing experiment runs from: %s", self.runs_dir)
+        
+        # Find all framework directories
+        framework_dirs = [d for d in self.runs_dir.iterdir() if d.is_dir()]
+        if not framework_dirs:
+            raise ExperimentDataError(
+                message=f"No framework directories found in {self.runs_dir}",
+                remediation="Ensure experiment has completed successfully"
+            )
+        
+        logger.info("Found %d frameworks: %s", len(framework_dirs), 
+                   [d.name for d in framework_dirs])
+        
+        # Aggregate metrics for each framework
+        frameworks_data = {}
+        for framework_dir in framework_dirs:
+            framework_name = framework_dir.name
+            aggregated = self._aggregate_framework_metrics(framework_dir)
+            if aggregated:
+                frameworks_data[framework_name] = aggregated
+        
+        if not frameworks_data:
+            raise ExperimentDataError(
+                message="No valid framework metrics found",
+                remediation="Check that run directories contain metrics.json files"
+            )
+        
+        # Write results to output directory
+        self._write_metrics_json(frameworks_data)
+        self._write_statistical_report(frameworks_data)
+        
+        logger.info("Analysis complete: %d frameworks analyzed", len(frameworks_data))
+        
+        return frameworks_data
+    
+    def _aggregate_framework_metrics(self, framework_dir: Path) -> Dict[str, Any]:
+        """Aggregate metrics across all runs for a framework."""
+        logger.debug("Analyzing framework: %s", framework_dir.name)
+        
+        # Find all run directories (UUIDs)
+        run_dirs = [d for d in framework_dir.iterdir() if d.is_dir()]
+        logger.debug("Found %d run directories for %s", len(run_dirs), framework_dir.name)
+        
+        # Collect metrics from all runs
+        all_runs = []
+        for run_dir in run_dirs:
+            metrics = self._load_run_metrics(run_dir)
+            if metrics:
+                all_runs.append(metrics)
+        
+        if not all_runs:
+            logger.warning("No valid metrics found for %s", framework_dir.name)
+            return {}
+        
+        logger.info("Loaded %d valid runs for %s", len(all_runs), framework_dir.name)
+        
+        # Aggregate statistics
+        aggregated = {
+            "num_runs": len(all_runs),
+            "execution_time": self._aggregate_metric(all_runs, "duration_total"),
+            "total_cost_usd": self._aggregate_metric(all_runs, "cost_total"),
+            "api_calls": self._aggregate_metric(all_runs, "api_calls_total"),
+            "tokens_total": self._aggregate_metric(all_runs, "tokens_total"),
+        }
+        
+        return aggregated
+    
+    def _load_run_metrics(self, run_dir: Path) -> Dict[str, Any]:
+        """Load metrics from a single run directory."""
+        metrics_file = run_dir / "metrics.json"
+        if not metrics_file.exists():
+            logger.debug("Metrics file not found: %s", metrics_file)
+            return None
+        
+        try:
+            with open(metrics_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning("Failed to load %s: %s", metrics_file, str(e))
+            return None
+    
+    def _aggregate_metric(self, runs: List[Dict], metric_name: str) -> Dict[str, float]:
+        """Calculate statistics for a specific metric across runs."""
+        values = []
+        
+        for run in runs:
+            value = None
+            
+            # Try to find the metric in the run data
+            if metric_name in run:
+                value = run[metric_name]
+            # Compute from steps if not at top level
+            elif metric_name == "duration_total" and "steps" in run:
+                value = sum(step.get("duration_seconds", 0) for step in run["steps"])
+            elif metric_name == "cost_total" and "steps" in run:
+                value = sum(step.get("cost", 0) for step in run["steps"])
+            elif metric_name == "api_calls_total" and "steps" in run:
+                value = sum(step.get("api_calls", 0) for step in run["steps"])
+            elif metric_name == "tokens_total" and "steps" in run:
+                value = sum(step.get("tokens_used", 0) for step in run["steps"])
+            
+            if value is not None:
+                values.append(value)
+        
+        if not values:
+            logger.debug("No values found for metric: %s", metric_name)
+            return {"mean": 0, "std": 0, "min": 0, "max": 0, "count": 0}
+        
+        return {
+            "mean": statistics.mean(values),
+            "std": statistics.stdev(values) if len(values) > 1 else 0,
+            "min": min(values),
+            "max": max(values),
+            "count": len(values)
+        }
+    
+    def _write_metrics_json(self, frameworks_data: Dict[str, Any]):
+        """Write aggregated metrics to JSON file."""
+        output_file = self.output_dir / "metrics.json"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(frameworks_data, f, indent=2)
+        
+        logger.info("Metrics written to: %s", output_file)
+    
+    def _write_statistical_report(self, frameworks_data: Dict[str, Any]):
+        """Generate statistical analysis report in Markdown."""
+        output_file = self.output_dir / "statistical_report.md"
+        
+        report = []
+        report.append("# Statistical Analysis Report\n")
+        report.append(f"Generated from {len(frameworks_data)} frameworks\n")
+        report.append("\n## Framework Comparison\n")
+        
+        # Create comparison table
+        report.append("\n### Execution Time\n")
+        report.append("| Framework | Mean (s) | Std Dev | Min | Max | Runs |")
+        report.append("|-----------|----------|---------|-----|-----|------|")
+        
+        for framework, data in sorted(frameworks_data.items()):
+            if "execution_time" in data:
+                et = data["execution_time"]
+                report.append(
+                    f"| {framework} | {et['mean']:.2f} | {et['std']:.2f} | "
+                    f"{et['min']:.2f} | {et['max']:.2f} | {et['count']} |"
+                )
+        
+        report.append("\n### Cost Analysis\n")
+        report.append("| Framework | Mean ($) | Std Dev | Min | Max | Runs |")
+        report.append("|-----------|----------|---------|-----|-----|------|")
+        
+        for framework, data in sorted(frameworks_data.items()):
+            if "total_cost_usd" in data:
+                cost = data["total_cost_usd"]
+                report.append(
+                    f"| {framework} | ${cost['mean']:.4f} | ${cost['std']:.4f} | "
+                    f"${cost['min']:.4f} | ${cost['max']:.4f} | {cost['count']} |"
+                )
+        
+        report.append("\n### API Usage\n")
+        report.append("| Framework | Metric | Mean | Std Dev |")
+        report.append("|-----------|--------|------|---------|")
+        
+        for framework, data in sorted(frameworks_data.items()):
+            if "api_calls" in data:
+                calls = data["api_calls"]
+                report.append(f"| {framework} | API Calls | {calls['mean']:.2f} | {calls['std']:.2f} |")
+            if "tokens_total" in data:
+                tokens = data["tokens_total"]
+                report.append(f"| {framework} | Total Tokens | {tokens['mean']:.0f} | {tokens['std']:.0f} |")
+        
+        report.append("\n## Key Findings\n")
+        report.append(f"- Comparative analysis across {len(frameworks_data)} frameworks\n")
+        report.append("- Statistical significance tests would require additional analysis\n")
+        report.append("- Data collected from raw experiment runs\n")
+        
+        # Write report
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(report))
+        
+        logger.info("Statistical report written to: %s", output_file)

@@ -9,7 +9,7 @@ import json
 import yaml
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import logging
 import subprocess
 
@@ -26,6 +26,7 @@ from .citation_handler import CitationHandler
 from .document_formatter import DocumentFormatter
 from .template_bundle import TemplateBundle
 from .readme_enhancer import ReadmeEnhancer
+from .experiment_analyzer import ExperimentAnalyzer
 from .sections import (
     AbstractGenerator,
     IntroductionGenerator,
@@ -118,9 +119,15 @@ class PaperGenerator:
             logger.info("Starting paper generation pipeline")
         logger.info("=" * 80)
         
-        # Step 1: Load experiment data
-        logger.info("Step 1: Loading experiment data...")
-        context = self._load_experiment_data()
+        # Step 1: Analyze raw experiment data (prerequisite)
+        logger.info("Step 1: Analyzing raw experiment runs...")
+        analyzer = ExperimentAnalyzer(self.config.experiment_dir, self.config.output_dir)
+        frameworks_data = analyzer.analyze()
+        logger.info("  Analyzed %d frameworks", len(frameworks_data))
+        
+        # Step 2: Load analyzed data
+        logger.info("Step 2: Loading analyzed data...")
+        context = self._load_analyzed_data(frameworks_data)
         
         # Validate metrics_filter if specified (after data loaded)
         if self.config.metrics_filter is not None:
@@ -132,7 +139,7 @@ class PaperGenerator:
         
         # If figures-only mode, skip prose generation and LaTeX compilation
         if self.config.figures_only:
-            logger.info("Step 2: Exporting figures (figures-only mode)...")
+            logger.info("Step 3: Exporting figures (figures-only mode)...")
             figures = self.figure_exporter.export_figures(context)
             
             end_time = time.time()
@@ -165,16 +172,16 @@ class PaperGenerator:
             
             return result
         
-        # Step 2: Generate all sections
-        logger.info("Step 2: Generating sections...")
+        # Step 3: Generate all sections
+        logger.info("Step 3: Generating sections...")
         sections = self._generate_all_sections(context)
         
-        # Step 3: Export figures
-        logger.info("Step 3: Exporting figures...")
+        # Step 4: Export figures
+        logger.info("Step 4: Exporting figures...")
         figures = self.figure_exporter.export_figures(context)
         
-        # Step 4: Assemble paper structure
-        logger.info("Step 4: Assembling paper structure...")
+        # Step 5: Assemble paper structure
+        logger.info("Step 5: Assembling paper structure...")
         paper_structure = PaperStructure(
             title=f"Empirical Comparison of {len(context.frameworks)} Multi-Agent Frameworks",
             authors=["Author 1", "Author 2"],  # TODO: Extract from config
@@ -190,21 +197,21 @@ class PaperGenerator:
             references_template=""  # Will be filled manually after citation placeholder review
         )
         
-        # Step 5: Insert citation placeholders
-        logger.info("Step 5: Inserting citation placeholders...")
+        # Step 6: Insert citation placeholders
+        logger.info("Step 6: Inserting citation placeholders...")
         paper_structure = self._insert_citations(paper_structure)
         
-        # Step 6: Convert to LaTeX
-        logger.info("Step 6: Converting to LaTeX...")
+        # Step 7: Convert to LaTeX
+        logger.info("Step 7: Converting to LaTeX...")
         latex_file = self._convert_to_latex(paper_structure)
         
-        # Step 7: Compile to PDF (if not skipped)
+        # Step 8: Compile to PDF (if not skipped)
         pdf_file = None
         if not self.config.skip_latex:
-            logger.info("Step 7: Compiling to PDF...")
+            logger.info("Step 8: Compiling to PDF...")
             pdf_file = self._compile_to_pdf(latex_file)
         else:
-            logger.info("Step 7: Skipped PDF compilation (skip_latex=True)")
+            logger.info("Step 8: Skipped PDF compilation (skip_latex=True)")
         
         # Calculate metrics
         end_time = time.time()
@@ -229,8 +236,8 @@ class PaperGenerator:
             ai_tokens_used=self.prose_engine.total_tokens_used
         )
         
-        # Step 8: Enhance experiment README with reproduction instructions
-        logger.info("Step 8: Enhancing experiment README...")
+        # Step 9: Enhance experiment README with reproduction instructions
+        logger.info("Step 9: Enhancing experiment README...")
         try:
             readme_enhancer = ReadmeEnhancer()
             readme_path = readme_enhancer.enhance_readme(
@@ -280,10 +287,13 @@ class PaperGenerator:
         
         logger.debug("Experiment directory validated: %s", exp_dir)
     
-    def _load_experiment_data(self) -> SectionContext:
+    def _load_analyzed_data(self, frameworks_data: Dict[str, Any]) -> SectionContext:
         """
-        Load experiment data from directory.
+        Load analyzed experiment data from output directory.
         
+        Args:
+            frameworks_data: Pre-analyzed framework metrics
+            
         Returns:
             SectionContext with loaded data
             
@@ -291,12 +301,13 @@ class PaperGenerator:
             ExperimentDataError: If required files missing or invalid
         """
         exp_dir = self.config.experiment_dir
+        output_dir = self.config.output_dir
         
         try:
-            # Load config/experiment.yaml
+            # Load config/experiment.yaml from experiment dir (if exists)
             config_file = exp_dir / "config" / "experiment.yaml"
             if config_file.exists():
-                with open(config_file, 'r') as f:
+                with open(config_file, 'r', encoding='utf-8') as f:
                     exp_config = yaml.safe_load(f)
                 frameworks = exp_config.get('frameworks', [])
                 num_runs = exp_config.get('num_runs', 50)
@@ -305,27 +316,17 @@ class PaperGenerator:
                 frameworks = []
                 num_runs = 50
             
-            # Load analysis/metrics.json
-            metrics_file = exp_dir / "analysis" / "metrics.json"
-            if not metrics_file.exists():
-                raise ExperimentDataError(
-                    message=f"Required file not found: {metrics_file}"
-                )
-            
-            with open(metrics_file, 'r') as f:
-                metrics_data = json.load(f)
-            
-            metrics = metrics_data.get('metrics', {})
-            statistical_results = metrics_data.get('statistical_tests', {})
+            # Use analyzed metrics from output_dir
+            metrics = frameworks_data
             
             # If frameworks not in config, extract from metrics
             if not frameworks:
                 frameworks = list(metrics.keys())
             
-            # Load analysis/statistical_report.md (if exists)
-            report_file = exp_dir / "analysis" / "statistical_report.md"
+            # Load statistical_report.md from output_dir
+            report_file = output_dir / "statistical_report.md"
             if report_file.exists():
-                statistical_report = report_file.read_text()
+                statistical_report = report_file.read_text(encoding='utf-8')
                 # Extract key findings from report (simple heuristic)
                 key_findings = self._extract_key_findings(statistical_report)
             else:
@@ -339,7 +340,7 @@ class PaperGenerator:
                 frameworks=frameworks,
                 num_runs=num_runs,
                 metrics=metrics,
-                statistical_results=statistical_results,
+                statistical_results={},  # Can be extended later
                 key_findings=key_findings
             )
             
@@ -350,7 +351,7 @@ class PaperGenerator:
             
         except Exception as e:
             raise ExperimentDataError(
-                message=f"Failed to load experiment data: {str(e)}"
+                message=f"Failed to load analyzed data: {str(e)}"
             ) from e
     
     def _extract_key_findings(self, report: str) -> List[str]:
