@@ -1,0 +1,130 @@
+{
+  "experiment_name": "Multi-Agent Framework Comparison",
+  "frameworks": ["ChatDev", "MetaGPT", "AutoGen"],
+  "total_runs": 150,
+  "metrics": {
+    "ChatDev": {
+      "execution_time": {
+        "mean": 245.3,
+        "std": 23.1,
+        "min": 198.5,
+        "max": 289.7,
+        "unit": "seconds"
+      },
+      "tokens_used": {
+        "mean": 15234,
+        "std": 1876,
+        "min": 11500,
+        "max": 19200,
+        "unit": "tokens"
+      },
+      "total_cost_usd": {
+        "mean": 0.42,
+        "std": 0.08,
+        "min": 0.28,
+        "max": 0.56,
+        "unit": "USD"
+      },
+      "test_pass_rate": {
+        "mean": 0.87,
+        "std": 0.12,
+        "min": 0.65,
+        "max": 1.0,
+        "unit": "ratio"
+      },
+      "code_quality_score": {
+        "mean": 7.2,
+        "std": 0.9,
+        "min": 5.5,
+        "max": 9.0,
+        "unit": "score"
+      }
+    },
+    "MetaGPT": {
+      "execution_time": {
+        "mean": 312.7,
+        "std": 31.4,
+        "min": 251.2,
+        "max": 378.9,
+        "unit": "seconds"
+      },
+      "tokens_used": {
+        "mean": 18923,
+        "std": 2134,
+        "min": 14800,
+        "max": 23100,
+        "unit": "tokens"
+      },
+      "total_cost_usd": {
+        "mean": 0.53,
+        "std": 0.11,
+        "min": 0.37,
+        "max": 0.69,
+        "unit": "USD"
+      },
+      "test_pass_rate": {
+        "mean": 0.92,
+        "std": 0.08,
+        "min": 0.75,
+        "max": 1.0,
+        "unit": "ratio"
+      },
+      "code_quality_score": {
+        "mean": 8.1,
+        "std": 0.7,
+        "min": 6.8,
+        "max": 9.5,
+        "unit": "score"
+      }
+    },
+    "AutoGen": {
+      "execution_time": {
+        "mean": 198.4,
+        "std": 19.8,
+        "min": 162.3,
+        "max": 234.5,
+        "unit": "seconds"
+      },
+      "tokens_used": {
+        "mean": 13456,
+        "std": 1654,
+        "min": 10200,
+        "max": 16800,
+        "unit": "tokens"
+      },
+      "total_cost_usd": {
+        "mean": 0.35,
+        "std": 0.07,
+        "min": 0.24,
+        "max": 0.46,
+        "unit": "USD"
+      },
+      "test_pass_rate": {
+        "mean": 0.83,
+        "std": 0.14,
+        "min": 0.58,
+        "max": 1.0,
+        "unit": "ratio"
+      },
+      "code_quality_score": {
+        "mean": 6.9,
+        "std": 1.1,
+        "min": 4.8,
+        "max": 8.7,
+        "unit": "score"
+      }
+    }
+  },
+  "statistical_tests": {
+    "execution_time": {
+      "test": "Kruskal-Wallis H-test",
+      "p_value": 0.0001,
+      "significant": true
+    },
+    "test_pass_rate": {
+      "test": "Chi-square test",
+      "p_value": 0.023,
+      "significant": true
+    }
+  }
+}
