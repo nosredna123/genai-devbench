@@ -8,6 +8,7 @@ Auto-generated from all feature plans. Last updated: 2025-10-27
 - File-based (YAML configs, JSON run data) (009-refactor-analysis-module)
 - Python 3.11+ (matching existing genai-devbench codebase) (010-paper-generation)
 - File-based (YAML configs, JSON run data, generated LaTeX/Markdown files, PDF/PNG figures) (010-paper-generation)
+- File-based (YAML configs, JSON run data, Markdown reports, SVG/PNG figures) (011-enhance-statistical-report)
 
 ## Project Structure
 ```
@@ -22,9 +23,9 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11+: Follow standard conventions
 
 ## Recent Changes
+- 011-enhance-statistical-report: Added Python 3.11+ (matching existing genai-devbench codebase)
 - 010-paper-generation: Added Python 3.11+ (matching existing genai-devbench codebase)
 - 010-paper-generation: Added Python 3.11+ (matching existing genai-devbench codebase)
-- 009-refactor-analysis-module: Added Python 3.11+ + PyYAML (config), pytest (testing), existing codebase (no new external deps)
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

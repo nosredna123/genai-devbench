@@ -15,6 +15,9 @@ import yaml
 
 from .exceptions import ExperimentDataError
 from src.utils.cost_calculator import CostCalculator
+from .statistical_analyzer import StatisticalAnalyzer
+from .statistical_visualizations import StatisticalVisualizationGenerator
+from .educational_content import EducationalContentGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +106,30 @@ class ExperimentAnalyzer:
                 message="No valid framework metrics found",
                 remediation="Check that run directories contain metrics.json files"
             )
+        
+        # T033: Perform statistical analysis
+        logger.info("Performing comprehensive statistical analysis...")
+        
+        # Initialize statistical analyzers
+        statistical_analyzer = StatisticalAnalyzer(alpha=0.05, random_seed=42)
+        viz_generator = StatisticalVisualizationGenerator(output_dir=str(self.output_dir))
+        educational_generator = EducationalContentGenerator(reading_level=8)
+        
+        # Perform statistical analysis
+        statistical_findings = statistical_analyzer.analyze_experiment(frameworks_data)
+        
+        # Generate visualizations
+        visualizations = viz_generator.generate_all_visualizations(statistical_findings)
+        
+        # Update findings with visualization data (flatten dict to list)
+        statistical_findings.visualizations = [
+            viz for viz_list in visualizations.values() for viz in viz_list
+        ]
+        
+        # Generate statistical reports
+        logger.info("Generating statistical reports...")
+        self._generate_statistical_report_summary(statistical_findings, educational_generator)
+        self._generate_statistical_report_full(statistical_findings, educational_generator)
         
         # Write results to output directory
         self._write_metrics_json(frameworks_data)
@@ -386,3 +413,273 @@ class ExperimentAnalyzer:
             f.write('\n'.join(report))
         
         logger.info("Statistical report written to: %s", output_file)
+    
+    def _generate_statistical_report_summary(
+        self,
+        findings,  # StatisticalFindings
+        educational_content  # EducationalContentGenerator
+    ) -> None:
+        """
+        Generate statistical_report_summary.md (T034).
+        
+        Creates a concise summary report (<300 lines) with:
+        - Quick Start Guide
+        - Executive Summary
+        - Key Findings (with effect sizes)
+        - Critical Visualizations (3-5 embedded)
+        - Power Recommendations
+        
+        Args:
+            findings: StatisticalFindings from analysis
+            educational_content: EducationalContentGenerator for explanations
+        """
+        output_file = self.output_dir / "statistical_report_summary.md"
+        
+        sections = []
+        
+        # Quick Start Guide
+        sections.append(educational_content.generate_quick_start_guide(findings))
+        sections.append("\n---\n")
+        
+        # Executive Summary
+        sections.append("## Executive Summary\n")
+        sections.append(f"**Experiment**: {findings.experiment_name}\n")
+        sections.append(f"**Analysis Date**: {findings.timestamp}\n")
+        sections.append(f"**Frameworks Analyzed**: {len(set(d.group_name for d in findings.distributions))}\n")
+        sections.append(f"**Metrics Analyzed**: {len(findings.metrics_analyzed)}\n")
+        sections.append(f"**Statistical Tests**: {len(findings.statistical_tests)}\n")
+        sections.append(f"**Significant Results**: {findings.n_significant_tests}\n")
+        sections.append(f"**Large Effects**: {findings.n_large_effects}\n\n")
+        
+        # Key Findings
+        sections.append("## 📊 Key Findings\n\n")
+        
+        for test in findings.statistical_tests:
+            sections.append(f"### {test.metric_name}\n\n")
+            sections.append(f"**Test Used**: {test.test_type.value}\n\n")
+            sections.append(f"**Result**: {'✅ Significant' if test.is_significant else '❌ Not Significant'} (p={test.p_value:.4f})\n\n")
+            sections.append(f"{test.interpretation}\n\n")
+            
+            # Add corresponding effect sizes
+            metric_effects = [e for e in findings.effect_sizes if e.metric_name == test.metric_name]
+            if metric_effects:
+                sections.append("**Effect Sizes**:\n\n")
+                for effect in metric_effects:
+                    comparison = f"{effect.group1} vs {effect.group2}"
+                    sections.append(
+                        f"- {comparison}: {effect.measure.value} = {effect.value:.3f} "
+                        f"({effect.magnitude}, 95% CI: [{effect.ci_lower:.3f}, {effect.ci_upper:.3f}])\n"
+                    )
+                sections.append("\n")
+        
+        # Critical Visualizations (top 3-5)
+        sections.append("## 📈 Critical Visualizations\n\n")
+        
+        # Select up to 5 most important visualizations
+        viz_priority = []
+        for metric in findings.metrics_analyzed[:2]:  # Top 2 metrics
+            # Box plot
+            box_plots = [v for v in findings.visualizations 
+                        if v.viz_type.value == 'boxplot' and v.metric_name == metric]
+            if box_plots:
+                viz_priority.append(box_plots[0])
+            
+            # Forest plot
+            forest_plots = [v for v in findings.visualizations 
+                           if v.viz_type.value == 'effect_forest' and v.metric_name == metric]
+            if forest_plots:
+                viz_priority.append(forest_plots[0])
+        
+        for viz in viz_priority[:5]:
+            # Make path relative to output_dir
+            rel_path = Path(viz.file_path).relative_to(self.output_dir)
+            sections.append(f"### {viz.title}\n\n")
+            sections.append(f"![{viz.caption}]({rel_path})\n\n")
+            sections.append(f"*{viz.caption}*\n\n")
+        
+        # Power Recommendations
+        if findings.power_warnings:
+            sections.append("## ⚠️ Power Analysis & Recommendations\n\n")
+            for warning in findings.power_warnings:
+                sections.append(f"- {warning}\n")
+            sections.append("\n")
+        
+        # Write report
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(''.join(sections))
+        
+        logger.info("Summary report written to: %s", output_file)
+    
+    def _generate_statistical_report_full(
+        self,
+        findings,  # StatisticalFindings
+        educational_content  # EducationalContentGenerator
+    ) -> None:
+        """
+        Generate statistical_report_full.md (T035).
+        
+        Creates a comprehensive report (800-1200 lines) with:
+        - Quick Start Guide
+        - Descriptive Statistics (with skew/kurtosis)
+        - Normality Assessment (with Q-Q plots)
+        - Assumption Validation (Levene)
+        - Statistical Comparisons (tests + effect sizes)
+        - Power Analysis
+        - Statistical Methodology
+        - Glossary
+        
+        Args:
+            findings: StatisticalFindings from analysis
+            educational_content: EducationalContentGenerator for explanations
+        """
+        output_file = self.output_dir / "statistical_report_full.md"
+        
+        sections = []
+        
+        # Quick Start Guide
+        sections.append(educational_content.generate_quick_start_guide(findings))
+        sections.append("\n---\n")
+        
+        # Table of Contents
+        sections.append("## Table of Contents\n\n")
+        sections.append("1. [Descriptive Statistics](#descriptive-statistics)\n")
+        sections.append("2. [Normality Assessment](#normality-assessment)\n")
+        sections.append("3. [Assumption Validation](#assumption-validation)\n")
+        sections.append("4. [Statistical Comparisons](#statistical-comparisons)\n")
+        sections.append("5. [Power Analysis](#power-analysis)\n")
+        sections.append("6. [Statistical Methodology](#statistical-methodology)\n")
+        sections.append("7. [Glossary](#glossary)\n\n")
+        sections.append("---\n\n")
+        
+        # 1. Descriptive Statistics
+        sections.append("## 1. Descriptive Statistics\n\n")
+        
+        for metric in findings.metrics_analyzed:
+            metric_dists = [d for d in findings.distributions if d.metric_name == metric]
+            if not metric_dists:
+                continue
+            
+            sections.append(f"### {metric}\n\n")
+            sections.append("| Framework | n | Mean | Median | Std Dev | Min | Max | Q1 | Q3 | IQR | Skewness | Kurtosis | Outliers |\n")
+            sections.append("|-----------|---|------|--------|---------|-----|-----|----|----|-----|----------|----------|----------|\n")
+            
+            for dist in metric_dists:
+                iqr = dist.q3 - dist.q1
+                sections.append(
+                    f"| {dist.group_name} | {dist.n_samples} | {dist.mean:.2f} | {dist.median:.2f} | "
+                    f"{dist.std_dev:.2f} | {dist.min_value:.2f} | {dist.max_value:.2f} | {dist.q1:.2f} | "
+                    f"{dist.q3:.2f} | {iqr:.2f} | {dist.skewness:.2f} | {dist.kurtosis:.2f} | "
+                    f"{dist.n_outliers} |\n"
+                )
+            sections.append("\n")
+        
+        # 2. Normality Assessment
+        sections.append("## 2. Normality Assessment\n\n")
+        sections.append("### Shapiro-Wilk Test Results\n\n")
+        
+        normality_checks = [a for a in findings.assumption_checks 
+                           if a.test_type.value == 'shapiro_wilk']
+        
+        if normality_checks:
+            sections.append("| Metric | Framework | W-statistic | p-value | Result | Interpretation |\n")
+            sections.append("|--------|-----------|-------------|---------|--------|----------------|\n")
+            
+            for check in normality_checks:
+                result = "✅ Normal" if check.passes else "❌ Non-normal"
+                sections.append(
+                    f"| {check.metric_name} | {', '.join(check.groups_tested)} | "
+                    f"{check.statistic:.4f} | {check.p_value:.4f} | {result} | "
+                    f"{check.interpretation} |\n"
+                )
+            sections.append("\n")
+        
+        # Q-Q Plots
+        qq_plots = [v for v in findings.visualizations if v.viz_type.value == 'qq']
+        if qq_plots:
+            sections.append("### Q-Q Plots\n\n")
+            for viz in qq_plots:
+                rel_path = Path(viz.file_path).relative_to(self.output_dir)
+                sections.append(f"![{viz.caption}]({rel_path})\n\n")
+        
+        # 3. Assumption Validation
+        sections.append("## 3. Assumption Validation\n\n")
+        
+        variance_checks = [a for a in findings.assumption_checks 
+                          if a.test_type.value == 'levene']
+        
+        if variance_checks:
+            sections.append("### Levene's Test (Variance Homogeneity)\n\n")
+            sections.append("| Metric | Frameworks | W-statistic | p-value | Result | Recommendation |\n")
+            sections.append("|--------|------------|-------------|---------|--------|----------------|\n")
+            
+            for check in variance_checks:
+                result = "✅ Equal variances" if check.passes else "❌ Unequal variances"
+                recommendation = check.recommendation if check.recommendation else "N/A"
+                sections.append(
+                    f"| {check.metric_name} | {', '.join(check.groups_tested)} | "
+                    f"{check.statistic:.4f} | {check.p_value:.4f} | {result} | "
+                    f"{recommendation} |\n"
+                )
+            sections.append("\n")
+        
+        # 4. Statistical Comparisons
+        sections.append("## 4. Statistical Comparisons\n\n")
+        
+        for test in findings.statistical_tests:
+            sections.append(f"### {test.metric_name}\n\n")
+            
+            # Test explanation
+            sections.append(educational_content.explain_statistical_test(test))
+            sections.append("\n")
+            
+            # Effect sizes for this metric
+            metric_effects = [e for e in findings.effect_sizes if e.metric_name == test.metric_name]
+            if metric_effects:
+                sections.append("#### Effect Sizes\n\n")
+                for effect in metric_effects:
+                    sections.append(educational_content.explain_effect_size(effect))
+                    sections.append("\n")
+            
+            # Forest plot if available
+            forest_plots = [v for v in findings.visualizations 
+                           if v.viz_type.value == 'forest' and v.metric_name == test.metric_name]
+            if forest_plots:
+                viz = forest_plots[0]
+                rel_path = Path(viz.file_path).relative_to(self.output_dir)
+                sections.append(f"![{viz.caption}]({rel_path})\n\n")
+        
+        # 5. Power Analysis
+        if findings.power_analyses:
+            sections.append("## 5. Power Analysis\n\n")
+            
+            for power in findings.power_analyses:
+                sections.append(educational_content.explain_power_analysis(power))
+                sections.append("\n")
+        
+        # 6. Statistical Methodology
+        sections.append("## 6. Statistical Methodology\n\n")
+        sections.append(findings.methodology_text)
+        sections.append("\n\n")
+        
+        # Reproducibility Information
+        sections.append("### Reproducibility Information\n\n")
+        sections.append("| Parameter | Value |\n")
+        sections.append("|-----------|-------|\n")
+        for key, value in findings.metadata.items():
+            sections.append(f"| {key} | {value} |\n")
+        sections.append("\n")
+        
+        # 7. Glossary
+        sections.append("## 7. Glossary\n\n")
+        sections.append(educational_content.generate_glossary())
+        sections.append("\n")
+        
+        # Write report
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(''.join(sections))
+        
+        logger.info("Full report written to: %s (%d chars)", 
+                   output_file, len(''.join(sections)))
+

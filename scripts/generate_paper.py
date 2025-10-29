@@ -17,6 +17,18 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Load environment variables from .env file if it exists
+try:
+    from dotenv import load_dotenv
+    project_root = Path(__file__).parent.parent
+    env_file = project_root / '.env'
+    if env_file.exists():
+        load_dotenv(env_file)
+        logging.debug(f"Loaded environment variables from {env_file}")
+except ImportError:
+    # python-dotenv not installed, environment variables must be set manually
+    pass
+
 from src.paper_generation.paper_generator import PaperGenerator
 from src.paper_generation.models import PaperConfig
 from src.paper_generation.exceptions import PaperGenerationError
