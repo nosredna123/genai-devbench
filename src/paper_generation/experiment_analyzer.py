@@ -9,10 +9,12 @@ import json
 import logging
 import statistics
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from collections import defaultdict
+import yaml
 
 from .exceptions import ExperimentDataError
+from src.utils.cost_calculator import CostCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,28 @@ class ExperimentAnalyzer:
                 message=f"Runs directory not found: {self.runs_dir}",
                 remediation="Ensure experiment has completed and generated run data"
             )
+        
+        # Load experiment config for model and pricing
+        self.config = self._load_experiment_config()
+        self.default_model = self.config.get('model', 'gpt-4o-mini')
+        self.pricing_config = self.config.get('pricing', {}).get('models', {})
+        
+        logger.debug(f"Loaded config: model={self.default_model}, pricing for {len(self.pricing_config)} models")
+    
+    def _load_experiment_config(self) -> Dict[str, Any]:
+        """Load experiment config.yaml from experiment directory."""
+        config_file = self.experiment_dir / "config.yaml"
+        
+        if not config_file.exists():
+            logger.warning(f"Config file not found: {config_file}, using defaults")
+            return {}
+        
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                return yaml.safe_load(f) or {}
+        except Exception as e:
+            logger.warning(f"Failed to load config: {e}, using defaults")
+            return {}
     
     def analyze(self) -> Dict[str, Any]:
         """
@@ -165,7 +189,21 @@ class ExperimentAnalyzer:
         elif "aggregate_metrics" in metrics:
             agg = metrics["aggregate_metrics"]
             if metric_name == "cost_total":
-                value = agg.get("COST_USD", 0)
+                # Calculate cost dynamically from token data using experiment's pricing
+                tokens_in = agg.get("TOK_IN", 0)
+                tokens_out = agg.get("TOK_OUT", 0)
+                cached_tokens = agg.get("CACHED_TOKENS", 0)
+                model = metrics.get("model", self.default_model)
+                
+                if tokens_in > 0 or tokens_out > 0:
+                    value = self._calculate_cost(
+                        model=model,
+                        tokens_in=tokens_in,
+                        tokens_out=tokens_out,
+                        cached_tokens=cached_tokens
+                    )
+                else:
+                    value = 0.0
             elif metric_name == "api_calls_total":
                 value = agg.get("API_CALLS", 0)
             elif metric_name == "tokens_in":
@@ -178,6 +216,47 @@ class ExperimentAnalyzer:
                 value = agg.get("CACHED_TOKENS", 0)
         
         return value if value is not None else 0
+    
+    def _calculate_cost(
+        self,
+        model: str,
+        tokens_in: int,
+        tokens_out: int,
+        cached_tokens: int = 0
+    ) -> float:
+        """
+        Calculate cost using experiment's pricing configuration.
+        
+        Falls back to CostCalculator if pricing not in config.
+        """
+        # Try to use experiment's pricing config
+        if model in self.pricing_config:
+            pricing = self.pricing_config[model]
+            input_price = pricing.get('input_price', 0)
+            cached_price = pricing.get('cached_price', 0)
+            output_price = pricing.get('output_price', 0)
+            
+            # Calculate costs (pricing is per million tokens)
+            uncached_tokens = tokens_in - cached_tokens
+            uncached_input_cost = (uncached_tokens * input_price) / 1_000_000
+            cached_input_cost = (cached_tokens * cached_price) / 1_000_000
+            output_cost = (tokens_out * output_price) / 1_000_000
+            
+            return uncached_input_cost + cached_input_cost + output_cost
+        else:
+            # Fallback to CostCalculator with default pricing
+            try:
+                calculator = CostCalculator(model)
+                cost_result = calculator.calculate_cost(
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
+                    cached_tokens=cached_tokens
+                )
+                return cost_result['total_cost']
+            except Exception as e:
+                logger.warning(f"Failed to calculate cost for model {model}: {e}")
+                return 0.0
+    
     
     def _aggregate_metric(self, runs: List[Dict], metric_name: str) -> Dict[str, float]:
         """Calculate statistics for a specific metric across runs."""
