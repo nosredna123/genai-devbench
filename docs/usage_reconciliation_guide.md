@@ -136,7 +136,7 @@ jobs:
         run: pip install -r requirements.txt
       - name: Reconcile usage
         env:
-          OPEN_AI_KEY_ADM: ${{ secrets.OPEN_AI_KEY_ADM }}
+          OPENAI_API_KEY_USAGE_TRACKING: ${{ secrets.OPENAI_API_KEY_USAGE_TRACKING }}
         run: ./runners/reconcile_usage.sh
 ```
 
@@ -363,7 +363,7 @@ A: Yes, but only the token counts. All other metrics remain unchanged.
 A: Metrics stay at 0. Check logs and retry later. Token data is not critical for run completion.
 
 **Q: Can I use framework-specific API keys?**  
-A: No. Reconciliation requires `OPEN_AI_KEY_ADM` with `api.usage.read` scope.
+A: No. Reconciliation requires `OPENAI_API_KEY_USAGE_TRACKING` with `api.usage.read` scope.
 
 **Q: How does framework attribution work?**  
 A: Time window isolation. Each step's start/end timestamps define the query window.

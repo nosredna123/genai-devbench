@@ -28,7 +28,7 @@ Added `reconcile_usage.sh` generation to the standalone experiment generator.
 1. **`generator/script_generator.py`**
    - Added `generate_reconcile_usage_script()` method (358 lines)
    - Added `_generate_fallback_key_logic()` helper method
-   - Updated `generate_env_example()` to include `OPEN_AI_KEY_ADM`
+   - Updated `generate_env_example()` to include `OPENAI_API_KEY_USAGE_TRACKING`
    - Updated `generate_readme()` with reconciliation documentation
 
 2. **`generator/standalone_generator.py`**
@@ -50,7 +50,7 @@ The generated script includes:
 - `./reconcile_usage.sh --help` - Show comprehensive help
 
 **Features:**
-- Automatic API key fallback (uses framework keys if OPEN_AI_KEY_ADM not set)
+- Automatic API key fallback (uses framework keys if OPENAI_API_KEY_USAGE_TRACKING not set)
 - Virtual environment activation
 - Environment variable loading from .env
 - Proper error handling and user-friendly messages
@@ -74,7 +74,7 @@ Added:
 # This key is used to query the OpenAI Usage API for token reconciliation
 # It requires 'api.usage.read' scope
 # You can use the same key as one of the frameworks above, or a dedicated key
-OPEN_AI_KEY_ADM=sk-your-admin-api-key-here
+OPENAI_API_KEY_USAGE_TRACKING=sk-your-admin-api-key-here
 ```
 
 #### 3. Comprehensive README Documentation
@@ -119,7 +119,7 @@ All tests passed:
 ```
 ✓ OPENAI_API_KEY_BAES
 ✓ OPENAI_API_KEY_CHATDEV
-✓ OPEN_AI_KEY_ADM
+✓ OPENAI_API_KEY_USAGE_TRACKING
 ✓ RECONCILIATION_VERIFICATION_INTERVAL_MIN
 ✓ RECONCILIATION_MIN_STABLE_VERIFICATIONS
 ```
@@ -174,11 +174,11 @@ The script requires an API key with `api.usage.read` scope:
 
 **Option 1: Dedicated key (recommended)**
 ```bash
-OPEN_AI_KEY_ADM=sk-your-admin-key-here
+OPENAI_API_KEY_USAGE_TRACKING=sk-your-admin-key-here
 ```
 
 **Option 2: Use framework key**
-The script automatically falls back to framework keys if `OPEN_AI_KEY_ADM` is not set.
+The script automatically falls back to framework keys if `OPENAI_API_KEY_USAGE_TRACKING` is not set.
 
 ## Technical Details
 

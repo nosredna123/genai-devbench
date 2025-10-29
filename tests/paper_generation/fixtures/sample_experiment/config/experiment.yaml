@@ -1,0 +1,40 @@
+# Sample experiment configuration for paper generation tests
+
+experiment:
+  name: "Multi-Agent Framework Comparison"
+  description: "Comparative analysis of autonomous software development frameworks"
+  task: "Implement a REST API for task management"
+  
+# Simple list of framework names (strings)
+frameworks:
+  - "ChatDev"
+  - "MetaGPT"
+  - "AutoGen"
+
+# Number of runs
+num_runs: 50
+
+runs:
+  total: 50
+  per_framework: 50
+  timeout_seconds: 600
+
+metrics:
+  categories:
+    - efficiency
+    - cost
+    - quality
+  
+  efficiency:
+    - execution_time
+    - tokens_used
+    
+  cost:
+    - total_cost_usd
+    - cost_per_task
+    
+  quality:
+    - test_pass_rate
+    - code_quality_score
+
+random_seed: 42

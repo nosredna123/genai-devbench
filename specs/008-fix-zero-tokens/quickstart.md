@@ -35,7 +35,7 @@ Add to your `.env` file:
 
 ```bash
 # Admin key for querying Usage API (existing)
-OPEN_AI_KEY_ADM="sk-proj-YOUR_ADMIN_KEY"
+OPENAI_API_KEY_USAGE_TRACKING="sk-proj-YOUR_ADMIN_KEY"
 
 # Framework execution keys (existing)
 OPENAI_API_KEY_BAES="sk-proj-YOUR_BAES_KEY"

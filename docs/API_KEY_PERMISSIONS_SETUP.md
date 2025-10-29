@@ -19,7 +19,7 @@
 
 ### Root Cause
 
-The `OPEN_AI_KEY_ADM` API key (service account key) does not have the **`api.usage.read`** scope required to access the OpenAI Usage API endpoint (`/v1/organization/usage/completions`).
+The `OPENAI_API_KEY_USAGE_TRACKING` API key (service account key) does not have the **`api.usage.read`** scope required to access the OpenAI Usage API endpoint (`/v1/organization/usage/completions`).
 
 ---
 
@@ -67,7 +67,7 @@ You have **two options**:
 4. **Update `.env` file**:
    ```bash
    # Replace the old key with the new one
-   OPEN_AI_KEY_ADM=sk-svcacct-<your-new-key-here>
+   OPENAI_API_KEY_USAGE_TRACKING=sk-svcacct-<your-new-key-here>
    ```
 
 5. **Test the fix**:
@@ -89,7 +89,7 @@ set -a && source .env && set +a
 
 # Test Usage API access
 curl "https://api.openai.com/v1/organization/usage/completions?start_time=1728476220&limit=1" \
-  -H "Authorization: Bearer $OPEN_AI_KEY_ADM"
+  -H "Authorization: Bearer $OPENAI_API_KEY_USAGE_TRACKING"
 ```
 
 **Expected (Success)**:
@@ -134,7 +134,7 @@ Querying usage for last hour:
   Start: 1728476220 (Wed Oct  9 11:17:00 2025)
   End:   1728479820 (Wed Oct  9 12:17:00 2025)
   Model: gpt-5-mini
-  API Key Env: OPEN_AI_KEY_ADM (admin key with org permissions)
+  API Key Env: OPENAI_API_KEY_USAGE_TRACKING (admin key with org permissions)
 
 Results:
   Input tokens:  12,345
@@ -160,7 +160,7 @@ After the test completes, check that token counts appear in the output instead o
 
 ## Required API Key Scopes
 
-### Admin Key (`OPEN_AI_KEY_ADM`)
+### Admin Key (`OPENAI_API_KEY_USAGE_TRACKING`)
 
 **Required Scopes**:
 - ✅ **`api.usage.read`** - Read organization usage data (Usage API)
@@ -195,7 +195,7 @@ After the test completes, check that token counts appear in the output instead o
 **Debug steps**:
 ```bash
 # 1. Verify the key is loaded
-echo $OPEN_AI_KEY_ADM
+echo $OPENAI_API_KEY_USAGE_TRACKING
 
 # 2. Check if it starts with sk-svcacct-
 # Should output: sk-svcacct-VziaonHkns7QevkViR0L...
@@ -254,7 +254,7 @@ python test_usage_api.py
 ## Summary
 
 ✅ **To enable token counting**:
-1. Grant `api.usage.read` scope to `OPEN_AI_KEY_ADM`
+1. Grant `api.usage.read` scope to `OPENAI_API_KEY_USAGE_TRACKING`
 2. Test with: `python test_usage_api.py`
 3. Verify tokens appear in smoke test
 

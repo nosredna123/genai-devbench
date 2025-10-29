@@ -125,7 +125,7 @@ key_Y0r9whvwK8Gilt6s: 5,904 tokens
 Total: 10,116 tokens
 ```
 
-**For our use case:** We use a single admin key (`OPEN_AI_KEY_ADM`) to query, but frameworks use different keys (OPENAI_API_KEY_BAES, etc.) during execution.
+**For our use case:** We use a single admin key (`OPENAI_API_KEY_USAGE_TRACKING`) to query, but frameworks use different keys (OPENAI_API_KEY_BAES, etc.) during execution.
 
 **Critical question:** Does the CSV data come from querying with the admin key? If so, does it show ALL organization usage, or filtered by the querying key?
 

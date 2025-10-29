@@ -1056,7 +1056,7 @@ def test_baes_complete_workflow(baes_adapter, tmp_path):
 **CRITICAL DECISION**: All adapters (GHSpec, ChatDev, BAEs) MUST use the same token tracking method for consistency and comparability.
 
 **Method**: OpenAI Usage API Reconciliation
-- **Primary Source**: Official OpenAI Usage API (accessed via `OPEN_AI_KEY_ADM`)
+- **Primary Source**: Official OpenAI Usage API (accessed via `OPENAI_API_KEY_USAGE_TRACKING`)
 - **Script**: `runners/reconcile_usage.sh`
 - **Timing**: Runs 30-60 minutes after experiment completion (API delay requirement)
 - **Per-Framework API Keys**:
@@ -1115,7 +1115,7 @@ def execute_step(self, step_num: int, command_text: str) -> Tuple[bool, float, i
         duration = end_timestamp - start_timestamp
         
         # Token placeholders (will be filled by reconciliation)
-        # The reconcile_usage.sh script queries Usage API with OPEN_AI_KEY_ADM
+        # The reconcile_usage.sh script queries Usage API with OPENAI_API_KEY_USAGE_TRACKING
         # and updates run metadata with actual token counts per step
         tokens_in = 0
         tokens_out = 0
@@ -1155,7 +1155,7 @@ def execute_step(self, step_num: int, command_text: str) -> Tuple[bool, float, i
 - ❌ Return non-zero token counts in execute_step()
 
 **What reconciliation does**:
-- ✅ Queries Usage API with `OPEN_AI_KEY_ADM` 
+- ✅ Queries Usage API with `OPENAI_API_KEY_USAGE_TRACKING` 
 - ✅ Filters by framework-specific API key (e.g., `OPENAI_API_KEY_BAES`)
 - ✅ Matches API calls to experiment steps by timestamp
 - ✅ Updates run metadata with actual token counts
@@ -1241,7 +1241,7 @@ BAEs-specific API key for token tracking (already configured):
 
 ```bash
 # Admin Key (for reconciliation via Usage API)
-OPEN_AI_KEY_ADM=sk-admin-...
+OPENAI_API_KEY_USAGE_TRACKING=sk-admin-...
 
 # BAEs Framework (for generation)
 OPENAI_API_KEY_BAES=sk-proj-OpISHqiUYt9o8-mnWMe5...

@@ -67,7 +67,7 @@ class UsageReconciler:
         by framework-specific API key ID to prevent cross-contamination when
         multiple frameworks run simultaneously.
         
-        Uses OPEN_AI_KEY_ADM (which has api.usage.read permission) to query the Usage API.
+        Uses OPENAI_API_KEY_USAGE_TRACKING (which has api.usage.read permission) to query the Usage API.
         Attribution to specific frameworks is achieved through api_key_ids filtering.
         
         Args:
@@ -87,12 +87,12 @@ class UsageReconciler:
             - Tokens are attributed by completion time (not request time)
             - api_key_ids parameter filters to framework-specific usage
         """
-        # Use OPEN_AI_KEY_ADM for authorization (it has api.usage.read permission)
+        # Use OPENAI_API_KEY_USAGE_TRACKING for authorization (it has api.usage.read permission)
         # Framework-specific keys (OPENAI_API_KEY_{FRAMEWORK}) are used during generation,
         # but the admin key is needed to QUERY usage data
-        api_key = os.getenv('OPEN_AI_KEY_ADM')
+        api_key = os.getenv('OPENAI_API_KEY_USAGE_TRACKING')
         if not api_key:
-            logger.warning("OPEN_AI_KEY_ADM not found in environment")
+            logger.warning("OPENAI_API_KEY_USAGE_TRACKING not found in environment")
             return 0, 0, 0, 0
         
         # Get framework-specific API key ID for filtering (FR-010)

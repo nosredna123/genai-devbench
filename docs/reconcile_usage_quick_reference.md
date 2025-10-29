@@ -213,5 +213,5 @@ Edit `.env` file to customize:
 RECONCILIATION_VERIFICATION_INTERVAL_MIN=60
 
 # Your OpenAI API key with usage.read scope
-OPEN_AI_KEY_ADM=sk-proj-...
+OPENAI_API_KEY_USAGE_TRACKING=sk-proj-...
 ```

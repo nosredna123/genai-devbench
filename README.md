@@ -366,6 +366,117 @@ genai-devbench/
 - ⚠️ **Deprecated**: Legacy `runners/run_experiment.sh` (use `scripts/run_experiment.py`)
 - 🗄️ **Legacy**: Old `runs/` directory maintained for backward compatibility
 
+---
+
+## 📄 Camera-Ready Paper Generation
+
+**NEW**: Generate publication-ready papers from experiment results with AI-assisted prose, statistical analysis, and ACM formatting.
+
+### Quick Start
+
+```bash
+# After running an experiment with statistical analysis
+cd my_first_experiment
+
+# Generate camera-ready paper (requires OpenAI API key)
+python ../../scripts/generate_paper.py . --output-dir paper
+
+# Output:
+#   paper/main.pdf         # ACM SIGSOFT formatted PDF
+#   paper/main.tex         # LaTeX source with AI-generated prose
+#   paper/figures/         # Publication-quality figures (PDF + PNG)
+#   README.md              # Enhanced with reproduction instructions
+```
+
+### Features
+
+**Automated Content Generation:**
+- ✅ **AI-Generated Prose**: All sections (Introduction, Related Work, Methodology, Results, Discussion, Conclusion) with ≥800 words each
+- ✅ **Statistical Tables**: Descriptive statistics, hypothesis tests, effect sizes automatically formatted
+- ✅ **Publication Figures**: Vector PDFs (scalable) + PNG (300 DPI) for all metrics
+- ✅ **Citation Placeholders**: Bold markers like **[CITE: framework_name]** for manual citation filling
+- ✅ **ACM SIGSOFT Format**: Ready for conference submission (sigconf template)
+
+**Customization Options:**
+```bash
+# Generate only specific sections
+python ../../scripts/generate_paper.py . \
+    --sections=methodology,results,discussion
+
+# Filter metrics in results section
+python ../../scripts/generate_paper.py . \
+    --metrics-filter=execution_time,total_cost_usd,quality_score
+
+# Control prose detail level
+python ../../scripts/generate_paper.py . \
+    --prose-level=minimal  # minimal | standard | comprehensive
+
+# Export only figures (fast, no prose generation)
+python ../../scripts/generate_paper.py . --figures-only
+# or use dedicated script:
+python ../../scripts/export_figures.py . --formats=pdf,png --dpi=300
+```
+
+**Reproduction Enhancement:**
+- 📝 Automatically enhances experiment README.md with comprehensive reproduction instructions
+- ⏱️ Enables independent researchers to reproduce experiments in ≤30 minutes
+- 🔍 Includes environment setup, dependencies, execution steps, and expected outputs
+
+### Output Structure
+
+```
+my_experiment/
+├── paper/
+│   ├── main.pdf              # Compiled PDF (if pdflatex available)
+│   ├── main.tex              # LaTeX source
+│   ├── main.md               # Markdown intermediate
+│   ├── figures/
+│   │   ├── metric_comparison_execution_time.pdf
+│   │   ├── metric_comparison_execution_time.png
+│   │   ├── metric_comparison_cost.pdf
+│   │   ├── metric_comparison_cost.png
+│   │   └── statistical_significance.pdf
+│   └── acm_sigsoft/          # ACM template files
+└── README.md                 # Enhanced with Reproduction Guide
+```
+
+### Requirements
+
+**System:**
+- Python 3.11+ with matplotlib, numpy, pandas
+- Pandoc ≥2.0 (for Markdown→LaTeX conversion)
+- pdflatex (optional, for PDF compilation)
+
+**API:**
+- OpenAI API key (set `OPENAI_API_KEY` environment variable)
+- Note: Separate from experiment API keys; used only for prose generation
+
+**Installation:**
+```bash
+# Install Pandoc (Ubuntu/Debian)
+sudo apt-get install pandoc texlive-latex-base texlive-latex-extra
+
+# Install Pandoc (macOS)
+brew install pandoc
+brew install --cask mactex-no-gui  # optional, for PDF
+
+# Verify
+pandoc --version  # Should be ≥2.0
+```
+
+### Best Practices
+
+⚠️ **Important**: AI-generated prose requires manual review:
+1. ✅ Verify all claims match experimental data
+2. ✅ Fill citation placeholders with proper references
+3. ✅ Review interpretations for accuracy (AI may overclaim)
+4. ✅ Check statistical reporting (p-values, effect sizes)
+5. ✅ Validate figure captions and descriptions
+
+**See [Paper Generation Guide](docs/paper_generation_guide.md) for detailed usage and troubleshooting.**
+
+---
+
 ## Metrics Reference
 
 ### Quality Metrics (5)

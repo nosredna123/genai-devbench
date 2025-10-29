@@ -79,8 +79,8 @@ Previous BAEs runs consistently showed `TOK_IN: 0` and `TOK_OUT: 0` despite:
 - Need to verify proper timestamp formatting (Unix epoch with appropriate granularity)
 
 **Hypothesis 4: API Key Isolation**
-- OPENAI_API_KEY_BAES is separate from OPEN_AI_KEY_ADM
-- Reconciliation script uses OPEN_AI_KEY_ADM to query usage
+- OPENAI_API_KEY_BAES is separate from OPENAI_API_KEY_USAGE_TRACKING
+- Reconciliation script uses OPENAI_API_KEY_USAGE_TRACKING to query usage
 - Different API keys may not track each other's usage
 
 ### Test Plan
@@ -128,7 +128,7 @@ Previous BAEs runs consistently showed `TOK_IN: 0` and `TOK_OUT: 0` despite:
   "total_tokens_out": 0
 }
 ```
-**Reason**: OPEN_AI_KEY_ADM can't see OPENAI_API_KEY_BAES usage  
+**Reason**: OPENAI_API_KEY_USAGE_TRACKING can't see OPENAI_API_KEY_BAES usage  
 **Action**: Modify reconciliation to use correct API key
 
 #### Phase 3: Analysis 🔍
@@ -154,9 +154,9 @@ For comparison, these runs successfully tracked tokens:
 **Key Question**: Why do ChatDev/GHSpec work but BAEs doesn't?
 
 **Possible Answer**: Different API keys
-- ChatDev/GHSpec may use OPEN_AI_KEY_ADM
+- ChatDev/GHSpec may use OPENAI_API_KEY_USAGE_TRACKING
 - BAEs uses OPENAI_API_KEY_BAES
-- Reconciliation script queries with OPEN_AI_KEY_ADM
+- Reconciliation script queries with OPENAI_API_KEY_USAGE_TRACKING
 - Can't see usage from OPENAI_API_KEY_BAES
 
 ---
@@ -173,13 +173,13 @@ For comparison, these runs successfully tracked tokens:
 1. Check API key configuration:
    ```bash
    echo $OPENAI_API_KEY_BAES
-   echo $OPEN_AI_KEY_ADM
+   echo $OPENAI_API_KEY_USAGE_TRACKING
    ```
 2. Verify API key permissions on OpenAI dashboard
 3. Test manual API query with curl:
    ```bash
    curl https://api.openai.com/v1/organization/usage/completions \
-     -H "Authorization: Bearer $OPEN_AI_KEY_ADM" \
+     -H "Authorization: Bearer $OPENAI_API_KEY_USAGE_TRACKING" \
      -G \
      --data-urlencode "start_time=1760617771" \
      --data-urlencode "end_time=1760618010" \

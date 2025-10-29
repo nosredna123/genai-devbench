@@ -419,7 +419,7 @@ api_rate_limit_delay: 20  # Wait 20 seconds between calls
 # Option 3: Use different API keys for admin vs. user operations
 # Set separate keys in .env:
 OPEN_AI_KEY_USR=sk-user-key-here     # For framework operations
-OPEN_AI_KEY_ADM=sk-admin-key-here    # For usage API queries
+OPENAI_API_KEY_USAGE_TRACKING=sk-admin-key-here    # For usage API queries
 ```
 
 **Rate limit monitoring:**

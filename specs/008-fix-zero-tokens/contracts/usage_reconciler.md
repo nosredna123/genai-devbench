@@ -85,14 +85,14 @@ def _fetch_usage_from_openai(
         tuple: (input_tokens, output_tokens, api_calls, cached_tokens)
         
     Raises:
-        KeyError: If OPEN_AI_KEY_ADM or framework API key ID not in environment
+        KeyError: If OPENAI_API_KEY_USAGE_TRACKING or framework API key ID not in environment
         requests.RequestException: If API request fails
         ValueError: If API response is malformed
     """
 ```
 
 **Behavior**:
-1. Get admin API key from `OPEN_AI_KEY_ADM` (for authorization)
+1. Get admin API key from `OPENAI_API_KEY_USAGE_TRACKING` (for authorization)
 2. Get framework API key ID from `OPENAI_API_KEY_{FRAMEWORK}_ID` (for filtering)
 3. Construct query parameters:
    ```python
@@ -115,7 +115,7 @@ def _fetch_usage_from_openai(
 6. Return tuple
 
 **Contract**:
-- MUST use admin key for authorization (`OPEN_AI_KEY_ADM`)
+- MUST use admin key for authorization (`OPENAI_API_KEY_USAGE_TRACKING`)
 - MUST filter by framework-specific key ID (`api_key_ids` parameter)
 - MUST use `bucket_width="1m"` (minute granularity)
 - MUST aggregate ALL buckets (no partial sums)
@@ -130,7 +130,7 @@ def _fetch_usage_from_openai(
 
 | Variable | Format | Purpose | Validation |
 |----------|--------|---------|------------|
-| `OPEN_AI_KEY_ADM` | `sk-proj-...` | Admin key with `api.usage.read` permission | Must exist, fail if missing |
+| `OPENAI_API_KEY_USAGE_TRACKING` | `sk-proj-...` | Admin key with `api.usage.read` permission | Must exist, fail if missing |
 | `OPENAI_API_KEY_{FRAMEWORK}_ID` | `key_XXXXXXXXXXXX` | API key ID for filtering (per framework) | Must exist, fail if missing |
 
 ### Optional
@@ -148,8 +148,8 @@ def _fetch_usage_from_openai(
 
 ```python
 # Missing API key → FAIL immediately
-if not os.getenv('OPEN_AI_KEY_ADM'):
-    raise KeyError("OPEN_AI_KEY_ADM environment variable required")
+if not os.getenv('OPENAI_API_KEY_USAGE_TRACKING'):
+    raise KeyError("OPENAI_API_KEY_USAGE_TRACKING environment variable required")
 
 # Invalid API response → FAIL immediately
 if response.status_code != 200:

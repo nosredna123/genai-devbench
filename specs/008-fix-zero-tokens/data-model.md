@@ -193,7 +193,7 @@ OPENAI_API_KEY_CHATDEV="sk-proj-..."
 OPENAI_API_KEY_GHSPEC="sk-proj-..."
 
 # Admin key for Usage API queries (existing)
-OPEN_AI_KEY_ADM="sk-proj-..."
+OPENAI_API_KEY_USAGE_TRACKING="sk-proj-..."
 
 # API Key IDs for filtering (NEW)
 OPENAI_API_KEY_BAES_ID="key_XXXXXXXXXXXX"

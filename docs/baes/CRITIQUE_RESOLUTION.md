@@ -74,12 +74,12 @@ The BAEs Adapter Implementation Plan was reviewed against a detailed external cr
 > "The plan mentions trying to extract tokens from BAEs metrics, but doesn't explicitly document the fallback to OpenAI Usage API (which we use for ChatDev)."
 
 **Your Decision**:
-> "We need keep a unique way to extract the tokens for all adapters. All of them must be extract using the current reconcile_usage.sh script, that uses the official OPENAI Usage API using the API key set in the OPEN_AI_KEY_ADM global env var."
+> "We need keep a unique way to extract the tokens for all adapters. All of them must be extract using the current reconcile_usage.sh script, that uses the official OPENAI Usage API using the API key set in the OPENAI_API_KEY_USAGE_TRACKING global env var."
 
 **Resolution Implemented**:
 - ✅ **Complete Section 5 rewrite** - "Token Tracking Strategy"
 - ✅ Documents unified approach for ALL adapters:
-  - Primary source: OpenAI Usage API (via `OPEN_AI_KEY_ADM`)
+  - Primary source: OpenAI Usage API (via `OPENAI_API_KEY_USAGE_TRACKING`)
   - Script: `runners/reconcile_usage.sh`
   - Timing: 30-60 minutes after run completion
 - ✅ Per-framework API keys documented:

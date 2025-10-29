@@ -8,7 +8,7 @@ This project uses a **two-tier API key system** to separate execution permission
 
 ### 1. Admin Key (Organization-Level) 🔑
 
-**Environment Variable**: `OPEN_AI_KEY_ADM`
+**Environment Variable**: `OPENAI_API_KEY_USAGE_TRACKING`
 
 **Purpose**: Query the OpenAI Usage API for token counting across all frameworks
 
@@ -75,7 +75,7 @@ The Usage API endpoint (`/v1/organization/usage/completions`) requires organizat
          │ Token Counting                │
          │ (BaseAdapter)                 │
          │                               │
-         │ Uses: OPEN_AI_KEY_ADM         │ ← Admin Key
+         │ Uses: OPENAI_API_KEY_USAGE_TRACKING         │ ← Admin Key
          │                               │    (org-level)
          │ - Query Usage API             │
          │ - Get token counts            │
@@ -89,7 +89,7 @@ The Usage API endpoint (`/v1/organization/usage/completions`) requires organizat
 
 ```bash
 # Admin Key (for overall usage tracking)
-OPEN_AI_KEY_ADM=sk-svcacct-VziaonHkns...
+OPENAI_API_KEY_USAGE_TRACKING=sk-svcacct-VziaonHkns...
 
 # BAEs Framework
 OPENAI_API_KEY_BAES=sk-proj-OpISHqiUYt...
@@ -115,7 +115,7 @@ env['OPENAI_API_KEY'] = os.getenv(self.config.get('api_key_env'))
 ```python
 # In chatdev_adapter.py (and all other adapters)
 tokens_in, tokens_out = self.fetch_usage_from_openai(
-    api_key_env_var='OPEN_AI_KEY_ADM',  # Always use admin key
+    api_key_env_var='OPENAI_API_KEY_USAGE_TRACKING',  # Always use admin key
     start_timestamp=self._step_start_time,
     end_timestamp=end_timestamp,
     model=model_config
@@ -129,7 +129,7 @@ tokens_in, tokens_out = self.fetch_usage_from_openai(
 ```bash
 # Verify admin key can access Usage API
 curl "https://api.openai.com/v1/organization/usage/completions?start_time=1728476220&limit=1" \
-  -H "Authorization: Bearer $OPEN_AI_KEY_ADM"
+  -H "Authorization: Bearer $OPENAI_API_KEY_USAGE_TRACKING"
 ```
 
 **Expected**: JSON response with usage data
@@ -164,7 +164,7 @@ tokens_in, tokens_out = self.fetch_usage_from_openai(
 
 # ✅ Correct - admin key has org permissions
 tokens_in, tokens_out = self.fetch_usage_from_openai(
-    api_key_env_var='OPEN_AI_KEY_ADM',  # Correct!
+    api_key_env_var='OPENAI_API_KEY_USAGE_TRACKING',  # Correct!
     ...
 )
 ```
@@ -173,7 +173,7 @@ tokens_in, tokens_out = self.fetch_usage_from_openai(
 
 **Cause**: API key lacks organization-level permissions
 
-**Solution**: Use `OPEN_AI_KEY_ADM` instead of framework-specific keys
+**Solution**: Use `OPENAI_API_KEY_USAGE_TRACKING` instead of framework-specific keys
 
 ### Issue: Want to track usage per framework
 
@@ -199,7 +199,7 @@ api_key = "sk-proj-..."
 
 ```python
 # ✅ GOOD
-api_key = os.getenv('OPEN_AI_KEY_ADM')
+api_key = os.getenv('OPENAI_API_KEY_USAGE_TRACKING')
 ```
 
 ### 3. Use Correct Key for Each Purpose
@@ -207,7 +207,7 @@ api_key = os.getenv('OPEN_AI_KEY_ADM')
 | Purpose | Key | Permissions |
 |---------|-----|-------------|
 | LLM Operations | `OPENAI_API_KEY_CHATDEV` | Project-level |
-| Token Counting | `OPEN_AI_KEY_ADM` | Org-level |
+| Token Counting | `OPENAI_API_KEY_USAGE_TRACKING` | Org-level |
 
 ### 4. Document Key Requirements
 
@@ -220,7 +220,7 @@ class NewAdapter(BaseAdapter):
     
     Required Environment Variables:
     - OPENAI_API_KEY_NEW: For LLM operations (project-level)
-    - OPEN_AI_KEY_ADM: For token counting (org-level, inherited)
+    - OPENAI_API_KEY_USAGE_TRACKING: For token counting (org-level, inherited)
     """
 ```
 
@@ -240,7 +240,7 @@ class NewAdapter(BaseAdapter):
 
 ```bash
 # .env.example (safe to commit)
-OPEN_AI_KEY_ADM=sk-your-admin-api-key-here
+OPENAI_API_KEY_USAGE_TRACKING=sk-your-admin-api-key-here
 OPENAI_API_KEY_CHATDEV=sk-your-chatdev-api-key-here
 ```
 
@@ -261,7 +261,7 @@ tokens_in, tokens_out = self.fetch_usage_from_openai(
 **After**:
 ```python
 tokens_in, tokens_out = self.fetch_usage_from_openai(
-    api_key_env_var='OPEN_AI_KEY_ADM',  # Correct
+    api_key_env_var='OPENAI_API_KEY_USAGE_TRACKING',  # Correct
     ...
 )
 ```
@@ -283,14 +283,14 @@ When creating a new adapter:
 3. Use admin key for token counting:
    ```python
    tokens_in, tokens_out = self.fetch_usage_from_openai(
-       api_key_env_var='OPEN_AI_KEY_ADM',
+       api_key_env_var='OPENAI_API_KEY_USAGE_TRACKING',
        ...
    )
    ```
 
 ## Summary
 
-✅ **Admin Key (`OPEN_AI_KEY_ADM`)**:
+✅ **Admin Key (`OPENAI_API_KEY_USAGE_TRACKING`)**:
 - Organization-level permissions
 - Used for Usage API queries
 - Shared across all frameworks
