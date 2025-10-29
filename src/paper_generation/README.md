@@ -5,11 +5,14 @@ Automated generation of camera-ready research papers from experiment results wit
 ## Quick Start
 
 ```bash
-# Generate paper from experiment
-python scripts/generate_paper.py <experiment_dir> --output-dir <output_dir>
+# Generate paper from experiment (outputs to ./papers/YYYYMMDD_HHMMSS)
+python scripts/generate_paper.py <experiment_dir>
 
-# Example
-python scripts/generate_paper.py ~/projects/my_experiment --output-dir papers/draft1
+# Example (outputs to ./papers/20251029_153045)
+python scripts/generate_paper.py ~/projects/my_experiment
+
+# Custom output directory
+python scripts/generate_paper.py <experiment_dir> --output-dir <output_dir>
 ```
 
 ## What Gets Generated
@@ -54,7 +57,7 @@ Required:
   experiment_dir              Path to experiment directory with runs/ folder
 
 Optional:
-  --output-dir DIR           Output directory (default: experiment_dir/paper)
+  --output-dir DIR           Output directory (default: ./papers/YYYYMMDD_HHMMSS)
   --skip-latex               Skip LaTeX/PDF compilation (Markdown only)
   --figures-only             Export only figures, skip paper generation
   --model MODEL              AI model for prose generation (default: gpt-4o-mini)
@@ -66,20 +69,23 @@ Optional:
 
 ### Basic Paper Generation
 ```bash
-# Generate complete paper with all artifacts
+# Generate complete paper with all artifacts (timestamped output)
 python scripts/generate_paper.py experiments/chatdev_vs_metagpt
+# Output: ./papers/20251029_153045/
 ```
 
 ### Quick Draft (No PDF)
 ```bash
 # Skip LaTeX compilation for faster iterations
 python scripts/generate_paper.py experiments/my_exp --skip-latex
+# Output: ./papers/20251029_153112/
 ```
 
 ### Custom Output Location
 ```bash
 # Specify output directory
 python scripts/generate_paper.py experiments/my_exp --output-dir papers/submission_v1
+# Output: papers/submission_v1/
 ```
 
 ### Statistical Analysis Only

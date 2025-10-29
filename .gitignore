@@ -52,3 +52,6 @@ htmlcov/
 .DS_Store
 Thumbs.db
 test_output/
+
+# Generated papers (timestamped outputs)
+papers/

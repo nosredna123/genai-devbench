@@ -13,6 +13,7 @@ import sys
 import argparse
 import logging
 from pathlib import Path
+from datetime import datetime
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -82,7 +83,7 @@ Examples:
     parser.add_argument(
         '--output-dir',
         type=Path,
-        help='Output directory for generated paper (default: experiment_dir/paper)'
+        help='Output directory for generated paper (default: ./papers/YYYYMMDD_HHMMSS)'
     )
     
     parser.add_argument(
@@ -153,8 +154,14 @@ def main():
         logger.error("Experiment directory not found: %s", args.experiment_dir)
         return 1
     
-    # Set output directory
-    output_dir = args.output_dir if args.output_dir else args.experiment_dir / "paper"
+    # Set output directory with timestamp if not specified
+    if args.output_dir:
+        output_dir = args.output_dir
+    else:
+        # Generate timestamp-based directory: ./papers/YYYYMMDD_HHMMSS
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = Path("papers") / timestamp
+    
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Parse sections filter if provided
