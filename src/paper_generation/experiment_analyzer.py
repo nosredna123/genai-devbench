@@ -123,28 +123,38 @@ class ExperimentAnalyzer:
         # Collect metrics from all runs with their run_ids
         all_runs = []
         run_data = []  # Individual run data for statistical analysis
+        skipped_unverified = 0
         
         for run_dir in run_dirs:
             metrics = self._load_run_metrics(run_dir)
             if metrics:
-                all_runs.append(metrics)
-                # Extract individual run data
-                run_data.append({
-                    "run_id": run_dir.name,
-                    "execution_time": self._extract_metric_value(metrics, "duration_total"),
-                    "total_cost_usd": self._extract_metric_value(metrics, "cost_total"),
-                    "api_calls": self._extract_metric_value(metrics, "api_calls_total"),
-                    "tokens_in": self._extract_metric_value(metrics, "tokens_in"),
-                    "tokens_out": self._extract_metric_value(metrics, "tokens_out"),
-                    "tokens_total": self._extract_metric_value(metrics, "tokens_total"),
-                    "cached_tokens": self._extract_metric_value(metrics, "cached_tokens"),
-                })
+                # Check verification status - only include verified runs
+                if self._is_run_verified(metrics):
+                    all_runs.append(metrics)
+                    # Extract individual run data
+                    run_data.append({
+                        "run_id": run_dir.name,
+                        "execution_time": self._extract_metric_value(metrics, "duration_total"),
+                        "total_cost_usd": self._extract_metric_value(metrics, "cost_total"),
+                        "api_calls": self._extract_metric_value(metrics, "api_calls_total"),
+                        "tokens_in": self._extract_metric_value(metrics, "tokens_in"),
+                        "tokens_out": self._extract_metric_value(metrics, "tokens_out"),
+                        "tokens_total": self._extract_metric_value(metrics, "tokens_total"),
+                        "cached_tokens": self._extract_metric_value(metrics, "cached_tokens"),
+                    })
+                else:
+                    skipped_unverified += 1
+                    logger.debug("Skipped unverified run: %s", run_dir.name)
         
         if not all_runs:
             logger.warning("No valid metrics found for %s", framework_dir.name)
             return {}
         
-        logger.info("Loaded %d valid runs for %s", len(all_runs), framework_dir.name)
+        if skipped_unverified > 0:
+            logger.info("Loaded %d verified runs for %s (skipped %d unverified)", 
+                       len(all_runs), framework_dir.name, skipped_unverified)
+        else:
+            logger.info("Loaded %d verified runs for %s", len(all_runs), framework_dir.name)
         
         # Aggregate statistics
         aggregated = {
@@ -174,6 +184,27 @@ class ExperimentAnalyzer:
         except Exception as e:
             logger.warning("Failed to load %s: %s", metrics_file, str(e))
             return None
+    
+    def _is_run_verified(self, metrics: Dict[str, Any]) -> bool:
+        """
+        Check if a run has been verified through usage API reconciliation.
+        
+        A run is considered verified if:
+        - usage_api_reconciliation.verification_status == "verified"
+        
+        Args:
+            metrics: Run metrics dictionary
+            
+        Returns:
+            True if run is verified, False otherwise
+        """
+        if "usage_api_reconciliation" not in metrics:
+            return False
+        
+        reconciliation = metrics["usage_api_reconciliation"]
+        verification_status = reconciliation.get("verification_status", "")
+        
+        return verification_status == "verified"
     
     def _extract_metric_value(self, metrics: Dict[str, Any], metric_name: str) -> float:
         """Extract a single metric value from run data."""
