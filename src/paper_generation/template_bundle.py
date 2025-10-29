@@ -146,6 +146,18 @@ class TemplateBundle:
                 raise OSError(
                     f"Failed to copy template file {filename} to {output_dir}: {e}"
                 ) from e
+        
+        # Also copy sigconf.cls as acmart.cls since the LaTeX doc uses \documentclass{acmart}
+        # The sigconf.cls file IS the acmart.cls file (check the header comment)
+        sigconf_src = self.template_dir / "sigconf.cls"
+        acmart_dst = output_dir / "acmart.cls"
+        try:
+            shutil.copy2(sigconf_src, acmart_dst)
+            logger.debug("Copied sigconf.cls as acmart.cls for LaTeX compilation")
+        except OSError as e:
+            raise OSError(
+                f"Failed to copy sigconf.cls as acmart.cls to {output_dir}: {e}"
+            ) from e
     
     def get_template_path(self, filename: str) -> Path:
         """Get path to a specific template file.

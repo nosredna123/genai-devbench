@@ -148,7 +148,10 @@ class DocumentFormatter:
             section_latex.append(f"\\section{{{title}}}\n{content}\n")
         
         # Assemble document
-        doc = f"""\\documentclass[sigconf]{{acmart}}
+        doc = f"""% Disable font expansion to avoid pdfTeX errors with ACM template
+\\PassOptionsToPackage{{expansion=false}}{{microtype}}
+
+\\documentclass[sigconf]{{acmart}}
 
 % Packages
 \\usepackage{{booktabs}}  % Professional tables
@@ -161,11 +164,11 @@ class DocumentFormatter:
 
 \\begin{{document}}
 
-\\maketitle
-
 \\begin{{abstract}}
 {abstract}
 \\end{{abstract}}
+
+\\maketitle
 
 {"".join(section_latex)}
 
