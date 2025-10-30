@@ -569,37 +569,42 @@ class StatisticalAnalyzer:
         """
         Check if a distribution has sufficient variance for meaningful analysis.
         
-        Feature 013: Centralized variance quality checking.
+        Feature 013: Centralized variance quality checking with adaptive thresholds.
         
         A distribution is considered to have zero or near-zero variance if:
         - Standard deviation is exactly 0
         - All values are identical
-        - Standard deviation < variance_threshold
-        - IQR < iqr_threshold
+        - Coefficient of variation (CV = std/mean) < 1% (for non-zero means)
+        - IQR/median < 1% (for non-zero medians)
         
         Args:
             values: Array of numeric values
-            variance_threshold: Minimum acceptable standard deviation (default: from config)
-            iqr_threshold: Minimum acceptable IQR (default: from config)
+            variance_threshold: Minimum acceptable standard deviation (DEPRECATED - kept for API compatibility)
+            iqr_threshold: Minimum acceptable IQR (DEPRECATED - kept for API compatibility)
             
         Returns:
             True if distribution has sufficient variance, False otherwise
         """
-        # Use config defaults if not specified
-        variance_threshold = variance_threshold if variance_threshold is not None else self.config.variance_threshold
-        iqr_threshold = iqr_threshold if iqr_threshold is not None else self.config.iqr_threshold
-        
         # Exact zero variance check
         if np.std(values) == 0.0 or len(set(values)) == 1:
             return False
         
-        # Near-zero variance checks
+        # Use relative variance (coefficient of variation) instead of absolute thresholds
+        # This works better for metrics with different scales (e.g., tokens vs cost)
         std_dev = np.std(values)
+        mean_val = np.mean(values)
+        median_val = np.median(values)
         q1 = np.percentile(values, 25)
         q3 = np.percentile(values, 75)
         iqr = q3 - q1
         
-        if std_dev < variance_threshold or iqr < iqr_threshold:
+        # Check relative variance: CV < 1% suggests deterministic behavior
+        # Use median for IQR check to avoid mean=0 issues
+        relative_std = abs(std_dev / mean_val) if mean_val != 0 else float('inf')
+        relative_iqr = abs(iqr / median_val) if median_val != 0 else float('inf')
+        
+        # Consider it zero-variance if both relative measures are < 1%
+        if relative_std < 0.01 and relative_iqr < 0.01:
             return False
         
         return True

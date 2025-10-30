@@ -71,6 +71,30 @@ class ExperimentAnalyzer:
             logger.warning(f"Failed to load config: {e}, using defaults")
             return {}
     
+    def _format_metric_value(self, value: float, metric_name: str) -> str:
+        """
+        Format metric value with appropriate precision.
+        
+        Feature 013: Adaptive precision to avoid hiding variance in small-value metrics.
+        
+        Args:
+            value: Numeric value to format
+            metric_name: Name of the metric (used to determine precision)
+            
+        Returns:
+            Formatted string with appropriate decimal places
+        """
+        # Cost metrics need higher precision to show variance
+        if 'cost' in metric_name.lower() or 'price' in metric_name.lower():
+            return f"{value:.5f}"
+        
+        # For very small values (< 0.01), use scientific notation or higher precision
+        if abs(value) < 0.01 and value != 0:
+            return f"{value:.5f}"
+        
+        # Default: 2 decimal places for most metrics
+        return f"{value:.2f}"
+    
     def analyze(self) -> Dict[str, Any]:
         """
         Perform complete analysis of experiment runs.
@@ -717,21 +741,24 @@ class ExperimentAnalyzer:
             for dist in metric_dists:
                 iqr = dist.q3 - dist.q1
                 
+                # Feature 013: Use adaptive precision for cost metrics
+                fmt = lambda v: self._format_metric_value(v, metric)
+                
                 # T054-T055: Bold primary summary based on skewness (FR-032)
                 if dist.primary_summary == "median":
                     # Bold median and IQR for skewed distributions
                     sections.append(
-                        f"| {dist.group_name} | {dist.n_samples} | {dist.mean:.2f} | **{dist.median:.2f}** | "
-                        f"{dist.std_dev:.2f} | {dist.min_value:.2f} | {dist.max_value:.2f} | {dist.q1:.2f} | "
-                        f"{dist.q3:.2f} | **{iqr:.2f}** | {dist.skewness:.2f} | {dist.kurtosis:.2f} | "
+                        f"| {dist.group_name} | {dist.n_samples} | {fmt(dist.mean)} | **{fmt(dist.median)}** | "
+                        f"{fmt(dist.std_dev)} | {fmt(dist.min_value)} | {fmt(dist.max_value)} | {fmt(dist.q1)} | "
+                        f"{fmt(dist.q3)} | **{fmt(iqr)}** | {dist.skewness:.2f} | {dist.kurtosis:.2f} | "
                         f"{dist.n_outliers} |\n"
                     )
                 else:
                     # Bold mean and SD for normally distributed data
                     sections.append(
-                        f"| {dist.group_name} | {dist.n_samples} | **{dist.mean:.2f}** | {dist.median:.2f} | "
-                        f"**{dist.std_dev:.2f}** | {dist.min_value:.2f} | {dist.max_value:.2f} | {dist.q1:.2f} | "
-                        f"{dist.q3:.2f} | {iqr:.2f} | {dist.skewness:.2f} | {dist.kurtosis:.2f} | "
+                        f"| {dist.group_name} | {dist.n_samples} | **{fmt(dist.mean)}** | {fmt(dist.median)} | "
+                        f"**{fmt(dist.std_dev)}** | {fmt(dist.min_value)} | {fmt(dist.max_value)} | {fmt(dist.q1)} | "
+                        f"{fmt(dist.q3)} | {fmt(iqr)} | {dist.skewness:.2f} | {dist.kurtosis:.2f} | "
                         f"{dist.n_outliers} |\n"
                     )
             sections.append("\n")
