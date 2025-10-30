@@ -55,6 +55,16 @@ class VisualizationType(Enum):
     VIOLIN = "violin"                   # Violin plot
     QQ_PLOT = "qq_plot"                # Q-Q plot for normality
     EFFECT_FOREST = "effect_forest"     # Forest plot for effect sizes
+    
+    # NEW: Enhanced statistical visualizations (Feature 015)
+    EFFECT_PANEL = "effect_panel"           # Multi-metric faceted effect sizes
+    EFFICIENCY = "efficiency"               # Cost vs time scatter
+    REGRESSION = "regression"               # Token-to-cost with fitted lines
+    OVERLAP = "overlap"                     # 2-way distribution comparison
+    NORMALIZED_COST = "normalized_cost"     # Cost per 1k tokens
+    RANK = "rank"                           # Multi-metric rankings
+    STABILITY = "stability"                 # Coefficient of variation
+    OUTLIER_RUN = "outlier_run"            # Run-index time series
 
 
 @dataclass
