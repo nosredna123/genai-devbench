@@ -1826,7 +1826,7 @@ class StatisticalAnalyzer:
                     # Skip Cohen's d if zero variance (would produce inflated/invalid d)
                     if zero_variance_detected:
                         # Skip this comparison entirely - will not be added to results
-                        self.logger.warning(
+                        logger.warning(
                             f"Skipping Cohen's d for {group1} vs {group2} on {metric_name}: "
                             f"zero/near-zero variance detected (SD: {std1:.4f}, {std2:.4f}, "
                             f"IQR: {iqr1:.4f}, {iqr2:.4f}). Effect size would be invalid."
@@ -1872,7 +1872,7 @@ class StatisticalAnalyzer:
                     
                     # Warn if zero variance produces deterministic CI
                     if zero_variance_detected and abs(ci_upper - ci_lower) < 0.01:
-                        self.logger.warning(
+                        logger.warning(
                             f"Cliff's Delta CI for {group1} vs {group2} on {metric_name} "
                             f"is deterministic [{ci_lower:.3f}, {ci_upper:.3f}] due to "
                             f"zero/near-zero variance (SD: {std1:.4f}, {std2:.4f}, "
