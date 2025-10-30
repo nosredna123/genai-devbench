@@ -5,6 +5,7 @@ All models implement fail-fast validation with clear error messages.
 """
 
 import os
+import numpy as np
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -367,3 +368,93 @@ class PaperResult:
     def pdf_file(self) -> Path | None:
         """Alias for pdf_path for backward compatibility."""
         return self.pdf_path
+
+
+@dataclass
+class PowerAnalysis:
+    """
+    Power analysis result for a statistical test.
+    
+    Enables researchers to assess sample size adequacy and plan future studies.
+    """
+    comparison_id: str              # E.g., "execution_time_baes_vs_chatdev"
+    metric_name: str                # Metric being compared
+    group_names: List[str]          # Groups involved in comparison
+    
+    # Effect size used for power calculation
+    effect_size_value: float        # Cohen's d or f (ANOVA)
+    effect_size_type: str           # "cohens_d" or "cohens_f"
+    
+    # Sample sizes
+    n_group1: int
+    achieved_power: float           # Calculated power (0.0-1.0)
+    n_group2: int = None            # None for multi-group ANOVA
+    
+    # Power analysis results
+    target_power: float = 0.80      # Desired power threshold
+    alpha: float = 0.05             # Significance level
+    
+    # Recommendations
+    power_adequate: bool = None     # True if achieved_power ≥ target_power
+    recommended_n_per_group: int = None  # Sample size needed for target_power (if underpowered)
+    
+    # Interpretation
+    adequacy_flag: str = ""         # "sufficient", "insufficient", "indeterminate"
+    warning_message: str = ""       # Warning for underpowered tests
+    
+    def __post_init__(self):
+        """Set adequacy flag based on achieved power."""
+        if self.achieved_power is None or np.isnan(self.achieved_power):
+            self.adequacy_flag = "indeterminate"
+            self.warning_message = "Power could not be calculated (insufficient sample size or extreme effect size)"
+            self.power_adequate = None
+        elif self.achieved_power >= self.target_power:
+            self.adequacy_flag = "sufficient"
+            self.power_adequate = True
+        else:
+            self.adequacy_flag = "insufficient"
+            self.power_adequate = False
+            if self.achieved_power < 0.50:
+                self.warning_message = (
+                    f"Low power ({self.achieved_power:.2f}) indicates insufficient "
+                    f"sample size to detect effects. Non-significant results may reflect "
+                    f"inadequate power rather than true absence of effects."
+                )
+
+
+@dataclass
+class MultipleComparisonCorrection:
+    """
+    Multiple testing correction metadata for a family of comparisons.
+    
+    Ensures researchers understand when and how p-values were adjusted.
+    """
+    metric_name: str                    # Metric family being corrected
+    correction_method: str = "holm"     # "holm", "bonferroni", "fdr_bh", or "none"
+    n_comparisons: int = 0              # Number of tests in family
+    alpha: float = 0.05                 # Original significance level
+    
+    # P-value mapping (before → after correction)
+    raw_pvalues: List[float] = field(default_factory=list)
+    adjusted_pvalues: List[float] = field(default_factory=list)
+    comparison_labels: List[str] = field(default_factory=list)  # e.g., "baes_vs_chatdev"
+    
+    # Results
+    reject_decisions: List[bool] = field(default_factory=list)  # Significance after correction
+    corrected_alpha: float = None       # Effective alpha after correction
+    
+    # Documentation
+    citation: str = ""                  # Reference for method used
+    explanation: str = ""               # Why correction was applied
+    
+    def __post_init__(self):
+        """Set citation and explanation based on method."""
+        if self.correction_method == "holm":
+            self.citation = "Holm, S. (1979). Scandinavian Journal of Statistics, 6(2), 65-70"
+            self.explanation = (
+                f"Holm-Bonferroni correction applied to control family-wise error rate "
+                f"across {self.n_comparisons} pairwise comparisons. This method is less "
+                f"conservative than Bonferroni while maintaining FWER ≤ {self.alpha}."
+            )
+        elif self.correction_method == "none":
+            self.explanation = "No correction applied (single comparison only)"

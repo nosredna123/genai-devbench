@@ -310,34 +310,81 @@ class PaperGenerator:
         output_dir = self.config.output_dir
         
         try:
-            # Load config/experiment.yaml from experiment dir (if exists)
-            config_file = exp_dir / "config" / "experiment.yaml"
-            if config_file.exists():
-                with open(config_file, 'r', encoding='utf-8') as f:
-                    exp_config = yaml.safe_load(f)
-                frameworks = exp_config.get('frameworks', [])
-                num_runs = exp_config.get('num_runs', 50)
+            # Load config.yaml from experiment root directory
+            config_file = exp_dir / "config.yaml"
+            if not config_file.exists():
+                raise ExperimentDataError(
+                    message=f"config.yaml not found in experiment directory: {exp_dir}\n"
+                           f"Expected: {config_file}",
+                    remediation="Ensure the experiment directory contains config.yaml with experiment configuration"
+                )
+            
+            with open(config_file, 'r', encoding='utf-8') as f:
+                exp_config = yaml.safe_load(f)
+            
+            # Validate required config fields
+            if 'frameworks' not in exp_config or not exp_config['frameworks']:
+                raise ExperimentDataError(
+                    message=f"'frameworks' key missing or empty in config.yaml: {config_file}",
+                    remediation="Ensure config.yaml contains 'frameworks' section with at least one framework"
+                )
+            
+            frameworks = list(exp_config['frameworks'].keys())
+            
+            # Get num_runs - must be in stopping_rule or direct field
+            if 'stopping_rule' in exp_config:
+                if 'max_runs' not in exp_config['stopping_rule']:
+                    raise ExperimentDataError(
+                        message="'stopping_rule' exists but 'max_runs' is missing in config.yaml",
+                        remediation="Add 'max_runs' field to 'stopping_rule' section in config.yaml"
+                    )
+                num_runs = exp_config['stopping_rule']['max_runs']
+            elif 'num_runs' in exp_config:
+                num_runs = exp_config['num_runs']
             else:
-                logger.warning("experiment.yaml not found, using defaults")
-                frameworks = []
-                num_runs = 50
+                raise ExperimentDataError(
+                    message="Neither 'stopping_rule.max_runs' nor 'num_runs' found in config.yaml",
+                    remediation="Add either 'stopping_rule.max_runs' or 'num_runs' to config.yaml"
+                )
+            
+            # Count actual runs from runs/ directory to verify/override
+            runs_dir = exp_dir / "runs"
+            if runs_dir.exists():
+                # Get framework directories (excluding manifest.json)
+                framework_dirs = [d for d in runs_dir.iterdir() 
+                                if d.is_dir() and d.name != '__pycache__']
+                if framework_dirs:
+                    # Count runs in first framework directory
+                    first_framework = framework_dirs[0]
+                    run_dirs = [d for d in first_framework.iterdir() 
+                              if d.is_dir() and d.name.startswith('run_')]
+                    if run_dirs:
+                        actual_runs = len(run_dirs)
+                        logger.info(f"Detected {actual_runs} actual runs from {first_framework.name}")
+                        num_runs = actual_runs  # Use actual count instead of config
             
             # Use analyzed metrics from output_dir
             metrics = frameworks_data
             
-            # If frameworks not in config, extract from metrics
-            if not frameworks:
-                frameworks = list(metrics.keys())
+            # Validate frameworks exist in analyzed data
+            for framework in frameworks:
+                if framework not in metrics:
+                    raise ExperimentDataError(
+                        message=f"Framework '{framework}' from config not found in analyzed metrics data",
+                        remediation=f"Ensure runs exist for framework '{framework}' in runs/ directory"
+                    )
             
-            # Load statistical_report.md from output_dir
+            # Load statistical_report.md from output_dir (required)
             report_file = output_dir / "statistical_report.md"
-            if report_file.exists():
-                statistical_report = report_file.read_text(encoding='utf-8')
-                # Extract key findings from report (simple heuristic)
-                key_findings = self._extract_key_findings(statistical_report)
-            else:
-                statistical_report = ""
-                key_findings = []
+            if not report_file.exists():
+                raise ExperimentDataError(
+                    message=f"statistical_report.md not found in output directory: {output_dir}",
+                    remediation="Run statistical analysis before generating paper"
+                )
+            
+            statistical_report = report_file.read_text(encoding='utf-8')
+            # Extract key findings from report (simple heuristic)
+            key_findings = self._extract_key_findings(statistical_report)
             
             # T036: Parse statistical reports and extract structured data
             self.statistical_data = self._parse_statistical_reports()
@@ -382,6 +429,19 @@ class PaperGenerator:
         summary_file = output_dir / "statistical_report_summary.md"
         full_file = output_dir / "statistical_report_full.md"
         
+        # Validate required files exist
+        if not summary_file.exists():
+            raise ExperimentDataError(
+                message=f"statistical_report_summary.md not found in output directory: {output_dir}",
+                remediation="Run statistical analysis before generating paper"
+            )
+        
+        if not full_file.exists():
+            raise ExperimentDataError(
+                message=f"statistical_report_full.md not found in output directory: {output_dir}",
+                remediation="Run statistical analysis before generating paper"
+            )
+        
         statistical_data = {
             'comparisons': [],
             'primary_metric': None,
@@ -391,160 +451,149 @@ class PaperGenerator:
             'key_findings': []
         }
         
-        # If summary report doesn't exist, return empty data
-        if not summary_file.exists():
-            logger.warning("statistical_report_summary.md not found, statistical data unavailable")
-            return statistical_data
+        summary_content = summary_file.read_text(encoding='utf-8')
         
-        try:
-            summary_content = summary_file.read_text(encoding='utf-8')
+        # Extract comparisons from Key Findings section
+        in_findings = False
+        current_metric = None
+        
+        for line in summary_content.split('\n'):
+            line_stripped = line.strip()
             
-            # Extract comparisons from Key Findings section
-            in_findings = False
-            current_metric = None
+            # Detect Key Findings section
+            if '## 📊 Key Findings' in line_stripped or '## Key Findings' in line_stripped:
+                in_findings = True
+                continue
             
-            for line in summary_content.split('\n'):
-                line_stripped = line.strip()
-                
-                # Detect Key Findings section
-                if '## 📊 Key Findings' in line_stripped or '## Key Findings' in line_stripped:
-                    in_findings = True
-                    continue
-                
-                # Detect next section (end of findings)
-                if in_findings and line_stripped.startswith('## ') and 'Key Findings' not in line_stripped:
-                    in_findings = False
-                    continue
-                
-                if in_findings:
-                    # Extract metric name
-                    if line_stripped.startswith('### '):
-                        current_metric = line_stripped[4:].strip()
-                        if not statistical_data['primary_metric']:
-                            statistical_data['primary_metric'] = current_metric
-                    
-                    # Extract test result and p-value
-                    if '**Result**:' in line_stripped and current_metric:
-                        # Extract p-value
-                        import re
-                        p_match = re.search(r'p=([\d.]+)', line_stripped)
-                        p_value = float(p_match.group(1)) if p_match else None
-                        test_type = None
-                    
-                    # Extract test type
-                    if '**Test Used**:' in line_stripped:
-                        test_type = line_stripped.split('**Test Used**:')[1].strip()
-                    
-                    # Extract effect sizes
-                    if line_stripped.startswith('- ') and ' vs ' in line_stripped and ':' in line_stripped:
-                        # Parse effect size line: "- framework1 vs framework2: measure = value (magnitude, 95% CI: [lower, upper])"
-                        parts = line_stripped[2:].split(':')
-                        if len(parts) >= 2:
-                            comparison = parts[0].strip()
-                            frameworks = [f.strip() for f in comparison.split(' vs ')]
-                            
-                            if len(frameworks) == 2:
-                                # Extract effect size value and CI
-                                effect_str = parts[1].strip()
-                                import re
-                                value_match = re.search(r'=\s*([-\d.]+)', effect_str)
-                                ci_match = re.search(r'\[([-\d.]+),\s*([-\d.]+)\]', effect_str)
-                                magnitude_match = re.search(r'\(([^,]+),', effect_str)
-                                
-                                if value_match:
-                                    statistical_data['comparisons'].append({
-                                        'framework1': frameworks[0],
-                                        'framework2': frameworks[1],
-                                        'metric': current_metric,
-                                        'effect_size': float(value_match.group(1)),
-                                        'ci_lower': float(ci_match.group(1)) if ci_match else None,
-                                        'ci_upper': float(ci_match.group(2)) if ci_match else None,
-                                        'magnitude': magnitude_match.group(1).strip() if magnitude_match else 'unknown',
-                                        'p_value': p_value,
-                                        'test_type': test_type
-                                    })
+            # Detect next section (end of findings)
+            if in_findings and line_stripped.startswith('## ') and 'Key Findings' not in line_stripped:
+                in_findings = False
+                continue
             
-            # Extract visualization paths
-            in_viz_section = False
-            for line in summary_content.split('\n'):
-                if '## 📈 Critical Visualizations' in line or '## Critical Visualizations' in line:
-                    in_viz_section = True
-                    continue
+            if in_findings:
+                # Extract metric name
+                if line_stripped.startswith('### '):
+                    current_metric = line_stripped[4:].strip()
+                    if not statistical_data['primary_metric']:
+                        statistical_data['primary_metric'] = current_metric
                 
-                if in_viz_section and line.strip().startswith('## '):
-                    in_viz_section = False
-                    continue
-                
-                if in_viz_section and line.strip().startswith('!['):
-                    # Extract image path: ![caption](path)
+                # Extract test result and p-value
+                if '**Result**:' in line_stripped and current_metric:
+                    # Extract p-value
                     import re
-                    img_match = re.search(r'!\[.*?\]\((.*?)\)', line)
-                    if img_match:
-                        path = img_match.group(1)
-                        # Determine viz type from path
-                        if 'box_plot' in path:
-                            statistical_data['visualization_paths']['box_plot'] = path
-                        elif 'forest_plot' in path:
-                            statistical_data['visualization_paths']['forest_plot'] = path
-                        elif 'violin_plot' in path:
-                            statistical_data['visualization_paths']['violin_plot'] = path
-                        elif 'qq_plot' in path:
-                            statistical_data['visualization_paths']['qq_plot'] = path
-            
-            # Extract power warnings
-            in_power_section = False
-            for line in summary_content.split('\n'):
-                if '## ⚠️ Power Analysis' in line or '## Power Analysis' in line:
-                    in_power_section = True
-                    continue
+                    p_match = re.search(r'p=([\d.]+)', line_stripped)
+                    p_value = float(p_match.group(1)) if p_match else None
+                    test_type = None
                 
-                if in_power_section and line.strip().startswith('## '):
-                    in_power_section = False
-                    continue
+                # Extract test type
+                if '**Test Used**:' in line_stripped:
+                    test_type = line_stripped.split('**Test Used**:')[1].strip()
                 
-                if in_power_section and line.strip().startswith('- '):
-                    statistical_data['power_warnings'].append(line.strip()[2:])
+                # Extract effect sizes
+                if line_stripped.startswith('- ') and ' vs ' in line_stripped and ':' in line_stripped:
+                    # Parse effect size line: "- framework1 vs framework2: measure = value (magnitude, 95% CI: [lower, upper])"
+                    parts = line_stripped[2:].split(':')
+                    if len(parts) >= 2:
+                        comparison = parts[0].strip()
+                        frameworks = [f.strip() for f in comparison.split(' vs ')]
+                        
+                        if len(frameworks) == 2:
+                            # Extract effect size value and CI
+                            effect_str = parts[1].strip()
+                            import re
+                            value_match = re.search(r'=\s*([-\d.]+)', effect_str)
+                            ci_match = re.search(r'\[([-\d.]+),\s*([-\d.]+)\]', effect_str)
+                            magnitude_match = re.search(r'\(([^,]+),', effect_str)
+                            
+                            if value_match:
+                                statistical_data['comparisons'].append({
+                                    'framework1': frameworks[0],
+                                    'framework2': frameworks[1],
+                                    'metric': current_metric,
+                                    'effect_size': float(value_match.group(1)),
+                                    'ci_lower': float(ci_match.group(1)) if ci_match else None,
+                                    'ci_upper': float(ci_match.group(2)) if ci_match else None,
+                                    'magnitude': magnitude_match.group(1).strip() if magnitude_match else 'unknown',
+                                    'p_value': p_value,
+                                    'test_type': test_type
+                                })
+        
+        # Extract visualization paths
+        in_viz_section = False
+        for line in summary_content.split('\n'):
+            if '## 📈 Critical Visualizations' in line or '## Critical Visualizations' in line:
+                in_viz_section = True
+                continue
             
-            # Extract methodology text from full report
-            if full_file.exists():
-                full_content = full_file.read_text(encoding='utf-8')
-                
-                in_methodology = False
-                methodology_lines = []
-                for line in full_content.split('\n'):
-                    if '## 6. Statistical Methodology' in line or '## Statistical Methodology' in line:
-                        in_methodology = True
-                        continue
-                    
-                    if in_methodology and line.strip().startswith('## '):
-                        break
-                    
-                    if in_methodology and line.strip().startswith('### Reproducibility'):
-                        break
-                    
-                    if in_methodology:
-                        methodology_lines.append(line)
-                
-                statistical_data['methodology_text'] = '\n'.join(methodology_lines).strip()
+            if in_viz_section and line.strip().startswith('## '):
+                in_viz_section = False
+                continue
             
-            # Extract key findings (simple heuristic - first few comparisons)
-            for comp in statistical_data['comparisons'][:3]:
-                finding = (
-                    f"{comp['framework1']} vs {comp['framework2']} on {comp['metric']}: "
-                    f"effect size = {comp['effect_size']:.2f} ({comp['magnitude']})"
-                )
-                statistical_data['key_findings'].append(finding)
+            if in_viz_section and line.strip().startswith('!['):
+                # Extract image path: ![caption](path)
+                import re
+                img_match = re.search(r'!\[.*?\]\((.*?)\)', line)
+                if img_match:
+                    path = img_match.group(1)
+                    # Determine viz type from path
+                    if 'box_plot' in path:
+                        statistical_data['visualization_paths']['box_plot'] = path
+                    elif 'forest_plot' in path:
+                        statistical_data['visualization_paths']['forest_plot'] = path
+                    elif 'violin_plot' in path:
+                        statistical_data['visualization_paths']['violin_plot'] = path
+                    elif 'qq_plot' in path:
+                        statistical_data['visualization_paths']['qq_plot'] = path
+        
+        # Extract power warnings
+        in_power_section = False
+        for line in summary_content.split('\n'):
+            if '## ⚠️ Power Analysis' in line or '## Power Analysis' in line:
+                in_power_section = True
+                continue
             
-            logger.info("Parsed statistical data: %d comparisons, %d visualizations, %d power warnings",
-                       len(statistical_data['comparisons']),
-                       len(statistical_data['visualization_paths']),
-                       len(statistical_data['power_warnings']))
+            if in_power_section and line.strip().startswith('## '):
+                in_power_section = False
+                continue
             
-            return statistical_data
+            if in_power_section and line.strip().startswith('- '):
+                statistical_data['power_warnings'].append(line.strip()[2:])
+        
+        # Extract methodology text from full report
+        full_content = full_file.read_text(encoding='utf-8')
+        
+        in_methodology = False
+        methodology_lines = []
+        for line in full_content.split('\n'):
+            if '## 6. Statistical Methodology' in line or '## Statistical Methodology' in line:
+                in_methodology = True
+                continue
             
-        except Exception as e:
-            logger.warning(f"Failed to parse statistical reports: {e}")
-            return statistical_data
+            if in_methodology and line.strip().startswith('## '):
+                break
+            
+            if in_methodology and line.strip().startswith('### Reproducibility'):
+                break
+            
+            if in_methodology:
+                methodology_lines.append(line)
+        
+        statistical_data['methodology_text'] = '\n'.join(methodology_lines).strip()
+        
+        # Extract key findings (simple heuristic - first few comparisons)
+        for comp in statistical_data['comparisons'][:3]:
+            finding = (
+                f"{comp['framework1']} vs {comp['framework2']} on {comp['metric']}: "
+                f"effect size = {comp['effect_size']:.2f} ({comp['magnitude']})"
+            )
+            statistical_data['key_findings'].append(finding)
+        
+        logger.info("Parsed statistical data: %d comparisons, %d visualizations, %d power warnings",
+                   len(statistical_data['comparisons']),
+                   len(statistical_data['visualization_paths']),
+                   len(statistical_data['power_warnings']))
+        
+        return statistical_data
     
     def _extract_key_findings(self, report: str) -> List[str]:
         """Extract key findings from statistical report (simple heuristic)."""
@@ -603,7 +652,9 @@ class PaperGenerator:
                     sections[section_name] = prose
                     logger.info("  ✓ %s: %d words (full prose)", section_name, len(prose.split()))
                 except Exception as e:
+                    import traceback
                     logger.error("  ✗ %s: %s", section_name, str(e))
+                    logger.debug("Full traceback: %s", traceback.format_exc())
                     sections[section_name] = f"<!-- ERROR generating {section_name}: {str(e)} -->"
             else:
                 # Generate brief outline only
@@ -906,84 +957,118 @@ class PaperGenerator:
         Returns:
             Enhanced prose with statistical results and visualizations
         """
-        if not self.statistical_data:
-            logger.debug("No statistical data available")
-            return prose
-        
-        enhancements = []
-        
-        # Add statistical comparisons subsection
-        if self.statistical_data.get('comparisons'):
-            enhancements.append("\n\n\\subsection{Statistical Comparisons}\n\n")
+        try:
+            if not self.statistical_data:
+                logger.debug("No statistical data available")
+                return prose
             
-            # Group comparisons by metric
-            from collections import defaultdict
-            by_metric = defaultdict(list)
-            for comp in self.statistical_data['comparisons']:
-                by_metric[comp['metric']].append(comp)
+            enhancements = []
+            by_metric = {}  # Initialize here for later logging
             
-            for metric, comps in by_metric.items():
-                enhancements.append(f"\\textbf{{{metric}:}}\n")
-                enhancements.append("\\begin{itemize}\n")
+            # Add statistical comparisons subsection
+            if self.statistical_data.get('comparisons'):
+                enhancements.append("\n\n\\subsection{Statistical Comparisons}\n\n")
                 
-                for comp in comps:
-                    framework1 = comp['framework1']
-                    framework2 = comp['framework2']
-                    effect = comp['effect_size']
-                    magnitude = comp['magnitude']
-                    ci_lower = comp.get('ci_lower', 0)
-                    ci_upper = comp.get('ci_upper', 0)
-                    p_value = comp.get('p_value', 1.0)
+                # Group comparisons by metric
+                from collections import defaultdict
+                by_metric = defaultdict(list)
+                for comp in self.statistical_data['comparisons']:
+                    metric = comp.get('metric')
+                    if metric:  # Skip if metric is None
+                        by_metric[metric].append(comp)
+                
+                for metric, comps in by_metric.items():
+                    if not metric:  # Skip if metric is None
+                        continue
+                        
+                    enhancements.append(f"\\textbf{{{metric}:}}\n")
+                    enhancements.append("\\begin{itemize}\n")
                     
-                    sig_marker = "$p < 0.05$" if p_value and p_value < 0.05 else "$p \\geq 0.05$"
+                    for comp in comps:
+                        framework1 = comp.get('framework1')
+                        framework2 = comp.get('framework2')
+                        effect = comp.get('effect_size')
+                        magnitude = comp.get('magnitude')
+                        ci_lower = comp.get('ci_lower')
+                        ci_upper = comp.get('ci_upper')
+                        p_value = comp.get('p_value')
+                        
+                        # Convert None to defaults
+                        if framework1 is None:
+                            framework1 = 'Unknown'
+                        if framework2 is None:
+                            framework2 = 'Unknown'
+                        if magnitude is None:
+                            magnitude = 'unknown'
+                        if ci_lower is None:
+                            ci_lower = 0
+                        if ci_upper is None:
+                            ci_upper = 0
+                        if p_value is None:
+                            p_value = 1.0
+                        
+                        # Skip if effect size is None
+                        if effect is None:
+                            continue
+                        
+                        sig_marker = "$p < 0.05$" if p_value < 0.05 else "$p \\geq 0.05$"
+                        
+                        enhancements.append(
+                            f"\\item {framework1} vs {framework2}: "
+                            f"effect size = {effect:.3f} ({magnitude}, "
+                            f"95\\% CI: [{ci_lower:.3f}, {ci_upper:.3f}]), {sig_marker}\n"
+                        )
                     
+                    enhancements.append("\\end{itemize}\n\n")
+            
+            # Embed visualizations
+            if self.statistical_data.get('visualization_paths'):
+                enhancements.append("\\subsection{Statistical Visualizations}\n\n")
+                
+                viz_paths = self.statistical_data['visualization_paths']
+                
+                # Box plot
+                if 'box_plot' in viz_paths:
+                    primary_metric = self.statistical_data.get('primary_metric')
+                    if primary_metric is None:
+                        primary_metric = 'metrics'
                     enhancements.append(
-                        f"\\item {framework1} vs {framework2}: "
-                        f"effect size = {effect:.3f} ({magnitude}, "
-                        f"95\\% CI: [{ci_lower:.3f}, {ci_upper:.3f}]), {sig_marker}\n"
+                        f"\\begin{{figure}}[htbp]\n"
+                        f"\\centering\n"
+                        f"\\includegraphics[width=0.8\\textwidth]{{{viz_paths['box_plot']}}}\n"
+                        f"\\caption{{Box plot showing distribution of {primary_metric} across frameworks. "
+                        f"Box shows median and quartiles, whiskers extend to 1.5$\\times$IQR, points are outliers.}}\n"
+                        f"\\label{{fig:box_plot}}\n"
+                        f"\\end{{figure}}\n\n"
                     )
                 
-                enhancements.append("\\end{itemize}\n\n")
+                # Forest plot
+                if 'forest_plot' in viz_paths:
+                    primary_metric = self.statistical_data.get('primary_metric')
+                    if primary_metric is None:
+                        primary_metric = 'metrics'
+                    enhancements.append(
+                        f"\\begin{{figure}}[htbp]\n"
+                        f"\\centering\n"
+                        f"\\includegraphics[width=0.8\\textwidth]{{{viz_paths['forest_plot']}}}\n"
+                        f"\\caption{{Forest plot showing effect sizes with 95\\% confidence intervals for {primary_metric}. "
+                        f"Vertical line at 0 indicates no effect. Color indicates magnitude (green=small, orange=medium, red=large).}}\n"
+                        f"\\label{{fig:forest_plot}}\n"
+                        f"\\end{{figure}}\n\n"
+                    )
         
-        # Embed visualizations
-        if self.statistical_data.get('visualization_paths'):
-            enhancements.append("\\subsection{Statistical Visualizations}\n\n")
+            # Append enhancements to prose
+            enhanced = prose + ''.join(enhancements)
             
-            viz_paths = self.statistical_data['visualization_paths']
-            
-            # Box plot
-            if 'box_plot' in viz_paths:
-                primary_metric = self.statistical_data.get('primary_metric', 'primary metric')
-                enhancements.append(
-                    f"\\begin{{figure}}[htbp]\n"
-                    f"\\centering\n"
-                    f"\\includegraphics[width=0.8\\textwidth]{{{viz_paths['box_plot']}}}\n"
-                    f"\\caption{{Box plot showing distribution of {primary_metric} across frameworks. "
-                    f"Box shows median and quartiles, whiskers extend to 1.5$\\times$IQR, points are outliers.}}\n"
-                    f"\\label{{fig:box_plot}}\n"
-                    f"\\end{{figure}}\n\n"
-                )
-            
-            # Forest plot
-            if 'forest_plot' in viz_paths:
-                primary_metric = self.statistical_data.get('primary_metric', 'primary metric')
-                enhancements.append(
-                    f"\\begin{{figure}}[htbp]\n"
-                    f"\\centering\n"
-                    f"\\includegraphics[width=0.8\\textwidth]{{{viz_paths['forest_plot']}}}\n"
-                    f"\\caption{{Forest plot showing effect sizes with 95\\% confidence intervals for {primary_metric}. "
-                    f"Vertical line at 0 indicates no effect. Color indicates magnitude (green=small, orange=medium, red=large).}}\n"
-                    f"\\label{{fig:forest_plot}}\n"
-                    f"\\end{{figure}}\n\n"
-                )
-        
-        # Append enhancements to prose
-        enhanced = prose + ''.join(enhancements)
-        
-        logger.info("Enhanced results with %d comparison groups and %d visualizations",
-                   len(by_metric) if self.statistical_data.get('comparisons') else 0,
-                   len(self.statistical_data.get('visualization_paths', {})))
-        return enhanced
+            logger.info("Enhanced results with %d comparison groups and %d visualizations",
+                       len(by_metric) if self.statistical_data.get('comparisons') else 0,
+                       len(self.statistical_data.get('visualization_paths', {})))
+            return enhanced
+        except Exception as e:
+            import traceback
+            logger.warning("Could not enhance results section: %s", str(e))
+            logger.warning("Full traceback:\n%s", traceback.format_exc())
+            return prose
     
     def _enhance_discussion_section(self, prose: str) -> str:
         """
