@@ -2434,9 +2434,11 @@ class StatisticalAnalyzer:
             # Document zero-variance detection (FR-034: Data quality checks)
             sections.append(
                 "Effect size calculations included data quality checks: "
-                "groups with zero or near-zero variance (standard deviation < 0.01 or "
-                "interquartile range < 0.01) were flagged, as standardized effect sizes "
+                "groups with near-zero variance (coefficient of variation < 1% AND "
+                "relative IQR < 1%) were flagged, as standardized effect sizes "
                 "(e.g., Cohen's d) are inappropriate for such data. "
+                "This relative approach works correctly across metrics of different scales "
+                "(e.g., tokens vs. cost). "
                 "In these cases, Cohen's d was skipped, and Cliff's Delta confidence intervals "
                 "flagged as 'deterministic' to indicate categorical separation rather than "
                 "continuous effect magnitude. "

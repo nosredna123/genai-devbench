@@ -188,12 +188,21 @@ class StatisticalVisualizationGenerator:
         data = [dist.values for dist in distributions]
         labels = [dist.group_name for dist in distributions]
         
-        # Feature 013: Detect zero-variance distributions
+        # Feature 013: Detect zero-variance distributions using relative thresholds
         zero_variance_detected = []
         for i, dist in enumerate(distributions):
-            std_dev = dist.std_dev
+            # Exact zero check
+            if dist.std_dev == 0.0 or len(set(dist.values)) == 1:
+                zero_variance_detected.append(i)
+                continue
+            
+            # Relative variance check (coefficient of variation < 1%)
             iqr = dist.q3 - dist.q1
-            if std_dev == 0 or iqr < 0.01:
+            relative_std = abs(dist.std_dev / dist.mean) if dist.mean != 0 else float('inf')
+            relative_iqr = abs(iqr / dist.median) if dist.median != 0 else float('inf')
+            
+            # Only flag as zero-variance if BOTH relative measures < 1%
+            if relative_std < 0.01 and relative_iqr < 0.01:
                 zero_variance_detected.append(i)
         
         # Create box plot only for distributions with variance
