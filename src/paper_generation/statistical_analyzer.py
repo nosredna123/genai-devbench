@@ -25,6 +25,7 @@ from src.utils.statistical_helpers import (
     bootstrap_ci, cohens_d, cliffs_delta, interpret_effect_size, format_pvalue
 )
 from .exceptions import StatisticalAnalysisError
+from .config import StatisticalConfig
 
 logger = logging.getLogger(__name__)
 
@@ -536,18 +537,72 @@ class StatisticalAnalyzer:
         ...         print(f"{test.metric_name}: p={test.p_value:.4f}")
     """
     
-    def __init__(self, alpha: float = 0.05, random_seed: int = 42):
+    def __init__(
+        self,
+        alpha: float = 0.05,
+        random_seed: int = 42,
+        config: Optional[StatisticalConfig] = None
+    ):
         """
         Initialize statistical analyzer.
         
         Args:
             alpha: Significance level for hypothesis tests (default: 0.05)
             random_seed: Random seed for reproducibility (default: 42)
+            config: Statistical configuration (default: StatisticalConfig())
         """
         self.alpha = alpha
         self.random_seed = random_seed
         self.rng = np.random.RandomState(random_seed)
-        logger.info(f"StatisticalAnalyzer initialized (α={alpha}, seed={random_seed})")
+        self.config = config if config is not None else StatisticalConfig()
+        logger.info(
+            f"StatisticalAnalyzer initialized (α={alpha}, seed={random_seed}, "
+            f"variance_threshold={self.config.variance_threshold})"
+        )
+    
+    def _check_variance_quality(
+        self,
+        values: np.ndarray,
+        variance_threshold: Optional[float] = None,
+        iqr_threshold: Optional[float] = None
+    ) -> bool:
+        """
+        Check if a distribution has sufficient variance for meaningful analysis.
+        
+        Feature 013: Centralized variance quality checking.
+        
+        A distribution is considered to have zero or near-zero variance if:
+        - Standard deviation is exactly 0
+        - All values are identical
+        - Standard deviation < variance_threshold
+        - IQR < iqr_threshold
+        
+        Args:
+            values: Array of numeric values
+            variance_threshold: Minimum acceptable standard deviation (default: from config)
+            iqr_threshold: Minimum acceptable IQR (default: from config)
+            
+        Returns:
+            True if distribution has sufficient variance, False otherwise
+        """
+        # Use config defaults if not specified
+        variance_threshold = variance_threshold if variance_threshold is not None else self.config.variance_threshold
+        iqr_threshold = iqr_threshold if iqr_threshold is not None else self.config.iqr_threshold
+        
+        # Exact zero variance check
+        if np.std(values) == 0.0 or len(set(values)) == 1:
+            return False
+        
+        # Near-zero variance checks
+        std_dev = np.std(values)
+        q1 = np.percentile(values, 25)
+        q3 = np.percentile(values, 75)
+        iqr = q3 - q1
+        
+        if std_dev < variance_threshold or iqr < iqr_threshold:
+            return False
+        
+        return True
     
     def analyze_experiment(
         self,
@@ -809,8 +864,8 @@ class StatisticalAnalyzer:
                 ci_lower = median
                 ci_upper = median
             
-            # Check for zero variance (T012)
-            has_zero_variance = (std_dev == 0.0) or (len(set(values)) == 1)
+            # Feature 013: Use centralized variance quality check
+            has_zero_variance = not self._check_variance_quality(values_array)
             
             # Calculate skewness and kurtosis (T028)
             if len(values) >= 3 and not has_zero_variance:
@@ -1855,14 +1910,10 @@ class StatisticalAnalyzer:
                 # T036: Use test type to select effect size measure (FR-013, FR-014)
                 comparison_key = tuple(sorted([group1, group2]))
                 
-                # Check for zero-variance or near-zero variance (data quality issue)
-                std1, std2 = np.std(vals1), np.std(vals2)
-                iqr1 = np.percentile(vals1, 75) - np.percentile(vals1, 25)
-                iqr2 = np.percentile(vals2, 75) - np.percentile(vals2, 25)
-                
-                # Detect zero-inflation: either SD < 0.01 or IQR = 0
-                zero_variance_detected = (std1 < 0.01 or std2 < 0.01 or 
-                                         iqr1 < 0.01 or iqr2 < 0.01)
+                # Feature 013: Use centralized variance quality check
+                has_variance1 = self._check_variance_quality(vals1)
+                has_variance2 = self._check_variance_quality(vals2)
+                zero_variance_detected = not (has_variance1 and has_variance2)
                 
                 if comparison_key in test_type_map:
                     # T036: Get measure based on test type
@@ -1883,8 +1934,7 @@ class StatisticalAnalyzer:
                         # Skip this comparison entirely - will not be added to results
                         warning_msg = (
                             f"Skipping Cohen's d for {group1} vs {group2} on {metric_name}: "
-                            f"zero/near-zero variance detected (SD: {std1:.4f}, {std2:.4f}, "
-                            f"IQR: {iqr1:.4f}, {iqr2:.4f}). Effect size would be invalid."
+                            f"zero/near-zero variance detected. Effect size would be invalid."
                         )
                         logger.warning(warning_msg)
                         if findings:
@@ -1936,8 +1986,7 @@ class StatisticalAnalyzer:
                         warning_msg = (
                             f"Cliff's Delta CI for {group1} vs {group2} on {metric_name} "
                             f"is deterministic [{ci_lower:.3f}, {ci_upper:.3f}] due to "
-                            f"zero/near-zero variance (SD: {std1:.4f}, {std2:.4f}, "
-                            f"IQR: {iqr1:.4f}, {iqr2:.4f}). This represents categorical "
+                            f"zero/near-zero variance. This represents categorical "
                             f"separation rather than continuous effect size."
                         )
                         logger.warning(warning_msg)
@@ -2039,7 +2088,10 @@ class StatisticalAnalyzer:
             
             # Skip if zero variance
             if dist_map[group1].has_zero_variance or dist_map[group2].has_zero_variance:
-                logger.debug(f"Skipping power analysis: zero variance")
+                logger.debug(
+                    f"Skipping power analysis for {metric_name}: "
+                    f"zero variance in {group1} or {group2}"
+                )
                 return power_results
             
             # Calculate effect size (use Cohen's d for power)

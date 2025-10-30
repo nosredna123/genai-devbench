@@ -188,28 +188,79 @@ class StatisticalVisualizationGenerator:
         data = [dist.values for dist in distributions]
         labels = [dist.group_name for dist in distributions]
         
-        # Create box plot
-        bp = ax.boxplot(
-            data,
-            labels=labels,
-            patch_artist=True,
-            showfliers=True,
-            notch=False,
-            widths=0.6,
-        )
+        # Feature 013: Detect zero-variance distributions
+        zero_variance_detected = []
+        for i, dist in enumerate(distributions):
+            std_dev = dist.std_dev
+            iqr = dist.q3 - dist.q1
+            if std_dev == 0 or iqr < 0.01:
+                zero_variance_detected.append(i)
         
-        # Color boxes with colorblind-friendly palette
-        colors = sns.color_palette("colorblind", len(distributions))
-        for patch, color in zip(bp['boxes'], colors):
-            patch.set_facecolor(color)
-            patch.set_alpha(0.7)
+        # Create box plot only for distributions with variance
+        normal_data = [data[i] for i in range(len(data)) if i not in zero_variance_detected]
+        normal_labels = [labels[i] for i in range(len(labels)) if i not in zero_variance_detected]
         
-        # Style whiskers, caps, medians
-        for element in ['whiskers', 'caps']:
-            plt.setp(bp[element], color='black', linewidth=1.2)
-        plt.setp(bp['medians'], color='darkred', linewidth=2)
-        plt.setp(bp['fliers'], marker='o', markerfacecolor='red', 
-                 markersize=5, alpha=0.6, markeredgecolor='darkred')
+        if normal_data:
+            bp = ax.boxplot(
+                normal_data,
+                labels=normal_labels,
+                patch_artist=True,
+                showfliers=True,
+                notch=False,
+                widths=0.6,
+            )
+            
+            # Color boxes with colorblind-friendly palette
+            colors = sns.color_palette("colorblind", len(normal_data))
+            for patch, color in zip(bp['boxes'], colors):
+                patch.set_facecolor(color)
+                patch.set_alpha(0.7)
+            
+            # Style whiskers, caps, medians
+            for element in ['whiskers', 'caps']:
+                plt.setp(bp[element], color='black', linewidth=1.2)
+            plt.setp(bp['medians'], color='darkred', linewidth=2)
+            plt.setp(bp['fliers'], marker='o', markerfacecolor='red', 
+                     markersize=5, alpha=0.6, markeredgecolor='darkred')
+        
+        # Feature 013: Add visual indicators for zero-variance distributions
+        if zero_variance_detected:
+            for idx in zero_variance_detected:
+                dist = distributions[idx]
+                x_pos = len(normal_data) + zero_variance_detected.index(idx) + 1
+                
+                # Draw horizontal line at mean
+                ax.hlines(
+                    y=dist.mean,
+                    xmin=x_pos - 0.3,
+                    xmax=x_pos + 0.3,
+                    color='red',
+                    linewidth=3,
+                    label='Zero Variance' if zero_variance_detected.index(idx) == 0 else ""
+                )
+                
+                # Add annotation
+                ax.annotate(
+                    'No variation',
+                    xy=(x_pos, dist.mean),
+                    xytext=(x_pos + 0.4, dist.mean),
+                    fontsize=8,
+                    color='red',
+                    ha='left',
+                    va='center'
+                )
+                
+                # Add label on x-axis
+                if normal_data:
+                    current_labels = ax.get_xticklabels()
+                    new_labels = [label.get_text() for label in current_labels] + [labels[idx]]
+                    new_positions = list(range(1, len(normal_data) + 1)) + [x_pos]
+                    ax.set_xticks(new_positions)
+                    ax.set_xticklabels(new_labels)
+                else:
+                    # All distributions have zero variance
+                    ax.set_xticks([x_pos])
+                    ax.set_xticklabels([labels[idx]])
         
         # Labels and title
         ax.set_ylabel(self._format_metric_label(metric_name))
@@ -219,6 +270,10 @@ class StatisticalVisualizationGenerator:
         # Grid
         ax.yaxis.grid(True, alpha=0.3)
         ax.set_axisbelow(True)
+        
+        # Feature 013: Add legend if zero-variance detected
+        if zero_variance_detected:
+            ax.legend(loc='best', fontsize=8)
         
         # Save
         output_filename = f"box_plot_{metric_name}.svg"
@@ -233,6 +288,12 @@ class StatisticalVisualizationGenerator:
             f"Box shows median (red line) and quartiles (Q1-Q3). "
             f"Whiskers extend to 1.5×IQR. Red dots indicate outliers."
         )
+        
+        # Feature 013: Update caption if zero-variance detected
+        if zero_variance_detected:
+            caption += (
+                " Red horizontal lines indicate distributions with zero variance (no variation in values)."
+            )
         
         return Visualization(
             viz_type=VisualizationType.BOXPLOT,
@@ -356,24 +417,49 @@ class StatisticalVisualizationGenerator:
         errors_lower = [abs(values[i] - ci_lowers[i]) for i in range(len(values))]
         errors_upper = [abs(ci_uppers[i] - values[i]) for i in range(len(values))]
         
+        # Feature 013: Detect deterministic CIs (complete separation)
+        deterministic_ci_detected = []
+        for i, es in enumerate(effect_sizes):
+            if abs(es.value) == 1.0 and es.ci_lower == es.ci_upper:
+                deterministic_ci_detected.append(i)
+        
         # Plot horizontal error bars
         for i, (y, val, err_low, err_up, color, es) in enumerate(
             zip(y_positions, values, errors_lower, errors_upper, colors, effect_sizes)
         ):
-            # Error bar
-            ax.errorbar(
-                val, y,
-                xerr=[[err_low], [err_up]],
-                fmt='o',
-                markersize=8,
-                color=color,
-                ecolor=color,
-                capsize=5,
-                capthick=2,
-                linewidth=2,
-                alpha=0.8,
-                label=es.magnitude if i == 0 or es.magnitude != effect_sizes[i-1].magnitude else "",
-            )
+            # Feature 013: Use different styling for deterministic CIs
+            if i in deterministic_ci_detected:
+                # Complete separation: open marker, red edge, larger size
+                ax.errorbar(
+                    val, y,
+                    xerr=[[err_low], [err_up]],
+                    fmt='o',
+                    markersize=12,
+                    markerfacecolor='none',
+                    markeredgecolor='red',
+                    markeredgewidth=2.5,
+                    ecolor='red',
+                    capsize=5,
+                    capthick=2,
+                    linewidth=2,
+                    alpha=0.8,
+                    label='Complete Separation' if i == deterministic_ci_detected[0] else "",
+                )
+            else:
+                # Normal rendering
+                ax.errorbar(
+                    val, y,
+                    xerr=[[err_low], [err_up]],
+                    fmt='o',
+                    markersize=8,
+                    color=color,
+                    ecolor=color,
+                    capsize=5,
+                    capthick=2,
+                    linewidth=2,
+                    alpha=0.8,
+                    label=es.magnitude if i == 0 or es.magnitude != effect_sizes[i-1].magnitude else "",
+                )
         
         # Reference line at 0 (no effect)
         ax.axvline(x=0, color='black', linestyle='--', linewidth=1.5, alpha=0.7, label='No effect')
@@ -413,6 +499,12 @@ class StatisticalVisualizationGenerator:
             f"Colors indicate magnitude: green (small), orange (medium), red (large), gray (negligible). "
             f"Dashed line at 0 indicates no effect."
         )
+        
+        # Feature 013: Update caption if deterministic CIs detected
+        if deterministic_ci_detected:
+            caption += (
+                " Open red markers indicate complete separation (|effect| = 1.0 with no uncertainty)."
+            )
         
         return Visualization(
             viz_type=VisualizationType.EFFECT_FOREST,
