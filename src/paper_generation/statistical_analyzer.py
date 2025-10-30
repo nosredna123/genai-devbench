@@ -418,6 +418,19 @@ class StatisticalFindings:
     metadata: Dict[str, Any] = field(default_factory=dict)
     methodology_text: str = ""
     
+    # Feature 013: Analysis warnings for data quality and assumption violations
+    warnings: List[str] = field(default_factory=list)
+    
+    def add_warning(self, category: str, message: str):
+        """
+        Add a categorized warning about data quality or analysis assumptions.
+        
+        Args:
+            category: Warning category (e.g., 'Zero Variance', 'Assumption Violation')
+            message: Descriptive warning message
+        """
+        self.warnings.append(f'**{category}**: {message}')
+    
     def __post_init__(self):
         """Calculate summary statistics and generate power warnings."""
         self.n_significant_tests = sum(
@@ -570,6 +583,20 @@ class StatisticalAnalyzer:
         
         logger.info(f"Analyzing {len(metrics_to_analyze)} metrics: {metrics_to_analyze}")
         
+        # Feature 013: Create early findings object for warning collection
+        findings_for_warnings = StatisticalFindings(
+            experiment_name=self._infer_experiment_name(frameworks_data),
+            timestamp=datetime.now().isoformat(),
+            metrics_analyzed=[],  # Will be populated later
+            distributions=[],
+            assumption_checks=[],
+            statistical_tests=[],
+            effect_sizes=[],
+            power_analyses=[],
+            visualizations=[],
+            metadata={}
+        )
+        
         # Initialize result containers
         distributions = []
         assumption_checks = []
@@ -594,12 +621,16 @@ class StatisticalAnalyzer:
                 distributions.extend(metric_distributions)
                 
                 # T007: Check normality assumptions
-                normality_checks = self._check_normality(metric_name, metric_data)
+                normality_checks = self._check_normality(
+                    metric_name, metric_data, findings=findings_for_warnings
+                )
                 assumption_checks.extend(normality_checks)
                 
                 # T008: Check variance homogeneity (if multiple groups)
                 if len(metric_data) >= 2:
-                    variance_check = self._check_variance_homogeneity(metric_name, metric_data)
+                    variance_check = self._check_variance_homogeneity(
+                        metric_name, metric_data, findings=findings_for_warnings
+                    )
                     if variance_check:
                         assumption_checks.append(variance_check)
                 
@@ -639,7 +670,8 @@ class StatisticalAnalyzer:
                     
                     # T010, T036: Calculate effect sizes with test alignment
                     effects = self._calculate_effect_sizes(
-                        metric_name, metric_data, metric_distributions, test_results
+                        metric_name, metric_data, metric_distributions, test_results,
+                        findings=findings_for_warnings
                     )
                     effect_sizes.extend(effects)
                     
@@ -680,7 +712,8 @@ class StatisticalAnalyzer:
             effect_sizes=effect_sizes,
             power_analyses=power_analyses,
             visualizations=[],  # Will be populated by visualization generator
-            metadata=metadata
+            metadata=metadata,
+            warnings=findings_for_warnings.warnings  # Feature 013: Copy collected warnings
         )
         
         # T032: Generate methodology text
@@ -834,12 +867,16 @@ class StatisticalAnalyzer:
     def _check_normality(
         self,
         metric_name: str,
-        metric_data: Dict[str, List[float]]
+        metric_data: Dict[str, List[float]],
+        findings: 'StatisticalFindings' = None
     ) -> List[AssumptionCheck]:
         """
         Perform Shapiro-Wilk normality tests for each group.
         
         Updates distribution.is_normal based on test results.
+        
+        Args:
+            findings: StatisticalFindings object for warning collection (Feature 013)
         """
         normality_checks = []
         
@@ -890,6 +927,12 @@ class StatisticalAnalyzer:
                     "Kruskal-Wallis for 3+ groups) or applying data transformations "
                     "(log, square root, Box-Cox) to achieve normality."
                 )
+                # Feature 013: Add warning for assumption violation
+                if findings:
+                    findings.add_warning(
+                        'Assumption Violation',
+                        f"Normality assumption violated for metric '{metric_name}' in group '{group_name}' (p={p_value:.4f}); non-parametric test recommended"
+                    )
             
             check = AssumptionCheck(
                 test_type=TestType.SHAPIRO_WILK,
@@ -910,12 +953,16 @@ class StatisticalAnalyzer:
     def _check_variance_homogeneity(
         self,
         metric_name: str,
-        metric_data: Dict[str, List[float]]
+        metric_data: Dict[str, List[float]],
+        findings: 'StatisticalFindings' = None
     ) -> Optional[AssumptionCheck]:
         """
         Perform Levene's test for homogeneity of variance across groups.
         
         Required for parametric tests like ANOVA and t-test.
+        
+        Args:
+            findings: StatisticalFindings object for warning collection (Feature 013)
         """
         groups = list(metric_data.keys())
         values_list = list(metric_data.values())
@@ -963,6 +1010,12 @@ class StatisticalAnalyzer:
                 recommendation = (
                     "Consider using Welch's ANOVA (does not assume equal variances) "
                     "or non-parametric Kruskal-Wallis test."
+                )
+            # Feature 013: Add warning for assumption violation
+            if findings:
+                findings.add_warning(
+                    'Assumption Violation',
+                    f"Variance homogeneity assumption violated for metric '{metric_name}' (Levene's test p={p_value:.4f}); robust test recommended"
                 )
         
         return AssumptionCheck(
@@ -1751,7 +1804,8 @@ class StatisticalAnalyzer:
         metric_name: str,
         metric_data: Dict[str, List[float]],
         distributions: List[MetricDistribution],
-        test_results: List[StatisticalTest] = None
+        test_results: List[StatisticalTest] = None,
+        findings: 'StatisticalFindings' = None
     ) -> List[EffectSize]:
         """
         Calculate effect sizes for all pairwise comparisons.
@@ -1765,6 +1819,7 @@ class StatisticalAnalyzer:
             metric_data: Dict mapping group names to value lists
             distributions: MetricDistribution objects for normality checks
             test_results: Statistical test results for this metric (T036: NEW)
+            findings: StatisticalFindings object for warning collection (Feature 013)
             
         Returns:
             List of EffectSize objects with proper measure-test alignment
@@ -1826,11 +1881,17 @@ class StatisticalAnalyzer:
                     # Skip Cohen's d if zero variance (would produce inflated/invalid d)
                     if zero_variance_detected:
                         # Skip this comparison entirely - will not be added to results
-                        logger.warning(
+                        warning_msg = (
                             f"Skipping Cohen's d for {group1} vs {group2} on {metric_name}: "
                             f"zero/near-zero variance detected (SD: {std1:.4f}, {std2:.4f}, "
                             f"IQR: {iqr1:.4f}, {iqr2:.4f}). Effect size would be invalid."
                         )
+                        logger.warning(warning_msg)
+                        if findings:
+                            findings.add_warning(
+                                'Zero Variance',
+                                f"Framework '{group1}' or '{group2}' showed zero variance for metric '{metric_name}'; Cohen's d calculation skipped"
+                            )
                         continue
                     
                     # Use Cohen's d
@@ -1872,13 +1933,19 @@ class StatisticalAnalyzer:
                     
                     # Warn if zero variance produces deterministic CI
                     if zero_variance_detected and abs(ci_upper - ci_lower) < 0.01:
-                        logger.warning(
+                        warning_msg = (
                             f"Cliff's Delta CI for {group1} vs {group2} on {metric_name} "
                             f"is deterministic [{ci_lower:.3f}, {ci_upper:.3f}] due to "
                             f"zero/near-zero variance (SD: {std1:.4f}, {std2:.4f}, "
                             f"IQR: {iqr1:.4f}, {iqr2:.4f}). This represents categorical "
                             f"separation rather than continuous effect size."
                         )
+                        logger.warning(warning_msg)
+                        if findings:
+                            findings.add_warning(
+                                'Deterministic CI',
+                                f"Cliff's Delta for metric '{metric_name}' comparison '{group1} vs {group2}' is {effect_value:.3f} with CI [{ci_lower:.3f}, {ci_upper:.3f}], indicating complete separation between groups"
+                            )
                     
                     magnitude = interpret_effect_size(effect_value, measure_str)
                     

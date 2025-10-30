@@ -691,6 +691,30 @@ class EducationalContentGenerator:
         glossary.append("# 📚 Statistical Terms Glossary\n")
         glossary.append("*Plain-language definitions for common statistical terms*\n\n")
         
+        # Feature 013: Add Effect Size Interpretation Guide
+        glossary.append("## Effect Size Interpretation Guide\n\n")
+        
+        glossary.append("### Cohen's d (Parametric)\n\n")
+        glossary.append("| Range | Interpretation | Practical Meaning |\n")
+        glossary.append("|-------|----------------|-------------------|\n")
+        glossary.append("| \\|d\\| < 0.2 | Negligible | Minimal practical difference |\n")
+        glossary.append("| 0.2 ≤ \\|d\\| < 0.5 | Small | Detectable but modest difference |\n")
+        glossary.append("| 0.5 ≤ \\|d\\| < 0.8 | Medium | Moderate, meaningful difference |\n")
+        glossary.append("| \\|d\\| ≥ 0.8 | Large | Substantial difference |\n\n")
+        
+        glossary.append("### Cliff's Delta (Non-Parametric)\n\n")
+        glossary.append("| Range | Interpretation | Dominance Level |\n")
+        glossary.append("|-------|----------------|-----------------|\ n")
+        glossary.append("| \\|δ\\| < 0.147 | Negligible | Groups largely overlap |\n")
+        glossary.append("| 0.147 ≤ \\|δ\\| < 0.33 | Small | One group tends higher |\n")
+        glossary.append("| 0.33 ≤ \\|δ\\| < 0.474 | Medium | Clear tendency difference |\n")
+        glossary.append("| \\|δ\\| ≥ 0.474 | Large | Strong separation |\n")
+        glossary.append("| \\|δ\\| = 1.0 | Complete | No overlap (all A > all B) |\n\n")
+        
+        glossary.append("**Note**: Effect size interpretation should consider domain context. ")
+        glossary.append("Small effects may be practically important in performance benchmarking.\n\n")
+        glossary.append("---\n\n")
+        
         terms = {
             "Alpha (α)": "The significance level, usually 0.05. It's the probability of saying there's a difference when there isn't one (false alarm rate).",
             

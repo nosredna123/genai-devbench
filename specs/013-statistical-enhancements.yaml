@@ -1,0 +1,380 @@
+feature_id: "013"
+name: "Statistical Analysis Enhancements"
+description: |
+  Implement core enhancements to statistical analysis system based on expert review validation.
+  Focus on warning summary system, effect size interpretation, visual indicators, and code refactoring.
+  Excludes: A priori power calculator, automated tests (manual testing only), detailed documentation.
+
+type: "enhancement"
+priority: "high"
+estimated_effort: "5-7 days"
+
+dependencies:
+  - feature_id: "012"
+    description: "Statistical report fixes (merged to main)"
+
+requirements:
+  functional:
+    - id: "REQ-013-F01"
+      description: "Implement warning collection and tracking system"
+      acceptance_criteria:
+        - "StatisticalFindings model has warnings list field"
+        - "add_warning() method categorizes warnings"
+        - "Warnings accumulated during analysis"
+      
+    - id: "REQ-013-F02"
+      description: "Generate warning summary in CLI output"
+      acceptance_criteria:
+        - "Warnings displayed at end of analysis"
+        - "Formatted summary with numbered list"
+        - "Clear separator lines for visibility"
+      
+    - id: "REQ-013-F03"
+      description: "Add warning summary section to Markdown reports"
+      acceptance_criteria:
+        - "New section after Methodology"
+        - "⚠️ emoji icon for visual distinction"
+        - "Categorized warnings with descriptions"
+        - "Section only appears if warnings exist"
+      
+    - id: "REQ-013-F04"
+      description: "Add effect size interpretation table to glossary"
+      acceptance_criteria:
+        - "Cohen's d interpretation ranges"
+        - "Cliff's Delta interpretation ranges"
+        - "Practical meaning explanations"
+        - "Context note about domain-specific interpretation"
+      
+    - id: "REQ-013-F05"
+      description: "Add visual indicators for zero-variance in plots"
+      acceptance_criteria:
+        - "Box plots: horizontal line + annotation for zero variance"
+        - "Forest plots: open marker for deterministic CIs"
+        - "Red color scheme for data quality issues"
+        - "Legend entries for special markers"
+      
+    - id: "REQ-013-F06"
+      description: "Extract variance checking into separate method"
+      acceptance_criteria:
+        - "_check_variance_quality() method created"
+        - "Returns dict with variance metrics"
+        - "Called from effect size calculation"
+        - "Original logic preserved"
+      
+    - id: "REQ-013-F07"
+      description: "Create centralized statistical configuration"
+      acceptance_criteria:
+        - "StatisticalConfig dataclass in config.py"
+        - "All thresholds as config fields"
+        - "Effect size interpretation thresholds"
+        - "Reporting preferences (decimal places)"
+        - "Multiple comparison method setting"
+
+  non_functional:
+    - id: "REQ-013-NF01"
+      description: "Code quality improvements"
+      criteria:
+        - "Extract long methods (>50 lines target)"
+        - "Consistent logging levels"
+        - "Self-documenting variable names"
+    
+    - id: "REQ-013-NF02"
+      description: "Backward compatibility"
+      criteria:
+        - "Existing reports still generated"
+        - "No breaking changes to public APIs"
+        - "Config has sensible defaults"
+
+implementation:
+  phases:
+    - phase: 1
+      name: "Warning System Infrastructure"
+      duration: "1-2 days"
+      tasks:
+        - task_id: "TASK-013-01"
+          description: "Add warnings field to StatisticalFindings model"
+          files:
+            - "src/paper_generation/models.py"
+          steps:
+            - "Import List and field from dataclasses"
+            - "Add warnings: List[str] = field(default_factory=list)"
+            - "Add add_warning(category: str, message: str) method"
+            - "Method formats: f'**{category}**: {message}'"
+        
+        - task_id: "TASK-013-02"
+          description: "Integrate warning collection in analyzer"
+          files:
+            - "src/paper_generation/statistical_analyzer.py"
+          steps:
+            - "Pass findings object to methods needing to log warnings"
+            - "Call findings.add_warning() for:"
+            - "  - Zero variance detection"
+            - "  - Deterministic CIs"
+            - "  - Assumption violations (normality, variance)"
+            - "  - Outlier detection"
+            - "Keep logger.warning() calls for CLI output"
+        
+        - task_id: "TASK-013-03"
+          description: "Add CLI warning summary"
+          files:
+            - "src/paper_generation/experiment_analyzer.py"
+          steps:
+            - "In analyze_experiment(), after analysis completes"
+            - "Check if findings.warnings is not empty"
+            - "Print separator line (60 '=')"
+            - "Print 'ANALYSIS WARNINGS SUMMARY (N issues)'"
+            - "Enumerate warnings with numbering"
+            - "Print closing separator"
+        
+        - task_id: "TASK-013-04"
+          description: "Add Markdown warning section"
+          files:
+            - "src/paper_generation/experiment_analyzer.py"
+          steps:
+            - "In _generate_statistical_report()"
+            - "After methodology section, before glossary"
+            - "If findings.warnings:"
+            - "  Add '## ⚠️ Notes and Warnings'"
+            - "  Add intro text about detected conditions"
+            - "  Enumerate warnings with markdown numbering"
+            - "Update section numbers after this insertion"
+
+    - phase: 2
+      name: "Effect Size Interpretation & Visuals"
+      duration: "2 days"
+      tasks:
+        - task_id: "TASK-013-05"
+          description: "Add effect size interpretation to glossary"
+          files:
+            - "src/paper_generation/educational_content.py"
+          steps:
+            - "Locate get_statistical_glossary() method"
+            - "Add new subsection: 'Effect Size Interpretation Guide'"
+            - "Create markdown table for Cohen's d ranges:"
+            - "  - |d| < 0.2: Negligible"
+            - "  - 0.2 ≤ |d| < 0.5: Small"
+            - "  - 0.5 ≤ |d| < 0.8: Medium"
+            - "  - |d| ≥ 0.8: Large"
+            - "Create markdown table for Cliff's Delta ranges:"
+            - "  - |δ| < 0.147: Negligible"
+            - "  - 0.147 ≤ |δ| < 0.33: Small"
+            - "  - 0.33 ≤ |δ| < 0.474: Medium"
+            - "  - |δ| ≥ 0.474: Large"
+            - "  - |δ| = 1.0: Complete separation"
+            - "Add context note about domain-specific interpretation"
+        
+        - task_id: "TASK-013-06"
+          description: "Add zero-variance indicators to box plots"
+          files:
+            - "src/paper_generation/statistical_visualizations.py"
+          steps:
+            - "Locate box plot creation method"
+            - "Before plotting each distribution:"
+            - "  Check if std_dev == 0 or IQR < 0.01"
+            - "  If true:"
+            - "    Draw horizontal line at mean (color='red', linewidth=3)"
+            - "    Add annotation: 'No variation'"
+            - "    Skip normal box plot for this distribution"
+            - "  Else: plot normally"
+            - "Add legend entry for 'Zero Variance' if any detected"
+        
+        - task_id: "TASK-013-07"
+          description: "Add deterministic CI indicators to forest plots"
+          files:
+            - "src/paper_generation/statistical_visualizations.py"
+          steps:
+            - "Locate forest plot creation (Cliff's Delta plot)"
+            - "When plotting each effect size point:"
+            - "  Check if abs(value) == 1.0 AND ci_lower == ci_upper"
+            - "  If true:"
+            - "    Use open marker: marker='o', facecolors='none'"
+            - "    Use red edge: edgecolors='red', linewidths=2"
+            - "    Larger size: s=150"
+            - "  Else: use normal filled marker"
+            - "Add legend entry: 'Complete Separation' if any detected"
+
+    - phase: 3
+      name: "Code Refactoring"
+      duration: "2-3 days"
+      tasks:
+        - task_id: "TASK-013-08"
+          description: "Create statistical configuration module"
+          files:
+            - "src/paper_generation/config.py"
+          steps:
+            - "Create new file if doesn't exist"
+            - "Import dataclass from dataclasses"
+            - "Define StatisticalConfig dataclass with fields:"
+            - "  - alpha: float = 0.05"
+            - "  - random_seed: int = 42"
+            - "  - bootstrap_iterations: int = 10000"
+            - "  - target_power: float = 0.80"
+            - "  - variance_threshold_sd: float = 0.01"
+            - "  - variance_threshold_iqr: float = 0.01"
+            - "  - cohens_d_small: float = 0.2"
+            - "  - cohens_d_medium: float = 0.5"
+            - "  - cohens_d_large: float = 0.8"
+            - "  - cliffs_delta_small: float = 0.147"
+            - "  - cliffs_delta_medium: float = 0.33"
+            - "  - cliffs_delta_large: float = 0.474"
+            - "  - decimal_places_effect: int = 3"
+            - "  - decimal_places_pvalue: int = 3"
+            - "  - correction_method: str = 'holm'"
+            - "Add docstring explaining each field"
+        
+        - task_id: "TASK-013-09"
+          description: "Extract variance checking method"
+          files:
+            - "src/paper_generation/statistical_analyzer.py"
+          steps:
+            - "Create new method: _check_variance_quality(vals1, vals2, metric_name, group1, group2)"
+            - "Move variance checking logic from _calculate_effect_sizes()"
+            - "Calculate: std1, std2, iqr1, iqr2"
+            - "Detect: zero_variance = (std1 < 0.01 or std2 < 0.01 or iqr1 < 0.01 or iqr2 < 0.01)"
+            - "Return dict:"
+            - "  {'zero_variance': bool, 'skip_cohens_d': bool,"
+            - "   'std1': float, 'std2': float, 'iqr1': float, 'iqr2': float,"
+            - "   'metric_name': str, 'group1': str, 'group2': str}"
+            - "Update _calculate_effect_sizes() to call this method"
+        
+        - task_id: "TASK-013-10"
+          description: "Integrate config into analyzer initialization"
+          files:
+            - "src/paper_generation/statistical_analyzer.py"
+          steps:
+            - "Import StatisticalConfig from config"
+            - "Add config parameter to __init__:"
+            - "  config: StatisticalConfig = None"
+            - "  If None: config = StatisticalConfig()"
+            - "Store as self.config"
+            - "Replace hardcoded values with self.config.field_name:"
+            - "  - 0.01 → self.config.variance_threshold_sd"
+            - "  - 10000 → self.config.bootstrap_iterations"
+            - "  - 'holm' → self.config.correction_method"
+            - "  - Effect size thresholds"
+        
+        - task_id: "TASK-013-11"
+          description: "Standardize logging levels"
+          files:
+            - "src/paper_generation/statistical_analyzer.py"
+            - "src/paper_generation/experiment_analyzer.py"
+          steps:
+            - "Review all logger calls"
+            - "Apply standard:"
+            - "  - logger.info() for milestones (Analysis started/complete)"
+            - "  - logger.warning() for data quality issues"
+            - "  - logger.debug() for detailed diagnostics"
+            - "  - logger.error() for failures"
+            - "Add format strings instead of concatenation where applicable"
+            - "Example: logger.warning('Zero variance in %s for %s', metric, framework)"
+
+validation:
+  manual_testing:
+    - test_id: "TEST-013-M01"
+      description: "Verify warning summary with real data"
+      steps:
+        - "Run analysis on experiment with zero-variance metrics"
+        - "Check CLI output shows warning summary"
+        - "Check Markdown report has ⚠️ section"
+        - "Verify warnings are categorized correctly"
+    
+    - test_id: "TEST-013-M02"
+      description: "Validate effect size interpretation table"
+      steps:
+        - "Generate statistical report"
+        - "Locate glossary section"
+        - "Verify both Cohen's d and Cliff's Delta tables present"
+        - "Check ranges and interpretations are correct"
+    
+    - test_id: "TEST-013-M03"
+      description: "Check visual indicators in plots"
+      steps:
+        - "Generate plots with zero-variance data"
+        - "Verify box plots show red horizontal line"
+        - "Verify forest plots use open markers for deterministic CIs"
+        - "Check legends include special marker explanations"
+    
+    - test_id: "TEST-013-M04"
+      description: "Validate configuration system"
+      steps:
+        - "Create custom StatisticalConfig with different thresholds"
+        - "Pass to analyzer initialization"
+        - "Verify analysis uses custom values"
+        - "Check default config works when not provided"
+    
+    - test_id: "TEST-013-M05"
+      description: "Test backward compatibility"
+      steps:
+        - "Run existing analysis scripts without changes"
+        - "Verify reports still generated correctly"
+        - "Check no breaking errors from API changes"
+
+files_to_modify:
+  - path: "src/paper_generation/models.py"
+    changes: "Add warnings field and add_warning method to StatisticalFindings"
+  
+  - path: "src/paper_generation/statistical_analyzer.py"
+    changes: "Integrate warning collection, extract variance method, add config support, standardize logging"
+  
+  - path: "src/paper_generation/experiment_analyzer.py"
+    changes: "Add CLI and Markdown warning summaries, standardize logging"
+  
+  - path: "src/paper_generation/educational_content.py"
+    changes: "Add effect size interpretation table to glossary"
+  
+  - path: "src/paper_generation/statistical_visualizations.py"
+    changes: "Add zero-variance indicators to box plots and forest plots"
+  
+  - path: "src/paper_generation/config.py"
+    changes: "Create new file with StatisticalConfig dataclass"
+
+success_criteria:
+  - "Warning summary appears in CLI when warnings exist"
+  - "Warning section appears in Markdown reports when warnings exist"
+  - "Effect size interpretation table in glossary"
+  - "Visual indicators for zero-variance in plots"
+  - "Configuration system functional with defaults"
+  - "Variance checking extracted to separate method"
+  - "Logging levels consistent across modules"
+  - "Manual testing passes all 5 test scenarios"
+  - "No breaking changes to existing functionality"
+
+notes: |
+  Implementation Focus:
+  - Core functionality only (no automated tests)
+  - Manual testing validation
+  - Minimal documentation (inline comments)
+  - Backward compatible with existing code
+  
+  Excluded from this spec:
+  - Part 4.1: A priori power calculator
+  - Automated test suite creation
+  - Detailed documentation updates
+  - Edge case test implementations
+  
+  Testing Approach:
+  - Manual validation with real experiment data
+  - Visual inspection of plots and reports
+  - Configuration testing with custom values
+  - Backward compatibility verification
+
+timeline:
+  start_date: "2025-10-30"
+  estimated_completion: "2025-11-06"
+  phases:
+    - phase: 1
+      days: "1-2"
+    - phase: 2
+      days: "2"
+    - phase: 3
+      days: "2-3"
+
+metadata:
+  created_date: "2025-10-30"
+  author: "GitHub Copilot"
+  based_on: "STATISTICAL_IMPROVEMENTS_PLAN.md"
+  excluded_items:
+    - "A priori power analysis tool"
+    - "Automated test suite"
+    - "Comprehensive documentation"
+  focus: "Core implementation with manual validation"

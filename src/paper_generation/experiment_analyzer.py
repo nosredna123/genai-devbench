@@ -119,6 +119,15 @@ class ExperimentAnalyzer:
         # Perform statistical analysis
         statistical_findings = statistical_analyzer.analyze_experiment(frameworks_data)
         
+        # Feature 013: Display warning summary if warnings exist
+        if statistical_findings.warnings:
+            logger.warning("=" * 60)
+            logger.warning("ANALYSIS WARNINGS SUMMARY (%d issues)", len(statistical_findings.warnings))
+            logger.warning("=" * 60)
+            for i, warning in enumerate(statistical_findings.warnings, 1):
+                logger.warning("%d. %s", i, warning)
+            logger.warning("=" * 60)
+        
         # Generate visualizations
         visualizations = viz_generator.generate_all_visualizations(statistical_findings)
         
@@ -893,6 +902,17 @@ class ExperimentAnalyzer:
         for key, value in findings.metadata.items():
             sections.append(f"| {key} | {value} |\n")
         sections.append("\n")
+        
+        # Feature 013: Notes and Warnings section (between methodology and glossary)
+        if findings.warnings:
+            sections.append("## ⚠️ Notes and Warnings\n\n")
+            sections.append(
+                "The following conditions were detected during analysis "
+                "and may affect interpretation:\n\n"
+            )
+            for i, warning in enumerate(findings.warnings, 1):
+                sections.append(f"{i}. {warning}\n")
+            sections.append("\n")
         
         # 6. Glossary (renumbered from 7 after removing Power Analysis)
         sections.append("## 6. Glossary\n\n")
