@@ -71,6 +71,30 @@ class ExperimentAnalyzer:
             logger.warning(f"Failed to load config: {e}, using defaults")
             return {}
     
+    def _format_metric_value(self, value: float, metric_name: str) -> str:
+        """
+        Format metric value with appropriate precision.
+        
+        Feature 013: Adaptive precision to avoid hiding variance in small-value metrics.
+        
+        Args:
+            value: Numeric value to format
+            metric_name: Name of the metric (used to determine precision)
+            
+        Returns:
+            Formatted string with appropriate decimal places
+        """
+        # Cost metrics need higher precision to show variance
+        if 'cost' in metric_name.lower() or 'price' in metric_name.lower():
+            return f"{value:.5f}"
+        
+        # For very small values (< 0.01), use scientific notation or higher precision
+        if abs(value) < 0.01 and value != 0:
+            return f"{value:.5f}"
+        
+        # Default: 2 decimal places for most metrics
+        return f"{value:.2f}"
+    
     def analyze(self) -> Dict[str, Any]:
         """
         Perform complete analysis of experiment runs.
@@ -118,6 +142,15 @@ class ExperimentAnalyzer:
         
         # Perform statistical analysis
         statistical_findings = statistical_analyzer.analyze_experiment(frameworks_data)
+        
+        # Feature 013: Display warning summary if warnings exist
+        if statistical_findings.warnings:
+            logger.warning("=" * 60)
+            logger.warning("ANALYSIS WARNINGS SUMMARY (%d issues)", len(statistical_findings.warnings))
+            logger.warning("=" * 60)
+            for i, warning in enumerate(statistical_findings.warnings, 1):
+                logger.warning("%d. %s", i, warning)
+            logger.warning("=" * 60)
         
         # Generate visualizations
         visualizations = viz_generator.generate_all_visualizations(statistical_findings)
@@ -708,21 +741,24 @@ class ExperimentAnalyzer:
             for dist in metric_dists:
                 iqr = dist.q3 - dist.q1
                 
+                # Feature 013: Use adaptive precision for cost metrics
+                fmt = lambda v: self._format_metric_value(v, metric)
+                
                 # T054-T055: Bold primary summary based on skewness (FR-032)
                 if dist.primary_summary == "median":
                     # Bold median and IQR for skewed distributions
                     sections.append(
-                        f"| {dist.group_name} | {dist.n_samples} | {dist.mean:.2f} | **{dist.median:.2f}** | "
-                        f"{dist.std_dev:.2f} | {dist.min_value:.2f} | {dist.max_value:.2f} | {dist.q1:.2f} | "
-                        f"{dist.q3:.2f} | **{iqr:.2f}** | {dist.skewness:.2f} | {dist.kurtosis:.2f} | "
+                        f"| {dist.group_name} | {dist.n_samples} | {fmt(dist.mean)} | **{fmt(dist.median)}** | "
+                        f"{fmt(dist.std_dev)} | {fmt(dist.min_value)} | {fmt(dist.max_value)} | {fmt(dist.q1)} | "
+                        f"{fmt(dist.q3)} | **{fmt(iqr)}** | {dist.skewness:.2f} | {dist.kurtosis:.2f} | "
                         f"{dist.n_outliers} |\n"
                     )
                 else:
                     # Bold mean and SD for normally distributed data
                     sections.append(
-                        f"| {dist.group_name} | {dist.n_samples} | **{dist.mean:.2f}** | {dist.median:.2f} | "
-                        f"**{dist.std_dev:.2f}** | {dist.min_value:.2f} | {dist.max_value:.2f} | {dist.q1:.2f} | "
-                        f"{dist.q3:.2f} | {iqr:.2f} | {dist.skewness:.2f} | {dist.kurtosis:.2f} | "
+                        f"| {dist.group_name} | {dist.n_samples} | **{fmt(dist.mean)}** | {fmt(dist.median)} | "
+                        f"**{fmt(dist.std_dev)}** | {fmt(dist.min_value)} | {fmt(dist.max_value)} | {fmt(dist.q1)} | "
+                        f"{fmt(dist.q3)} | {fmt(iqr)} | {dist.skewness:.2f} | {dist.kurtosis:.2f} | "
                         f"{dist.n_outliers} |\n"
                     )
             sections.append("\n")
@@ -893,6 +929,17 @@ class ExperimentAnalyzer:
         for key, value in findings.metadata.items():
             sections.append(f"| {key} | {value} |\n")
         sections.append("\n")
+        
+        # Feature 013: Notes and Warnings section (between methodology and glossary)
+        if findings.warnings:
+            sections.append("## ⚠️ Notes and Warnings\n\n")
+            sections.append(
+                "The following conditions were detected during analysis "
+                "and may affect interpretation:\n\n"
+            )
+            for i, warning in enumerate(findings.warnings, 1):
+                sections.append(f"{i}. {warning}\n")
+            sections.append("\n")
         
         # 6. Glossary (renumbered from 7 after removing Power Analysis)
         sections.append("## 6. Glossary\n\n")

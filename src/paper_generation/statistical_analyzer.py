@@ -25,6 +25,7 @@ from src.utils.statistical_helpers import (
     bootstrap_ci, cohens_d, cliffs_delta, interpret_effect_size, format_pvalue
 )
 from .exceptions import StatisticalAnalysisError
+from .config import StatisticalConfig
 
 logger = logging.getLogger(__name__)
 
@@ -418,6 +419,19 @@ class StatisticalFindings:
     metadata: Dict[str, Any] = field(default_factory=dict)
     methodology_text: str = ""
     
+    # Feature 013: Analysis warnings for data quality and assumption violations
+    warnings: List[str] = field(default_factory=list)
+    
+    def add_warning(self, category: str, message: str):
+        """
+        Add a categorized warning about data quality or analysis assumptions.
+        
+        Args:
+            category: Warning category (e.g., 'Zero Variance', 'Assumption Violation')
+            message: Descriptive warning message
+        """
+        self.warnings.append(f'**{category}**: {message}')
+    
     def __post_init__(self):
         """Calculate summary statistics and generate power warnings."""
         self.n_significant_tests = sum(
@@ -523,18 +537,77 @@ class StatisticalAnalyzer:
         ...         print(f"{test.metric_name}: p={test.p_value:.4f}")
     """
     
-    def __init__(self, alpha: float = 0.05, random_seed: int = 42):
+    def __init__(
+        self,
+        alpha: float = 0.05,
+        random_seed: int = 42,
+        config: Optional[StatisticalConfig] = None
+    ):
         """
         Initialize statistical analyzer.
         
         Args:
             alpha: Significance level for hypothesis tests (default: 0.05)
             random_seed: Random seed for reproducibility (default: 42)
+            config: Statistical configuration (default: StatisticalConfig())
         """
         self.alpha = alpha
         self.random_seed = random_seed
         self.rng = np.random.RandomState(random_seed)
-        logger.info(f"StatisticalAnalyzer initialized (α={alpha}, seed={random_seed})")
+        self.config = config if config is not None else StatisticalConfig()
+        logger.info(
+            f"StatisticalAnalyzer initialized (α={alpha}, seed={random_seed}, "
+            f"variance_threshold={self.config.variance_threshold})"
+        )
+    
+    def _check_variance_quality(
+        self,
+        values: np.ndarray,
+        variance_threshold: Optional[float] = None,
+        iqr_threshold: Optional[float] = None
+    ) -> bool:
+        """
+        Check if a distribution has sufficient variance for meaningful analysis.
+        
+        Feature 013: Centralized variance quality checking with adaptive thresholds.
+        
+        A distribution is considered to have zero or near-zero variance if:
+        - Standard deviation is exactly 0
+        - All values are identical
+        - Coefficient of variation (CV = std/mean) < 1% (for non-zero means)
+        - IQR/median < 1% (for non-zero medians)
+        
+        Args:
+            values: Array of numeric values
+            variance_threshold: Minimum acceptable standard deviation (DEPRECATED - kept for API compatibility)
+            iqr_threshold: Minimum acceptable IQR (DEPRECATED - kept for API compatibility)
+            
+        Returns:
+            True if distribution has sufficient variance, False otherwise
+        """
+        # Exact zero variance check
+        if np.std(values) == 0.0 or len(set(values)) == 1:
+            return False
+        
+        # Use relative variance (coefficient of variation) instead of absolute thresholds
+        # This works better for metrics with different scales (e.g., tokens vs cost)
+        std_dev = np.std(values)
+        mean_val = np.mean(values)
+        median_val = np.median(values)
+        q1 = np.percentile(values, 25)
+        q3 = np.percentile(values, 75)
+        iqr = q3 - q1
+        
+        # Check relative variance: CV < 1% suggests deterministic behavior
+        # Use median for IQR check to avoid mean=0 issues
+        relative_std = abs(std_dev / mean_val) if mean_val != 0 else float('inf')
+        relative_iqr = abs(iqr / median_val) if median_val != 0 else float('inf')
+        
+        # Consider it zero-variance if both relative measures are < 1%
+        if relative_std < 0.01 and relative_iqr < 0.01:
+            return False
+        
+        return True
     
     def analyze_experiment(
         self,
@@ -570,6 +643,20 @@ class StatisticalAnalyzer:
         
         logger.info(f"Analyzing {len(metrics_to_analyze)} metrics: {metrics_to_analyze}")
         
+        # Feature 013: Create early findings object for warning collection
+        findings_for_warnings = StatisticalFindings(
+            experiment_name=self._infer_experiment_name(frameworks_data),
+            timestamp=datetime.now().isoformat(),
+            metrics_analyzed=[],  # Will be populated later
+            distributions=[],
+            assumption_checks=[],
+            statistical_tests=[],
+            effect_sizes=[],
+            power_analyses=[],
+            visualizations=[],
+            metadata={}
+        )
+        
         # Initialize result containers
         distributions = []
         assumption_checks = []
@@ -594,12 +681,16 @@ class StatisticalAnalyzer:
                 distributions.extend(metric_distributions)
                 
                 # T007: Check normality assumptions
-                normality_checks = self._check_normality(metric_name, metric_data)
+                normality_checks = self._check_normality(
+                    metric_name, metric_data, findings=findings_for_warnings
+                )
                 assumption_checks.extend(normality_checks)
                 
                 # T008: Check variance homogeneity (if multiple groups)
                 if len(metric_data) >= 2:
-                    variance_check = self._check_variance_homogeneity(metric_name, metric_data)
+                    variance_check = self._check_variance_homogeneity(
+                        metric_name, metric_data, findings=findings_for_warnings
+                    )
                     if variance_check:
                         assumption_checks.append(variance_check)
                 
@@ -639,7 +730,8 @@ class StatisticalAnalyzer:
                     
                     # T010, T036: Calculate effect sizes with test alignment
                     effects = self._calculate_effect_sizes(
-                        metric_name, metric_data, metric_distributions, test_results
+                        metric_name, metric_data, metric_distributions, test_results,
+                        findings=findings_for_warnings
                     )
                     effect_sizes.extend(effects)
                     
@@ -680,7 +772,8 @@ class StatisticalAnalyzer:
             effect_sizes=effect_sizes,
             power_analyses=power_analyses,
             visualizations=[],  # Will be populated by visualization generator
-            metadata=metadata
+            metadata=metadata,
+            warnings=findings_for_warnings.warnings  # Feature 013: Copy collected warnings
         )
         
         # T032: Generate methodology text
@@ -776,8 +869,8 @@ class StatisticalAnalyzer:
                 ci_lower = median
                 ci_upper = median
             
-            # Check for zero variance (T012)
-            has_zero_variance = (std_dev == 0.0) or (len(set(values)) == 1)
+            # Feature 013: Use centralized variance quality check
+            has_zero_variance = not self._check_variance_quality(values_array)
             
             # Calculate skewness and kurtosis (T028)
             if len(values) >= 3 and not has_zero_variance:
@@ -834,12 +927,16 @@ class StatisticalAnalyzer:
     def _check_normality(
         self,
         metric_name: str,
-        metric_data: Dict[str, List[float]]
+        metric_data: Dict[str, List[float]],
+        findings: 'StatisticalFindings' = None
     ) -> List[AssumptionCheck]:
         """
         Perform Shapiro-Wilk normality tests for each group.
         
         Updates distribution.is_normal based on test results.
+        
+        Args:
+            findings: StatisticalFindings object for warning collection (Feature 013)
         """
         normality_checks = []
         
@@ -890,6 +987,12 @@ class StatisticalAnalyzer:
                     "Kruskal-Wallis for 3+ groups) or applying data transformations "
                     "(log, square root, Box-Cox) to achieve normality."
                 )
+                # Feature 013: Add warning for assumption violation
+                if findings:
+                    findings.add_warning(
+                        'Assumption Violation',
+                        f"Normality assumption violated for metric '{metric_name}' in group '{group_name}' (p={p_value:.4f}); non-parametric test recommended"
+                    )
             
             check = AssumptionCheck(
                 test_type=TestType.SHAPIRO_WILK,
@@ -910,12 +1013,16 @@ class StatisticalAnalyzer:
     def _check_variance_homogeneity(
         self,
         metric_name: str,
-        metric_data: Dict[str, List[float]]
+        metric_data: Dict[str, List[float]],
+        findings: 'StatisticalFindings' = None
     ) -> Optional[AssumptionCheck]:
         """
         Perform Levene's test for homogeneity of variance across groups.
         
         Required for parametric tests like ANOVA and t-test.
+        
+        Args:
+            findings: StatisticalFindings object for warning collection (Feature 013)
         """
         groups = list(metric_data.keys())
         values_list = list(metric_data.values())
@@ -963,6 +1070,12 @@ class StatisticalAnalyzer:
                 recommendation = (
                     "Consider using Welch's ANOVA (does not assume equal variances) "
                     "or non-parametric Kruskal-Wallis test."
+                )
+            # Feature 013: Add warning for assumption violation
+            if findings:
+                findings.add_warning(
+                    'Assumption Violation',
+                    f"Variance homogeneity assumption violated for metric '{metric_name}' (Levene's test p={p_value:.4f}); robust test recommended"
                 )
         
         return AssumptionCheck(
@@ -1751,7 +1864,8 @@ class StatisticalAnalyzer:
         metric_name: str,
         metric_data: Dict[str, List[float]],
         distributions: List[MetricDistribution],
-        test_results: List[StatisticalTest] = None
+        test_results: List[StatisticalTest] = None,
+        findings: 'StatisticalFindings' = None
     ) -> List[EffectSize]:
         """
         Calculate effect sizes for all pairwise comparisons.
@@ -1765,6 +1879,7 @@ class StatisticalAnalyzer:
             metric_data: Dict mapping group names to value lists
             distributions: MetricDistribution objects for normality checks
             test_results: Statistical test results for this metric (T036: NEW)
+            findings: StatisticalFindings object for warning collection (Feature 013)
             
         Returns:
             List of EffectSize objects with proper measure-test alignment
@@ -1800,14 +1915,10 @@ class StatisticalAnalyzer:
                 # T036: Use test type to select effect size measure (FR-013, FR-014)
                 comparison_key = tuple(sorted([group1, group2]))
                 
-                # Check for zero-variance or near-zero variance (data quality issue)
-                std1, std2 = np.std(vals1), np.std(vals2)
-                iqr1 = np.percentile(vals1, 75) - np.percentile(vals1, 25)
-                iqr2 = np.percentile(vals2, 75) - np.percentile(vals2, 25)
-                
-                # Detect zero-inflation: either SD < 0.01 or IQR = 0
-                zero_variance_detected = (std1 < 0.01 or std2 < 0.01 or 
-                                         iqr1 < 0.01 or iqr2 < 0.01)
+                # Feature 013: Use centralized variance quality check
+                has_variance1 = self._check_variance_quality(vals1)
+                has_variance2 = self._check_variance_quality(vals2)
+                zero_variance_detected = not (has_variance1 and has_variance2)
                 
                 if comparison_key in test_type_map:
                     # T036: Get measure based on test type
@@ -1826,11 +1937,16 @@ class StatisticalAnalyzer:
                     # Skip Cohen's d if zero variance (would produce inflated/invalid d)
                     if zero_variance_detected:
                         # Skip this comparison entirely - will not be added to results
-                        logger.warning(
+                        warning_msg = (
                             f"Skipping Cohen's d for {group1} vs {group2} on {metric_name}: "
-                            f"zero/near-zero variance detected (SD: {std1:.4f}, {std2:.4f}, "
-                            f"IQR: {iqr1:.4f}, {iqr2:.4f}). Effect size would be invalid."
+                            f"zero/near-zero variance detected. Effect size would be invalid."
                         )
+                        logger.warning(warning_msg)
+                        if findings:
+                            findings.add_warning(
+                                'Zero Variance',
+                                f"Framework '{group1}' or '{group2}' showed zero variance for metric '{metric_name}'; Cohen's d calculation skipped"
+                            )
                         continue
                     
                     # Use Cohen's d
@@ -1872,13 +1988,18 @@ class StatisticalAnalyzer:
                     
                     # Warn if zero variance produces deterministic CI
                     if zero_variance_detected and abs(ci_upper - ci_lower) < 0.01:
-                        logger.warning(
+                        warning_msg = (
                             f"Cliff's Delta CI for {group1} vs {group2} on {metric_name} "
                             f"is deterministic [{ci_lower:.3f}, {ci_upper:.3f}] due to "
-                            f"zero/near-zero variance (SD: {std1:.4f}, {std2:.4f}, "
-                            f"IQR: {iqr1:.4f}, {iqr2:.4f}). This represents categorical "
+                            f"zero/near-zero variance. This represents categorical "
                             f"separation rather than continuous effect size."
                         )
+                        logger.warning(warning_msg)
+                        if findings:
+                            findings.add_warning(
+                                'Deterministic CI',
+                                f"Cliff's Delta for metric '{metric_name}' comparison '{group1} vs {group2}' is {effect_value:.3f} with CI [{ci_lower:.3f}, {ci_upper:.3f}], indicating complete separation between groups"
+                            )
                     
                     magnitude = interpret_effect_size(effect_value, measure_str)
                     
@@ -1972,7 +2093,10 @@ class StatisticalAnalyzer:
             
             # Skip if zero variance
             if dist_map[group1].has_zero_variance or dist_map[group2].has_zero_variance:
-                logger.debug(f"Skipping power analysis: zero variance")
+                logger.debug(
+                    f"Skipping power analysis for {metric_name}: "
+                    f"zero variance in {group1} or {group2}"
+                )
                 return power_results
             
             # Calculate effect size (use Cohen's d for power)
@@ -2310,9 +2434,11 @@ class StatisticalAnalyzer:
             # Document zero-variance detection (FR-034: Data quality checks)
             sections.append(
                 "Effect size calculations included data quality checks: "
-                "groups with zero or near-zero variance (standard deviation < 0.01 or "
-                "interquartile range < 0.01) were flagged, as standardized effect sizes "
+                "groups with near-zero variance (coefficient of variation < 1% AND "
+                "relative IQR < 1%) were flagged, as standardized effect sizes "
                 "(e.g., Cohen's d) are inappropriate for such data. "
+                "This relative approach works correctly across metrics of different scales "
+                "(e.g., tokens vs. cost). "
                 "In these cases, Cohen's d was skipped, and Cliff's Delta confidence intervals "
                 "flagged as 'deterministic' to indicate categorical separation rather than "
                 "continuous effect magnitude. "
