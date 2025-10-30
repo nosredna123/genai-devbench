@@ -225,9 +225,19 @@ class StatisticalVisualizationGenerator:
         
         # Feature 013: Add visual indicators for zero-variance distributions
         if zero_variance_detected:
-            for idx in zero_variance_detected:
+            # Build complete label list for x-axis
+            all_positions = []
+            all_labels = []
+            
+            # Add normal data positions and labels
+            if normal_data:
+                all_positions.extend(range(1, len(normal_data) + 1))
+                all_labels.extend(normal_labels)
+            
+            # Add zero-variance indicators
+            for i, idx in enumerate(zero_variance_detected):
                 dist = distributions[idx]
-                x_pos = len(normal_data) + zero_variance_detected.index(idx) + 1
+                x_pos = len(normal_data) + i + 1
                 
                 # Draw horizontal line at mean
                 ax.hlines(
@@ -236,7 +246,7 @@ class StatisticalVisualizationGenerator:
                     xmax=x_pos + 0.3,
                     color='red',
                     linewidth=3,
-                    label='Zero Variance' if zero_variance_detected.index(idx) == 0 else ""
+                    label='Zero Variance' if i == 0 else ""
                 )
                 
                 # Add annotation
@@ -250,17 +260,13 @@ class StatisticalVisualizationGenerator:
                     va='center'
                 )
                 
-                # Add label on x-axis
-                if normal_data:
-                    current_labels = ax.get_xticklabels()
-                    new_labels = [label.get_text() for label in current_labels] + [labels[idx]]
-                    new_positions = list(range(1, len(normal_data) + 1)) + [x_pos]
-                    ax.set_xticks(new_positions)
-                    ax.set_xticklabels(new_labels)
-                else:
-                    # All distributions have zero variance
-                    ax.set_xticks([x_pos])
-                    ax.set_xticklabels([labels[idx]])
+                # Add to label lists
+                all_positions.append(x_pos)
+                all_labels.append(labels[idx])
+            
+            # Set all labels at once (avoids mismatch)
+            ax.set_xticks(all_positions)
+            ax.set_xticklabels(all_labels)
         
         # Labels and title
         ax.set_ylabel(self._format_metric_label(metric_name))
