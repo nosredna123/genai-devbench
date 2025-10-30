@@ -15,6 +15,7 @@ import yaml
 
 from .exceptions import ExperimentDataError
 from src.utils.cost_calculator import CostCalculator
+from src.utils.statistical_helpers import format_pvalue
 from .statistical_analyzer import StatisticalAnalyzer
 from .statistical_visualizations import StatisticalVisualizationGenerator
 from .educational_content import EducationalContentGenerator
@@ -457,7 +458,7 @@ class ExperimentAnalyzer:
         for test in findings.statistical_tests:
             sections.append(f"### {test.metric_name}\n\n")
             sections.append(f"**Test Used**: {test.test_type.value}\n\n")
-            sections.append(f"**Result**: {'✅ Significant' if test.is_significant else '❌ Not Significant'} (p={test.p_value:.4f})\n\n")
+            sections.append(f"**Result**: {'✅ Significant' if test.is_significant else '❌ Not Significant'} ({format_pvalue(test.p_value)})\n\n")
             sections.append(f"{test.interpretation}\n\n")
             
             # Add corresponding effect sizes
@@ -510,6 +511,145 @@ class ExperimentAnalyzer:
             f.write(''.join(sections))
         
         logger.info("Summary report written to: %s", output_file)
+    
+    # T031-T033: Power analysis section generation
+    def _generate_power_analysis_section(
+        self,
+        findings,  # StatisticalFindings
+        educational_content  # EducationalContentGenerator
+    ) -> str:
+        """
+        Generate Power Analysis section with tables and recommendations.
+        
+        Creates:
+        - Introduction to power analysis
+        - Power analysis results table (T032)
+        - Sample size recommendations table (T033)
+        - Educational content
+        
+        Args:
+            findings: StatisticalFindings with statistical_tests
+            educational_content: EducationalContentGenerator for explanations
+        
+        Returns:
+            Formatted markdown string for Section 5
+        """
+        sections = []
+        
+        # Introduction
+        sections.append("Statistical power is the probability of detecting a true effect when it exists. ")
+        sections.append("By convention, power ≥ 0.80 (80%) is considered adequate, meaning there is at least ")
+        sections.append("an 80% chance of detecting a real difference if one exists.\n\n")
+        
+        # Check if we have tests with power information
+        tests_with_power = [t for t in findings.statistical_tests 
+                           if hasattr(t, 'achieved_power') and t.achieved_power is not None]
+        
+        if not tests_with_power:
+            sections.append("*No power analysis available for this experiment.*\n\n")
+            return ''.join(sections)
+        
+        # T032: Power Analysis Results Table
+        sections.append("### Power Analysis Results\n\n")
+        sections.append("This table shows the achieved statistical power for each comparison, ")
+        sections.append("indicating the reliability of the test results.\n\n")
+        
+        sections.append("| Comparison | Metric | Test Type | Effect Size | Achieved Power | Adequacy | Status |\n")
+        sections.append("|------------|--------|-----------|-------------|----------------|----------|--------|\n")
+        
+        inadequate_tests = []
+        
+        for test in tests_with_power:
+            # Build comparison string
+            if len(test.groups) == 2:
+                comparison = f"{test.groups[0]} vs {test.groups[1]}"
+            else:
+                comparison = f"{len(test.groups)} groups"
+            
+            # Format test type
+            test_type_display = test.test_type.value.replace('_', ' ').title()
+            
+            # Get effect size from statistical tests (use statistic as proxy if needed)
+            effect_size_str = "N/A"
+            if hasattr(test, 'effect_size'):
+                effect_size_str = f"{test.effect_size:.3f}"
+            
+            # Format power
+            if test.achieved_power is not None:
+                power_str = f"{test.achieved_power:.3f}"
+                
+                # Determine adequacy
+                if test.achieved_power >= 0.80:
+                    adequacy = "Adequate"
+                    status = "✅"
+                elif test.achieved_power >= 0.50:
+                    adequacy = "Marginal"
+                    status = "⚠️"
+                    inadequate_tests.append(test)
+                else:
+                    adequacy = "Inadequate"
+                    status = "❌"
+                    inadequate_tests.append(test)
+            else:
+                power_str = "N/A"
+                adequacy = "Indeterminate"
+                status = "❓"
+            
+            sections.append(
+                f"| {comparison} | {test.metric_name} | {test_type_display} | "
+                f"{effect_size_str} | {power_str} | {adequacy} | {status} |\n"
+            )
+        
+        sections.append("\n")
+        
+        # T033: Sample Size Recommendations
+        if inadequate_tests:
+            sections.append("### Sample Size Recommendations\n\n")
+            sections.append("The following comparisons have inadequate or marginal power (< 0.80). ")
+            sections.append("To achieve 80% power, consider increasing sample sizes as recommended:\n\n")
+            
+            sections.append("| Comparison | Metric | Current n | Achieved Power | Recommended n | Additional Runs Needed |\n")
+            sections.append("|------------|--------|-----------|----------------|---------------|------------------------|\n")
+            
+            for test in inadequate_tests:
+                if not hasattr(test, 'recommended_n') or test.recommended_n is None:
+                    continue
+                
+                # Build comparison string
+                if len(test.groups) == 2:
+                    comparison = f"{test.groups[0]} vs {test.groups[1]}"
+                    # Get current sample sizes
+                    current_n = len(test.group_data[test.groups[0]])
+                else:
+                    comparison = f"{len(test.groups)} groups"
+                    # Average sample size
+                    current_n = int(sum(len(vals) for vals in test.group_data.values()) / len(test.groups))
+                
+                power_str = f"{test.achieved_power:.3f}" if test.achieved_power else "N/A"
+                additional = max(0, test.recommended_n - current_n)
+                
+                sections.append(
+                    f"| {comparison} | {test.metric_name} | {current_n} | "
+                    f"{power_str} | {test.recommended_n} | {additional} |\n"
+                )
+            
+            sections.append("\n")
+            sections.append("**Note**: Recommended sample sizes assume equal group sizes and are calculated ")
+            sections.append("to achieve 80% power at α = 0.05. Actual requirements may vary based on ")
+            sections.append("effect size stability and data characteristics.\n\n")
+        else:
+            sections.append("### ✅ All Comparisons Adequately Powered\n\n")
+            sections.append("All statistical comparisons have achieved power ≥ 0.80, indicating ")
+            sections.append("sufficient sample size to reliably detect true effects.\n\n")
+        
+        # Educational content
+        if findings.power_analyses and len(findings.power_analyses) > 0:
+            sections.append("### Understanding Power Analysis\n\n")
+            # Use the first power analysis for educational explanation
+            sections.append(educational_content.explain_power_analysis(findings.power_analyses[0]))
+            sections.append("\n")
+        
+        return ''.join(sections)
     
     def _generate_statistical_report_full(
         self,
@@ -566,13 +706,51 @@ class ExperimentAnalyzer:
             
             for dist in metric_dists:
                 iqr = dist.q3 - dist.q1
-                sections.append(
-                    f"| {dist.group_name} | {dist.n_samples} | {dist.mean:.2f} | {dist.median:.2f} | "
-                    f"{dist.std_dev:.2f} | {dist.min_value:.2f} | {dist.max_value:.2f} | {dist.q1:.2f} | "
-                    f"{dist.q3:.2f} | {iqr:.2f} | {dist.skewness:.2f} | {dist.kurtosis:.2f} | "
-                    f"{dist.n_outliers} |\n"
-                )
+                
+                # T054-T055: Bold primary summary based on skewness (FR-032)
+                if dist.primary_summary == "median":
+                    # Bold median and IQR for skewed distributions
+                    sections.append(
+                        f"| {dist.group_name} | {dist.n_samples} | {dist.mean:.2f} | **{dist.median:.2f}** | "
+                        f"{dist.std_dev:.2f} | {dist.min_value:.2f} | {dist.max_value:.2f} | {dist.q1:.2f} | "
+                        f"{dist.q3:.2f} | **{iqr:.2f}** | {dist.skewness:.2f} | {dist.kurtosis:.2f} | "
+                        f"{dist.n_outliers} |\n"
+                    )
+                else:
+                    # Bold mean and SD for normally distributed data
+                    sections.append(
+                        f"| {dist.group_name} | {dist.n_samples} | **{dist.mean:.2f}** | {dist.median:.2f} | "
+                        f"**{dist.std_dev:.2f}** | {dist.min_value:.2f} | {dist.max_value:.2f} | {dist.q1:.2f} | "
+                        f"{dist.q3:.2f} | {iqr:.2f} | {dist.skewness:.2f} | {dist.kurtosis:.2f} | "
+                        f"{dist.n_outliers} |\n"
+                    )
             sections.append("\n")
+            
+            # T058: Add skewness warning for severely skewed distributions (FR-034)
+            severe_skew_dists = [d for d in metric_dists if d.skewness_flag == "severe"]
+            if severe_skew_dists:
+                sections.append("**⚠️ Note on Skewness**: ")
+                sections.append(f"This metric shows severe skewness (|skewness| > 2.0) for some frameworks. ")
+                sections.append("**Median and IQR are emphasized** (shown in bold) as they are more robust ")
+                sections.append("to outliers and extreme values than mean and standard deviation. ")
+                sections.append("The median represents the center of the distribution, while IQR captures ")
+                sections.append("the spread of the middle 50% of values.\n\n")
+            
+            # T056-T057: Add interpretation text mentioning appropriate summary first (FR-033)
+            for dist in metric_dists:
+                if dist.primary_summary == "median":
+                    # Mention median first for skewed distributions
+                    sections.append(f"**{dist.group_name}**: ")
+                    sections.append(f"The median value is {dist.median:.2f} with an IQR of {dist.q3 - dist.q1:.2f}, ")
+                    sections.append(f"indicating typical performance and variability. ")
+                    sections.append(f"(Mean: {dist.mean:.2f}, SD: {dist.std_dev:.2f}). ")
+                    sections.append(f"*{dist.summary_explanation}*\n\n")
+                else:
+                    # Mention mean first for normally distributed data
+                    sections.append(f"**{dist.group_name}**: ")
+                    sections.append(f"The mean value is {dist.mean:.2f} (SD: {dist.std_dev:.2f}), ")
+                    sections.append(f"with a median of {dist.median:.2f} and IQR of {dist.q3 - dist.q1:.2f}. ")
+                    sections.append(f"*{dist.summary_explanation}*\n\n")
         
         # 2. Normality Assessment
         sections.append("## 2. Normality Assessment\n\n")
@@ -589,7 +767,7 @@ class ExperimentAnalyzer:
                 result = "✅ Normal" if check.passes else "❌ Non-normal"
                 sections.append(
                     f"| {check.metric_name} | {', '.join(check.groups_tested)} | "
-                    f"{check.statistic:.4f} | {check.p_value:.4f} | {result} | "
+                    f"{check.statistic:.4f} | {format_pvalue(check.p_value)} | {result} | "
                     f"{check.interpretation} |\n"
                 )
             sections.append("\n")
@@ -618,7 +796,7 @@ class ExperimentAnalyzer:
                 recommendation = check.recommendation if check.recommendation else "N/A"
                 sections.append(
                     f"| {check.metric_name} | {', '.join(check.groups_tested)} | "
-                    f"{check.statistic:.4f} | {check.p_value:.4f} | {result} | "
+                    f"{check.statistic:.4f} | {format_pvalue(check.p_value)} | {result} | "
                     f"{recommendation} |\n"
                 )
             sections.append("\n")
@@ -626,8 +804,25 @@ class ExperimentAnalyzer:
         # 4. Statistical Comparisons
         sections.append("## 4. Statistical Comparisons\n\n")
         
+        # T047: Check if multiple comparison correction was applied (FR-024)
+        correction_applied = any(
+            hasattr(test, 'correction_method') and test.correction_method != "none" 
+            for test in findings.statistical_tests
+        )
+        
+        if correction_applied:
+            sections.append("**Note**: Multiple comparison correction applied. ")
+            sections.append("Both raw and adjusted p-values are reported below.\n\n")
+        
         for test in findings.statistical_tests:
             sections.append(f"### {test.metric_name}\n\n")
+            
+            # T047: Display both raw and adjusted p-values when correction applied (FR-023, FR-024)
+            if hasattr(test, 'pvalue_raw') and hasattr(test, 'pvalue_adjusted'):
+                if test.correction_method != "none":
+                    sections.append(f"**Raw p-value**: {format_pvalue(test.pvalue_raw)}\n\n")
+                    sections.append(f"**Adjusted p-value**: {format_pvalue(test.pvalue_adjusted)} ({test.correction_method})\n\n")
+                    sections.append(f"**Significance**: Based on adjusted p-value\n\n")
             
             # Test explanation
             sections.append(educational_content.explain_statistical_test(test))
@@ -649,13 +844,10 @@ class ExperimentAnalyzer:
                 rel_path = Path(viz.file_path).relative_to(self.output_dir)
                 sections.append(f"![{viz.caption}]({rel_path})\n\n")
         
-        # 5. Power Analysis
-        if findings.power_analyses:
-            sections.append("## 5. Power Analysis\n\n")
-            
-            for power in findings.power_analyses:
-                sections.append(educational_content.explain_power_analysis(power))
-                sections.append("\n")
+        # 5. Power Analysis (T031-T033)
+        sections.append("## 5. Power Analysis\n\n")
+        sections.append(self._generate_power_analysis_section(findings, educational_content))
+        sections.append("\n")
         
         # 6. Statistical Methodology
         sections.append("## 6. Statistical Methodology\n\n")

@@ -8,6 +8,7 @@ Target reading level: 8th grade (accessible to researchers without statistics ba
 """
 
 from typing import Dict, Any
+from src.utils.statistical_helpers import format_pvalue
 from .statistical_analyzer import (
     StatisticalTest, EffectSize, PowerAnalysis, AssumptionCheck,
     StatisticalFindings, TestType, EffectSizeMeasure
@@ -36,8 +37,8 @@ EXPLANATION_TEMPLATES = {
         "what": "The t-test compares the average values of two groups",
         "why": "It tells us if the difference between groups is real or just random chance",
         "how_to_interpret": {
-            "significant": "The groups are genuinely different (not just random variation)",
-            "not_significant": "Any difference we see could easily be due to chance"
+            "significant": "The groups differ - the observed difference is unlikely to be due to chance alone",
+            "not_significant": "Insufficient evidence to conclude the groups differ - any observed difference could be due to chance"
         },
         "assumptions": "Requires normally distributed data with similar variances in both groups"
     },
@@ -45,17 +46,17 @@ EXPLANATION_TEMPLATES = {
         "what": "The Mann-Whitney U test compares two groups without assuming a normal distribution",
         "why": "It's a robust alternative to the t-test when data is skewed or has outliers",
         "how_to_interpret": {
-            "significant": "One group tends to have systematically higher/lower values than the other",
-            "not_significant": "The groups overlap substantially - no clear systematic difference"
+            "significant": "One group shows systematically higher/lower values than the other",
+            "not_significant": "The groups show similar distributions - no clear systematic difference"
         },
         "assumptions": "Makes fewer assumptions than t-test - works with any distribution shape"
     },
     "anova": {
         "what": "ANOVA (Analysis of Variance) compares averages across three or more groups",
-        "why": "It tells us if at least one group is different from the others",
+        "why": "It tells us if at least one group differs from the others",
         "how_to_interpret": {
-            "significant": "At least one group differs significantly from the others",
-            "not_significant": "All groups are statistically similar"
+            "significant": "At least one group differs from the others",
+            "not_significant": "Insufficient evidence to conclude differences exist among groups"
         },
         "assumptions": "Requires normally distributed data with similar variances across all groups"
     },
@@ -63,8 +64,8 @@ EXPLANATION_TEMPLATES = {
         "what": "The Kruskal-Wallis test compares three or more groups without assuming normality",
         "why": "It's a robust alternative to ANOVA when data is skewed or has outliers",
         "how_to_interpret": {
-            "significant": "At least one group systematically differs from the others",
-            "not_significant": "All groups have similar distributions"
+            "significant": "At least one group shows a different distribution pattern from the others",
+            "not_significant": "All groups show similar distribution patterns"
         },
         "assumptions": "Makes fewer assumptions than ANOVA - works with any distribution shape"
     },
@@ -72,10 +73,10 @@ EXPLANATION_TEMPLATES = {
         "what": "Cohen's d measures how far apart two group averages are, in standard deviation units",
         "why": "Statistical significance (p-value) doesn't tell you if the difference matters practically. Effect size does.",
         "interpretation_guide": {
-            "negligible": "< 0.2: Tiny difference, probably not practically important",
-            "small": "0.2-0.5: Small but potentially meaningful difference",
-            "medium": "0.5-0.8: Moderate difference, likely to be noticeable",
-            "large": "≥ 0.8: Large difference, definitely important in practice"
+            "negligible": "< 0.2: Minimal difference, may not be practically meaningful",
+            "small": "0.2-0.5: Small but potentially noticeable difference",
+            "medium": "0.5-0.8: Moderate difference, likely to be observable",
+            "large": "≥ 0.8: Substantial difference, clearly observable in practice"
         },
         "analogy": "Like measuring height difference between adults and teenagers in 'standard person heights'"
     },
@@ -99,6 +100,23 @@ EXPLANATION_TEMPLATES = {
             "inadequate": "< 70%: High risk of missing real differences (Type II error)"
         },
         "recommendation": "Aim for 80% power. If you have low power, collect more data."
+    },
+    "skewness": {
+        "what": "Skewness measures how lopsided a distribution is - whether values pile up on one side",
+        "why": "When data is heavily skewed, the mean can be misleading because it's pulled by extreme values",
+        "interpretation_guide": {
+            "normal": "|skewness| < 0.5: Distribution is fairly symmetric - mean and median are similar",
+            "moderate": "0.5 ≤ |skewness| < 1.0: Noticeable asymmetry - median starts to be more reliable", 
+            "high": "1.0 ≤ |skewness| < 2.0: Heavily skewed - median strongly preferred over mean",
+            "severe": "|skewness| ≥ 2.0: Extremely skewed - use median and IQR, not mean and SD"
+        },
+        "median_vs_mean": {
+            "when_mean": "Use mean ± SD when distribution is roughly symmetric (|skewness| < 0.5)",
+            "when_median": "Use median and IQR when distribution is skewed (|skewness| ≥ 0.5)",
+            "why_median_better": "The median isn't affected by extreme values, so it better represents the 'typical' value in skewed data",
+            "why_iqr_better": "IQR (Interquartile Range) shows the spread of the middle 50% of data, ignoring outliers"
+        },
+        "analogy": "In a neighborhood with 9 regular houses ($200k) and 1 mansion ($10M), the mean is $1.2M (misleading), but the median is $200k (typical)"
     }
 }
 
@@ -187,7 +205,7 @@ class EducationalContentGenerator:
         explanation.append(f"**📊 What did we find?**\n")
         explanation.append(f"- Groups compared: {', '.join(test.groups)}\n")
         explanation.append(f"- Test statistic: {test.statistic:.4f}\n")
-        explanation.append(f"- p-value: {test.p_value:.4f}\n")
+        explanation.append(f"- {format_pvalue(test.p_value)}\n")
         explanation.append(f"- Result: {'Significant difference detected' if test.is_significant else 'No significant difference'}\n")
         
         # Interpretation section
@@ -208,10 +226,70 @@ class EducationalContentGenerator:
         
         return "\n".join(explanation)
     
-    # T017: Explain effect sizes
+    # T060: Get neutral interpretation language (FR-035 to FR-038)
+    def _get_interpretation_language(self, context: str = "comparison") -> Dict[str, str]:
+        """
+        Provide neutral, descriptive phrases for statistical interpretations.
+        
+        Avoids causal language (outperforms, is better, beats) in favor of
+        descriptive comparative language (differs from, shows higher values).
+        
+        Args:
+            context: The interpretation context ("comparison", "effect", "non_significant")
+        
+        Returns:
+            Dictionary of neutral phrases for different scenarios
+        
+        Example:
+            >>> lang = generator._get_interpretation_language("comparison")
+            >>> # Use lang["higher"] instead of "outperforms"
+        """
+        # FR-035 to FR-038: Neutral phrase dictionary
+        language = {
+            # Comparison phrases (FR-035, FR-036)
+            "higher": "shows higher values than",
+            "lower": "shows lower values than",
+            "differs": "differs from",
+            "exceeds": "exceeds",
+            "is_exceeded_by": "is exceeded by",
+            "systematically_higher": "has systematically higher values compared to",
+            "systematically_lower": "has systematically lower values compared to",
+            
+            # Effect size phrases (FR-036)
+            "positive_effect": "positive difference favoring",
+            "negative_effect": "negative difference favoring",
+            "magnitude": "the magnitude of difference is",
+            
+            # Cliff's Delta extreme values (FR-037)
+            "cliffs_all_higher": "all observed values in {group1} exceed those in {group2}",
+            "cliffs_all_lower": "all observed values in {group1} are less than those in {group2}",
+            "cliffs_probability": "probability that a randomly selected value from {group1} exceeds one from {group2}",
+            
+            # Non-significant with low power (FR-038)
+            "insufficient_evidence_low_power": "insufficient evidence to detect a difference (achieved power: {power:.1%})",
+            "insufficient_evidence": "insufficient evidence to conclude a difference exists",
+            "cannot_rule_out": "cannot rule out the possibility of a difference with current sample size",
+            "power_limited": "the current sample size limits our ability to detect differences (power: {power:.1%})",
+            
+            # Avoid these causal terms
+            "avoid": [
+                "outperforms", "underperforms", "is better than", "is worse than",
+                "beats", "loses to", "superior", "inferior",
+                "100% certain", "definitely proves", "demonstrates superiority",
+                "no effect exists", "proves there is no difference"
+            ]
+        }
+        
+        return language
+    
+    # T017: Explain effect sizes (T039: Enhanced with test type alignment)
     def explain_effect_size(self, effect: EffectSize) -> str:
         """
         Generate educational explanation for an effect size.
+        
+        T039: Now references test type alignment (FR-015)
+        - Mentions why Cohen's d is appropriate for parametric tests
+        - Mentions why Cliff's Delta is appropriate for non-parametric tests
         
         Args:
             effect: EffectSize object with calculated effect
@@ -236,6 +314,18 @@ class EducationalContentGenerator:
         if "what" in template:
             explanation.append(f"**What is {measure_name}?**\n")
             explanation.append(f"{template['what']}\n")
+        
+        # T039: Add test type alignment explanation (FR-015)
+        if hasattr(effect, 'test_type_alignment') and effect.test_type_alignment:
+            test_name = effect.test_type_alignment.value.replace('_', ' ').title()
+            if measure_key == "cohens_d":
+                explanation.append(f"\n*Note:* Cohen's d is used here because the analysis employed {test_name}, ")
+                explanation.append(f"a parametric test that assumes normally distributed data. Cohen's d measures ")
+                explanation.append(f"the difference in means relative to pooled standard deviation.\n")
+            elif measure_key == "cliffs_delta":
+                explanation.append(f"\n*Note:* Cliff's Delta is used here because the analysis employed {test_name}, ")
+                explanation.append(f"a non-parametric test that does not assume normal distributions. Cliff's Delta ")
+                explanation.append(f"measures ordinal dominance (how often one group exceeds the other).\n")
         
         # Why section
         if "why" in template:
@@ -265,9 +355,46 @@ class EducationalContentGenerator:
         explanation.append(f"\n**✅ What this means for your research:**\n")
         explanation.append(f"{effect.interpretation}\n")
         
-        direction = "outperforms" if effect.value > 0 else "underperforms"
-        explanation.append(f"\nBottom line: {effect.group1} {direction} {effect.group2} ")
-        explanation.append(f"with a **{effect.magnitude}** practical difference.\n")
+        # T061-T063: Use neutral language instead of causal (FR-035 to FR-037)
+        lang = self._get_interpretation_language()
+        
+        # Determine neutral comparative phrase based on effect size measure
+        if effect.measure == EffectSizeMeasure.CLIFFS_DELTA:
+            # FR-037: Special handling for Cliff's Delta extreme values
+            if abs(effect.value) >= 0.999:
+                # Extreme Cliff's Delta (±1.000) - all values in one group exceed the other
+                if effect.value > 0:
+                    direction_phrase = lang["cliffs_all_higher"].format(
+                        group1=effect.group1, group2=effect.group2
+                    )
+                else:
+                    direction_phrase = lang["cliffs_all_lower"].format(
+                        group1=effect.group1, group2=effect.group2
+                    )
+            else:
+                # Normal Cliff's Delta - use probability interpretation
+                probability = abs(effect.value) * 50 + 50
+                if effect.value > 0:
+                    direction_phrase = (
+                        f"{lang['systematically_higher'].replace('compared to', 'than')} "
+                        f"{effect.group2} ({probability:.1f}% {lang['cliffs_probability'].format(group1='', group2='').replace('probability that a randomly selected value from  exceeds one from ', '')})"
+                    )
+                else:
+                    direction_phrase = (
+                        f"{lang['systematically_lower'].replace('compared to', 'than')} "
+                        f"{effect.group2}"
+                    )
+        else:
+            # Cohen's d or other measures
+            if effect.value > 0:
+                direction_phrase = f"{lang['higher']} {effect.group2}"
+            elif effect.value < 0:
+                direction_phrase = f"{lang['lower']} {effect.group2}"
+            else:
+                direction_phrase = f"shows similar values to {effect.group2}"
+        
+        explanation.append(f"\nBottom line: {effect.group1} {direction_phrase} ")
+        explanation.append(f"with a **{effect.magnitude}** effect size.\n")
         
         return "\n".join(explanation)
     
@@ -359,6 +486,69 @@ class EducationalContentGenerator:
                 f"Consider collecting additional experimental runs to increase your "
                 f"ability to detect real effects.\n"
             )
+        
+        return "\n".join(explanation)
+    
+    # T059: Explain skewness and median vs mean choice
+    def explain_skewness_and_summary_choice(self, skewness: float, primary_summary: str) -> str:
+        """
+        Generate educational explanation for skewness and why median/mean was chosen.
+        
+        Args:
+            skewness: The skewness value
+            primary_summary: "mean" or "median" - which summary is recommended
+        
+        Returns:
+            Markdown-formatted explanation of skewness and summary statistic choice
+        
+        Example:
+            >>> explanation = generator.explain_skewness_and_summary_choice(2.3, "median")
+            >>> print(explanation)
+        """
+        template = self.templates.get("skewness", {})
+        explanation = []
+        
+        explanation.append("### 📊 Understanding Skewness and Summary Statistics\n\n")
+        
+        # What is skewness
+        if "what" in template:
+            explanation.append(f"**What is skewness?**\n")
+            explanation.append(f"{template['what']}\n\n")
+        
+        # Classify the skewness
+        abs_skew = abs(skewness)
+        if abs_skew < 0.5:
+            skew_category = "normal"
+        elif abs_skew < 1.0:
+            skew_category = "moderate"
+        elif abs_skew < 2.0:
+            skew_category = "high"
+        else:
+            skew_category = "severe"
+        
+        # Show interpretation guide
+        if "interpretation_guide" in template:
+            explanation.append(f"**Your data's skewness: {skewness:.2f}**\n\n")
+            explanation.append(f"**Interpretation scale:**\n")
+            for category, desc in template["interpretation_guide"].items():
+                marker = "👉 " if category == skew_category else "   "
+                explanation.append(f"{marker}{desc}\n")
+            explanation.append("\n")
+        
+        # Explain the choice
+        if "median_vs_mean" in template:
+            explanation.append(f"**Why we chose {primary_summary}:**\n\n")
+            if primary_summary == "median":
+                explanation.append(f"{template['median_vs_mean']['when_median']}\n\n")
+                explanation.append(f"*{template['median_vs_mean']['why_median_better']}*\n\n")
+                explanation.append(f"*{template['median_vs_mean']['why_iqr_better']}*\n\n")
+            else:
+                explanation.append(f"{template['median_vs_mean']['when_mean']}\n\n")
+        
+        # Add analogy
+        if "analogy" in template:
+            explanation.append(f"**💡 Real-world example:**\n")
+            explanation.append(f"{template['analogy']}\n\n")
         
         return "\n".join(explanation)
     
@@ -455,9 +645,12 @@ class EducationalContentGenerator:
         guide.append("A: Effect size! A tiny, meaningless difference can have p < 0.05 with enough data. ")
         guide.append("Focus on whether the effect size is large enough to matter.\n\n")
         
+        # T064-T065: Updated FAQ with power-aware neutral language (FR-038)
         guide.append("**Q: What if the test says 'not significant'?**\n")
-        guide.append("A: Could mean (1) no real difference, (2) difference too small to detect, or ")
-        guide.append("(3) not enough data. Check the power analysis!\n\n")
+        guide.append("A: This means there's insufficient evidence to conclude a difference exists. ")
+        guide.append("This could indicate (1) truly similar distributions, (2) a difference too small to detect, ")
+        guide.append("or (3) inadequate sample size. **Always check the power analysis!** ")
+        guide.append("If power < 80%, the sample may be too small to detect real differences.\n\n")
         
         guide.append("**Q: Which plot should I include in my paper?**\n")
         guide.append("A: Box plots show distributions clearly. Forest plots show effect sizes with uncertainty. ")

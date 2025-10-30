@@ -22,7 +22,7 @@ from scipy import stats
 from statsmodels.stats.power import TTestIndPower
 
 from src.utils.statistical_helpers import (
-    bootstrap_ci, cohens_d, cliffs_delta, interpret_effect_size
+    bootstrap_ci, cohens_d, cliffs_delta, interpret_effect_size, format_pvalue
 )
 from .exceptions import StatisticalAnalysisError
 
@@ -33,9 +33,11 @@ class TestType(Enum):
     """Statistical test types."""
     SHAPIRO_WILK = "shapiro_wilk"           # Normality test
     LEVENE = "levene"                        # Variance homogeneity test
-    T_TEST = "t_test"                        # Parametric two-sample
+    T_TEST = "t_test"                        # Parametric two-sample (equal variance)
+    WELCH_T = "welch_t"                      # Parametric two-sample (unequal variance) - T021
     MANN_WHITNEY = "mann_whitney"            # Non-parametric two-sample
-    ANOVA = "anova"                          # Parametric multi-group
+    ANOVA = "anova"                          # Parametric multi-group (equal variance)
+    WELCH_ANOVA = "welch_anova"             # Parametric multi-group (unequal variance) - T021
     KRUSKAL_WALLIS = "kruskal_wallis"       # Non-parametric multi-group
 
 
@@ -60,6 +62,7 @@ class MetricDistribution:
     Distribution characteristics for a single metric.
     
     Captures both descriptive statistics and distributional properties.
+    Enhanced with skewness classification for summary statistic selection.
     """
     metric_name: str
     group_name: str
@@ -93,8 +96,13 @@ class MetricDistribution:
     outliers: List[float] = None  # Values outside 1.5×IQR range
     n_outliers: int = 0  # Count of outliers
     
+    # NEW FIELDS (T009) - Skewness classification
+    skewness_flag: str = "normal"       # "normal", "moderate", "high", "severe"
+    primary_summary: str = "mean"       # "mean" or "median" - which to emphasize
+    summary_explanation: str = ""       # Why this summary was chosen
+    
     def __post_init__(self):
-        """Validate distribution data."""
+        """Validate distribution data and classify skewness."""
         # Initialize outliers list if None
         if self.outliers is None:
             self.outliers = []
@@ -106,6 +114,30 @@ class MetricDistribution:
             )
         if self.n_samples == 0:
             raise ValueError("MetricDistribution requires at least one sample")
+        
+        # NEW LOGIC (T009) - Classify skewness and determine appropriate summary statistic
+        abs_skew = abs(self.skewness)
+        
+        # FR-031: Flag metrics with |skewness| > 1.0
+        if abs_skew < 0.5:
+            self.skewness_flag = "normal"
+            self.primary_summary = "mean"
+            self.summary_explanation = "Distribution is nearly symmetric; mean ± SD appropriate."
+        elif abs_skew <= 1.0:
+            self.skewness_flag = "moderate"
+            self.primary_summary = "median"  # FR-032
+            self.summary_explanation = "Moderate skewness detected; median and IQR are more robust."
+        elif abs_skew <= 2.0:
+            self.skewness_flag = "high"
+            self.primary_summary = "median"
+            self.summary_explanation = "High skewness detected; median strongly preferred over mean."
+        else:
+            self.skewness_flag = "severe"  # FR-034
+            self.primary_summary = "median"
+            self.summary_explanation = (
+                f"Severe skewness ({self.skewness:.2f}) detected; mean is substantially "
+                f"biased by extreme values. Median provides more accurate central tendency."
+            )
 
 
 @dataclass
@@ -149,6 +181,7 @@ class StatisticalTest:
     Results of hypothesis testing between groups.
     
     Includes test selection rationale and interpretation.
+    Enhanced with multiple comparison corrections and power analysis.
     """
     test_type: TestType
     metric_name: str
@@ -170,6 +203,20 @@ class StatisticalTest:
     # Raw data for visualization
     group_data: Dict[str, List[float]]
     
+    # NEW FIELDS (T007) - Multiple comparison corrections
+    pvalue_raw: float = None                # Raw p-value before correction
+    pvalue_adjusted: float = None           # Adjusted p-value (if multi-comparison)
+    correction_method: str = None           # "holm" or None
+    
+    # NEW FIELDS (T007) - Test selection metadata
+    test_rationale: str = ""                # Detailed rationale for test selection
+    assumptions_checked: Dict[str, bool] = None  # {normality: True, equal_var: False}
+    
+    # NEW FIELDS (T007) - Power analysis
+    achieved_power: float = None            # Calculated achieved power (0.0-1.0)
+    recommended_n: int = None               # Sample size for 80% power (if underpowered)
+    power_adequate: bool = None             # True if power ≥ 0.80
+    
     def __post_init__(self):
         """Validate statistical test."""
         if not 0 <= self.p_value <= 1:
@@ -178,6 +225,10 @@ class StatisticalTest:
             raise ValueError("Statistical test requires at least 2 groups")
         if set(self.groups) != set(self.group_data.keys()):
             raise ValueError("Groups don't match group_data keys")
+        
+        # Initialize assumptions_checked if None
+        if self.assumptions_checked is None:
+            self.assumptions_checked = {}
 
 
 @dataclass
@@ -186,6 +237,7 @@ class EffectSize:
     Effect size calculation with confidence interval.
     
     Measures practical significance beyond statistical significance.
+    Enhanced with CI validation and test type alignment.
     """
     measure: EffectSizeMeasure
     metric_name: str
@@ -203,8 +255,14 @@ class EffectSize:
     magnitude: str  # "negligible", "small", "medium", "large"
     interpretation: str  # Plain English explanation
     
+    # NEW FIELDS (T008) - Bootstrap metadata
+    bootstrap_iterations: int = 10000      # Number of bootstrap samples used
+    ci_method: str = "bootstrap"           # "bootstrap" or "analytic"
+    ci_valid: bool = True                  # Whether CI contains point estimate
+    test_type_alignment: TestType = None   # Which test this aligns with
+    
     def __post_init__(self):
-        """Validate effect size."""
+        """Validate effect size and CI."""
         if self.measure == EffectSizeMeasure.COHENS_D:
             # Cohen's d can be any real number
             pass
@@ -220,6 +278,18 @@ class EffectSize:
             raise ValueError(
                 f"Invalid magnitude: {self.magnitude}. "
                 f"Must be one of {valid_magnitudes}"
+            )
+        
+        # NEW VALIDATION (T008) - Validate that CI contains point estimate (FR-002)
+        from ..utils.statistical_helpers import validate_ci
+        self.ci_valid = validate_ci(self.value, self.ci_lower, self.ci_upper)
+        
+        if not self.ci_valid:
+            from .exceptions import StatisticalAnalysisError
+            raise StatisticalAnalysisError(
+                f"Invalid confidence interval: point estimate {self.value:.3f} "
+                f"is outside CI [{self.ci_lower:.3f}, {self.ci_upper:.3f}]. "
+                f"This indicates a bootstrap resampling bug."
             )
 
 
@@ -538,10 +608,39 @@ class StatisticalAnalyzer:
                     test_results = self._perform_statistical_tests(
                         metric_name, metric_data, metric_distributions
                     )
+                    
+                    # T044-T046: Apply multiple comparison correction to p-values
+                    if len(test_results) > 0:
+                        # Extract p-values and comparison labels
+                        pvalues = [test.p_value for test in test_results]
+                        comparison_labels = [
+                            "_vs_".join(test.groups) for test in test_results
+                        ]
+                        
+                        # Apply correction (T041-T043)
+                        correction = self._apply_multiple_comparison_correction(
+                            pvalues=pvalues,
+                            comparison_labels=comparison_labels,
+                            metric_name=metric_name,
+                            alpha=self.alpha,
+                            method="holm"  # FR-022
+                        )
+                        
+                        # T045: Populate test fields with raw, adjusted p-values and correction method
+                        for i, test in enumerate(test_results):
+                            test.pvalue_raw = correction.raw_pvalues[i]
+                            test.pvalue_adjusted = correction.adjusted_pvalues[i]
+                            test.correction_method = correction.correction_method
+                            
+                            # T046: Update significance decision using adjusted p-value (FR-023, FR-024)
+                            test.is_significant = correction.reject_decisions[i]
+                    
                     statistical_tests.extend(test_results)
                     
-                    # T010: Calculate effect sizes
-                    effects = self._calculate_effect_sizes(metric_name, metric_data, metric_distributions)
+                    # T010, T036: Calculate effect sizes with test alignment
+                    effects = self._calculate_effect_sizes(
+                        metric_name, metric_data, metric_distributions, test_results
+                    )
                     effect_sizes.extend(effects)
                     
                     # T011: Perform power analysis
@@ -778,7 +877,7 @@ class StatisticalAnalyzer:
             
             interpretation = (
                 f"Shapiro-Wilk test for {group_name}: "
-                f"W={statistic:.4f}, p={p_value:.4f}. "
+                f"W={statistic:.4f}, {format_pvalue(p_value)}. "
                 f"Data {'appears normally distributed' if passes else 'deviates from normality'} "
                 f"(α={self.alpha})."
             )
@@ -847,7 +946,7 @@ class StatisticalAnalyzer:
         
         interpretation = (
             f"Levene's test across {len(groups)} groups: "
-            f"W={statistic:.4f}, p={p_value:.4f}. "
+            f"W={statistic:.4f}, {format_pvalue(p_value)}. "
             f"Variances {'are homogeneous' if passes else 'differ significantly'} "
             f"(α={self.alpha})."
         )
@@ -890,9 +989,11 @@ class StatisticalAnalyzer:
         Decision logic:
         - Zero variance: Skip testing (report descriptively)
         - Two groups + normal + equal variance → Independent t-test
-        - Two groups + (non-normal OR unequal variance) → Mann-Whitney U
+        - Two groups + normal + unequal variance → Welch's t-test (T019)
+        - Two groups + non-normal → Mann-Whitney U
         - Multiple groups + normal + equal variance → One-way ANOVA
-        - Multiple groups + (non-normal OR unequal variance) → Kruskal-Wallis
+        - Multiple groups + normal + unequal variance → Welch's ANOVA (T020)
+        - Multiple groups + non-normal → Kruskal-Wallis
         """
         tests = []
         groups = list(metric_data.keys())
@@ -923,65 +1024,201 @@ class StatisticalAnalyzer:
         
         return tests
     
+    # T016-T021: Three-way statistical test selection
+    def _select_statistical_test(
+        self,
+        distributions: List[MetricDistribution],
+        alpha: float = 0.05
+    ) -> Tuple[TestType, Dict[str, bool], str]:
+        """
+        Select appropriate statistical test based on normality and variance equality.
+        
+        Implements three-way decision tree per FR-005 to FR-012.
+        
+        Args:
+            distributions: List of MetricDistribution objects (one per group)
+            alpha: Significance level for assumption tests (default 0.05)
+        
+        Returns:
+            Tuple of (test_type, assumptions, rationale)
+            - test_type: Selected test (T_TEST, WELCH_T, MANN_WHITNEY, ANOVA, WELCH_ANOVA, KRUSKAL_WALLIS)
+            - assumptions: {normality: bool, equal_variance: bool}
+            - rationale: Explanation of test selection
+        """
+        n_groups = len(distributions)
+        
+        # Preconditions
+        if n_groups < 2:
+            raise ValueError("Need at least 2 groups for statistical test")
+        
+        # T017: Check normality for each group (Shapiro-Wilk test, FR-005)
+        all_normal = True
+        for dist in distributions:
+            if len(dist.values) >= 3:
+                _, p = stats.shapiro(dist.values)
+                if p <= alpha:
+                    all_normal = False
+                    break
+            else:
+                all_normal = False  # Too few samples for normality test
+                break
+        
+        # T018: Check variance equality (Levene's test, FR-005)
+        values_list = [dist.values for dist in distributions]
+        _, p_levene = stats.levene(*values_list, center='median')
+        equal_variance = p_levene > alpha
+        
+        # Build assumptions dict (T023)
+        assumptions = {
+            'normality': all_normal,
+            'equal_variance': equal_variance
+        }
+        
+        # T019-T020: Three-way decision tree
+        if n_groups == 2:
+            # Pairwise comparison
+            if all_normal:
+                if equal_variance:
+                    # FR-009: Student's t-test
+                    test_type = TestType.T_TEST
+                    rationale = (
+                        "Student's t-test selected: both groups normally distributed "
+                        f"(Shapiro-Wilk test) and variances equal (Levene's {format_pvalue(p_levene)}, exceeds α={alpha})"
+                    )
+                else:
+                    # FR-010: Welch's t-test
+                    test_type = TestType.WELCH_T
+                    rationale = (
+                        "Welch's t-test selected: both groups normally distributed "
+                        f"(Shapiro-Wilk test) but variances unequal (Levene's {format_pvalue(p_levene)}, ≤α={alpha})"
+                    )
+            else:
+                # FR-011: Mann-Whitney U
+                test_type = TestType.MANN_WHITNEY
+                rationale = (
+                    "Mann-Whitney U test selected: at least one group non-normally distributed "
+                    f"(Shapiro-Wilk p≤{alpha}). Non-parametric test appropriate."
+                )
+        else:
+            # Multi-group comparison (k ≥ 3)
+            if all_normal:
+                if equal_variance:
+                    # FR-006: Standard ANOVA
+                    test_type = TestType.ANOVA
+                    rationale = (
+                        f"One-way ANOVA selected: all {n_groups} groups normally distributed "
+                        f"and variances equal (Levene's {format_pvalue(p_levene)}, exceeds α={alpha})"
+                    )
+                else:
+                    # FR-007: Welch's ANOVA
+                    test_type = TestType.WELCH_ANOVA
+                    rationale = (
+                        f"Welch's ANOVA selected: all {n_groups} groups normally distributed "
+                        f"but variances unequal (Levene's {format_pvalue(p_levene)}, ≤α={alpha})"
+                    )
+            else:
+                # FR-008: Kruskal-Wallis
+                test_type = TestType.KRUSKAL_WALLIS
+                rationale = (
+                    f"Kruskal-Wallis test selected: at least one group non-normally distributed "
+                    f"(Shapiro-Wilk p≤{alpha}). Non-parametric test appropriate."
+                )
+        
+        return test_type, assumptions, rationale
+    
+    def _select_effect_size_measure(self, test_type: TestType) -> EffectSizeMeasure:
+        """
+        Select appropriate effect size measure based on test type.
+        
+        Implements FR-013, FR-014: Match effect size to test assumptions
+        - Parametric tests (t-test, ANOVA, Welch's variants) → Cohen's d
+        - Non-parametric tests (Mann-Whitney, Kruskal-Wallis) → Cliff's Delta
+        
+        Args:
+            test_type: The statistical test that was selected
+            
+        Returns:
+            EffectSizeMeasure: COHENS_D for parametric, CLIFFS_DELTA for non-parametric
+        """
+        # FR-013: Parametric tests use Cohen's d
+        if test_type in (TestType.T_TEST, TestType.WELCH_T, TestType.ANOVA, TestType.WELCH_ANOVA):
+            return EffectSizeMeasure.COHENS_D
+        
+        # FR-014: Non-parametric tests use Cliff's Delta
+        elif test_type in (TestType.MANN_WHITNEY, TestType.KRUSKAL_WALLIS):
+            return EffectSizeMeasure.CLIFFS_DELTA
+        
+        else:
+            raise ValueError(f"Unknown test type for effect size selection: {test_type}")
+    
     def _perform_two_group_test(
         self,
         metric_name: str,
         metric_data: Dict[str, List[float]],
         distributions: List[MetricDistribution]
     ) -> Optional[StatisticalTest]:
-        """Perform two-group comparison (t-test or Mann-Whitney U)."""
+        """Perform two-group comparison using three-way test selection."""
         groups = list(metric_data.keys())
         group1_name, group2_name = groups[0], groups[1]
         group1_vals = metric_data[group1_name]
         group2_vals = metric_data[group2_name]
         
-        # Check assumptions from normality checks (would need to pass them in)
-        # For now, use simple heuristic: Shapiro-Wilk test
-        _, p1 = stats.shapiro(group1_vals) if len(group1_vals) >= 3 else (None, 0.0)
-        _, p2 = stats.shapiro(group2_vals) if len(group2_vals) >= 3 else (None, 0.0)
-        both_normal = (p1 > self.alpha) and (p2 > self.alpha)
+        # T022: Get distributions for this metric
+        metric_dists = [d for d in distributions if d.metric_name == metric_name]
         
-        # Check variance homogeneity
-        _, p_levene = stats.levene(group1_vals, group2_vals, center='median')
-        equal_variance = p_levene > self.alpha
+        # T016-T022: Use three-way test selection logic
+        test_type, assumptions, rationale = self._select_statistical_test(metric_dists, self.alpha)
         
-        # Select test
-        if both_normal and equal_variance:
-            # Parametric: Independent t-test
+        # Execute the selected test
+        if test_type == TestType.T_TEST:
+            # FR-009: Student's t-test (equal variance)
             statistic, p_value = stats.ttest_ind(group1_vals, group2_vals)
-            test_type = TestType.T_TEST
-            rationale = (
-                "Independent t-test selected: both groups normally distributed "
-                "(Shapiro-Wilk p>0.05) and variances are equal (Levene's p>0.05)"
-            )
-        else:
-            # Non-parametric: Mann-Whitney U
+        elif test_type == TestType.WELCH_T:
+            # FR-010: Welch's t-test (unequal variance)
+            statistic, p_value = stats.ttest_ind(group1_vals, group2_vals, equal_var=False)
+        elif test_type == TestType.MANN_WHITNEY:
+            # FR-011: Mann-Whitney U (non-parametric)
             statistic, p_value = stats.mannwhitneyu(
                 group1_vals, group2_vals, alternative='two-sided'
             )
-            test_type = TestType.MANN_WHITNEY
-            
-            reasons = []
-            if not both_normal:
-                reasons.append("non-normal distribution")
-            if not equal_variance:
-                reasons.append("unequal variances")
-            
-            rationale = (
-                f"Mann-Whitney U test selected: {' and '.join(reasons)}. "
-                "Non-parametric test appropriate for ordinal data or "
-                "when parametric assumptions violated."
-            )
+        else:
+            raise ValueError(f"Unexpected test type for two-group comparison: {test_type}")
         
         is_significant = p_value < self.alpha
+        
+        # T064: Power-aware interpretation for non-significant results (FR-038)
+        # Calculate power first to inform interpretation
+        effect_size = abs(cohens_d(group1_vals, group2_vals))
+        power_result = self._calculate_power_analysis(
+            test_type=test_type,
+            effect_size=effect_size,
+            n1=len(group1_vals),
+            n2=len(group2_vals),
+            alpha=self.alpha,
+            target_power=0.80
+        )
+        
+        # Use neutral language in interpretation
+        if is_significant:
+            conclusion = "Groups differ meaningfully"
+        else:
+            # FR-038: Avoid claiming "no effect exists" when power is low
+            if power_result.achieved_power < 0.80:
+                conclusion = (
+                    f"Insufficient evidence to detect a difference "
+                    f"(achieved power: {power_result.achieved_power:.1%})"
+                )
+            else:
+                conclusion = "Insufficient evidence to conclude a difference exists"
         
         interpretation = (
             f"Comparing {group1_name} vs {group2_name}: "
             f"{'Significant difference' if is_significant else 'No significant difference'} "
-            f"detected (p={p_value:.4f}, α={self.alpha}). "
-            f"{'Groups differ meaningfully' if is_significant else 'Groups are similar statistically'}."
+            f"detected ({format_pvalue(p_value)}, α={self.alpha}). "
+            f"{conclusion}."
         )
         
+        # T022-T023, T030: Create test with new fields
         return StatisticalTest(
             test_type=test_type,
             metric_name=metric_name,
@@ -991,7 +1228,12 @@ class StatisticalAnalyzer:
             is_significant=is_significant,
             rationale=rationale,
             interpretation=interpretation,
-            group_data=metric_data
+            group_data=metric_data,
+            test_rationale=rationale,  # T022
+            assumptions_checked=assumptions,  # T023
+            achieved_power=power_result.achieved_power,  # T030
+            recommended_n=power_result.recommended_n_per_group,  # T030 - Fixed field name
+            power_adequate=power_result.power_adequate  # T030
         )
     
     def _perform_multi_group_test(
@@ -1000,60 +1242,77 @@ class StatisticalAnalyzer:
         metric_data: Dict[str, List[float]],
         distributions: List[MetricDistribution]
     ) -> Optional[StatisticalTest]:
-        """Perform multi-group comparison (ANOVA or Kruskal-Wallis)."""
+        """Perform multi-group comparison using three-way test selection."""
         groups = list(metric_data.keys())
         values_list = [metric_data[g] for g in groups]
         
-        # Check normality for all groups
-        all_normal = True
-        for vals in values_list:
-            if len(vals) >= 3:
-                _, p = stats.shapiro(vals)
-                if p <= self.alpha:
-                    all_normal = False
-                    break
-            else:
-                all_normal = False
-                break
+        # T022: Get distributions for this metric
+        metric_dists = [d for d in distributions if d.metric_name == metric_name]
         
-        # Check variance homogeneity
-        _, p_levene = stats.levene(*values_list, center='median')
-        equal_variance = p_levene > self.alpha
+        # T016-T022: Use three-way test selection logic
+        test_type, assumptions, rationale = self._select_statistical_test(metric_dists, self.alpha)
         
-        # Select test
-        if all_normal and equal_variance:
-            # Parametric: One-way ANOVA
+        # Execute the selected test
+        if test_type == TestType.ANOVA:
+            # FR-006: Standard ANOVA (equal variance)
             statistic, p_value = stats.f_oneway(*values_list)
-            test_type = TestType.ANOVA
-            rationale = (
-                f"One-way ANOVA selected: all {len(groups)} groups normally distributed "
-                "and variances are equal. Parametric test appropriate."
-            )
-        else:
-            # Non-parametric: Kruskal-Wallis
+        elif test_type == TestType.WELCH_ANOVA:
+            # FR-007, T021: Welch's ANOVA (unequal variance)
+            statistic, p_value = self._welch_anova(*values_list)
+        elif test_type == TestType.KRUSKAL_WALLIS:
+            # FR-008: Kruskal-Wallis (non-parametric)
             statistic, p_value = stats.kruskal(*values_list)
-            test_type = TestType.KRUSKAL_WALLIS
-            
-            reasons = []
-            if not all_normal:
-                reasons.append("non-normal distributions")
-            if not equal_variance:
-                reasons.append("unequal variances")
-            
-            rationale = (
-                f"Kruskal-Wallis test selected: {' and '.join(reasons)}. "
-                "Non-parametric test appropriate for ordinal data."
-            )
+        else:
+            raise ValueError(f"Unexpected test type for multi-group comparison: {test_type}")
         
         is_significant = p_value < self.alpha
+        
+        # T064: Power-aware interpretation for non-significant results (FR-038)
+        # Calculate power first to inform interpretation (approximation for multi-group)
+        all_values = np.concatenate(values_list)
+        group_means = [np.mean(vals) for vals in values_list]
+        grand_mean = np.mean(all_values)
+        pooled_std = np.std(all_values, ddof=1)
+        
+        # Approximate Cohen's f from between-group variance
+        if pooled_std > 0:
+            between_group_variance = np.mean([(m - grand_mean)**2 for m in group_means])
+            cohens_f = np.sqrt(between_group_variance) / pooled_std
+        else:
+            cohens_f = 0.0
+        
+        n_per_group = int(np.mean([len(vals) for vals in values_list]))
+        
+        power_result = self._calculate_power_analysis(
+            test_type=test_type,
+            effect_size=cohens_f,
+            n1=n_per_group,
+            n_groups=len(groups),
+            alpha=self.alpha,
+            target_power=0.80
+        )
+        
+        # Use neutral language in interpretation
+        if is_significant:
+            conclusion = "At least one group differs"
+        else:
+            # FR-038: Avoid claiming "no differences exist" when power is low
+            if power_result.achieved_power < 0.80:
+                conclusion = (
+                    f"Insufficient evidence to detect differences "
+                    f"(achieved power: {power_result.achieved_power:.1%})"
+                )
+            else:
+                conclusion = "Insufficient evidence to conclude differences exist"
         
         interpretation = (
             f"Comparing {len(groups)} groups ({', '.join(groups)}): "
             f"{'Significant differences' if is_significant else 'No significant differences'} "
-            f"detected (p={p_value:.4f}, α={self.alpha}). "
-            f"{'At least one group differs' if is_significant else 'Groups are similar statistically'}."
+            f"detected ({format_pvalue(p_value)}, α={self.alpha}). "
+            f"{conclusion}."
         )
         
+        # T022-T023, T030: Create test with new fields
         return StatisticalTest(
             test_type=test_type,
             metric_name=metric_name,
@@ -1063,27 +1322,456 @@ class StatisticalAnalyzer:
             is_significant=is_significant,
             rationale=rationale,
             interpretation=interpretation,
-            group_data=metric_data
+            group_data=metric_data,
+            test_rationale=rationale,  # T022
+            assumptions_checked=assumptions,  # T023
+            achieved_power=power_result.achieved_power,  # T030
+            recommended_n=power_result.recommended_n_per_group,  # T030 - Fixed field name
+            power_adequate=power_result.power_adequate  # T030
         )
     
-    # T010: Calculate effect sizes
+    # T021: Welch's ANOVA implementation
+    def _welch_anova(self, *groups):
+        """
+        Perform Welch's ANOVA (heterogeneous variances one-way ANOVA).
+        
+        Uses the Welch F-statistic which doesn't assume equal variances.
+        Based on Welch (1951) methodology.
+        
+        Args:
+            *groups: Variable number of group arrays
+        
+        Returns:
+            Tuple of (statistic, pvalue)
+        
+        Reference:
+            Welch, B. L. (1951). On the comparison of several mean values: 
+            an alternative approach. Biometrika, 38(3/4), 330-336.
+        """
+        k = len(groups)  # Number of groups
+        if k < 2:
+            raise ValueError("Need at least 2 groups for Welch's ANOVA")
+        
+        # Calculate group statistics
+        n_i = np.array([len(g) for g in groups])
+        mean_i = np.array([np.mean(g) for g in groups])
+        var_i = np.array([np.var(g, ddof=1) for g in groups])
+        w_i = n_i / var_i  # Weights
+        
+        # Grand weighted mean
+        grand_mean = np.sum(w_i * mean_i) / np.sum(w_i)
+        
+        # Welch F-statistic (numerator)
+        numerator = np.sum(w_i * (mean_i - grand_mean)**2) / (k - 1)
+        
+        # Welch F-statistic (denominator correction)
+        denominator_term = np.sum((1 - w_i / np.sum(w_i))**2 / (n_i - 1))
+        denominator = 1 + (2 * (k - 2) / (k**2 - 1)) * denominator_term
+        
+        # Welch F-statistic
+        f_statistic = numerator / denominator
+        
+        # Degrees of freedom
+        df1 = k - 1
+        df2 = (k**2 - 1) / (3 * denominator_term)
+        
+        # P-value from F-distribution
+        p_value = 1 - stats.f.cdf(f_statistic, df1, df2)
+        
+        return f_statistic, p_value
+    
+    # T024-T029: Power analysis implementation
+    def _calculate_power_analysis(
+        self,
+        test_type: TestType,
+        effect_size: float,
+        n1: int,
+        n2: Optional[int] = None,
+        n_groups: Optional[int] = None,
+        alpha: float = 0.05,
+        target_power: float = 0.80
+    ) -> 'PowerAnalysis':
+        """
+        Calculate achieved statistical power and sample size recommendations.
+        
+        Uses statsmodels power analysis modules to compute:
+        1. Achieved power given effect size and sample sizes
+        2. Recommended sample size if power is inadequate
+        
+        Args:
+            test_type: Type of statistical test (T_TEST, WELCH_T, ANOVA, etc.)
+            effect_size: Cohen's d for t-tests, Cohen's f for ANOVA
+            n1: Sample size of group 1 (or per-group for ANOVA)
+            n2: Sample size of group 2 (for pairwise tests, optional)
+            n_groups: Number of groups (for ANOVA tests, optional)
+            alpha: Significance level (default 0.05)
+            target_power: Desired power threshold (default 0.80)
+        
+        Returns:
+            PowerAnalysis object with achieved_power, power_adequate, recommended_n
+        
+        References:
+            - Cohen, J. (1988). Statistical Power Analysis for the Behavioral Sciences
+            - statsmodels.stats.power documentation
+        """
+        from statsmodels.stats.power import TTestIndPower, FTestAnovaPower
+        from .models import PowerAnalysis
+        
+        # T029: Edge case handling
+        if n1 < 5 or (n2 is not None and n2 < 5):
+            return PowerAnalysis(
+                test_type=test_type.value,
+                effect_size=effect_size,
+                sample_size_group1=n1,
+                sample_size_group2=n2,
+                n_groups=n_groups,
+                alpha=alpha,
+                achieved_power=None,
+                target_power=target_power,
+                power_adequate=False,
+                adequacy_flag="indeterminate",
+                recommended_n=None,
+                warning_message="Sample size too small (n<5) for reliable power calculation"
+            )
+        
+        if abs(effect_size) > 5.0:
+            return PowerAnalysis(
+                test_type=test_type.value,
+                effect_size=effect_size,
+                sample_size_group1=n1,
+                sample_size_group2=n2,
+                n_groups=n_groups,
+                alpha=alpha,
+                achieved_power=1.0,
+                target_power=target_power,
+                power_adequate=True,
+                adequacy_flag="adequate",
+                recommended_n=None,
+                warning_message="Effect size extremely large (|d|>5), power ~1.0"
+            )
+        
+        achieved_power = None
+        recommended_n = None
+        warning_message = None
+        
+        try:
+            # T025-T026: Power calculations based on test type
+            if test_type in [TestType.T_TEST, TestType.WELCH_T, TestType.MANN_WHITNEY]:
+                # T025: Pairwise tests use TTestIndPower
+                power_analyzer = TTestIndPower()
+                
+                # T027: Calculate achieved power
+                if n2 is None:
+                    n2 = n1  # Assume equal groups if not specified
+                
+                ratio = n2 / n1 if n1 > 0 else 1.0
+                
+                achieved_power = power_analyzer.solve_power(
+                    effect_size=abs(effect_size),
+                    nobs1=n1,
+                    ratio=ratio,
+                    alpha=alpha,
+                    power=None,  # Solve for power
+                    alternative='two-sided'
+                )
+                
+                # T028: Calculate recommended sample size if power inadequate
+                if achieved_power < target_power:
+                    recommended_n = power_analyzer.solve_power(
+                        effect_size=abs(effect_size),
+                        nobs1=None,  # Solve for n
+                        ratio=1.0,   # Assume equal groups for recommendation
+                        alpha=alpha,
+                        power=target_power,
+                        alternative='two-sided'
+                    )
+                    recommended_n = int(np.ceil(recommended_n))
+                
+            elif test_type in [TestType.ANOVA, TestType.WELCH_ANOVA, TestType.KRUSKAL_WALLIS]:
+                # T026: Multi-group tests use FTestAnovaPower
+                if n_groups is None or n_groups < 2:
+                    raise ValueError("n_groups required for ANOVA power analysis")
+                
+                power_analyzer = FTestAnovaPower()
+                
+                # Convert Cohen's d to Cohen's f if needed (approximation)
+                # Cohen's f ≈ d / 2 for two groups, use directly for ANOVA
+                cohens_f = abs(effect_size) if test_type == TestType.ANOVA else abs(effect_size) / 2
+                
+                total_n = n1 * n_groups
+                
+                # T027: Calculate achieved power
+                achieved_power = power_analyzer.solve_power(
+                    effect_size=cohens_f,
+                    nobs=total_n,
+                    alpha=alpha,
+                    k_groups=n_groups,
+                    power=None  # Solve for power
+                )
+                
+                # T028: Calculate recommended sample size per group
+                if achieved_power < target_power:
+                    recommended_total_n = power_analyzer.solve_power(
+                        effect_size=cohens_f,
+                        nobs=None,  # Solve for total n
+                        alpha=alpha,
+                        k_groups=n_groups,
+                        power=target_power
+                    )
+                    recommended_n = int(np.ceil(recommended_total_n / n_groups))
+            
+            # Determine adequacy
+            if achieved_power is None:
+                adequacy_flag = "indeterminate"
+                power_adequate = False
+            elif achieved_power >= target_power:
+                adequacy_flag = "adequate"
+                power_adequate = True
+            elif achieved_power >= 0.50:
+                adequacy_flag = "marginal"
+                power_adequate = False
+            else:
+                adequacy_flag = "inadequate"
+                power_adequate = False
+                warning_message = (
+                    f"Achieved power ({achieved_power:.2f}) is very low (<0.50). "
+                    "Results may be unreliable due to insufficient sample size."
+                )
+        
+        except Exception as e:
+            # T029: Graceful error handling
+            achieved_power = None
+            power_adequate = False
+            adequacy_flag = "error"
+            warning_message = f"Power calculation failed: {str(e)}"
+        
+        # Build group_names from context (this will need to be passed in properly)
+        # For now, use generic names
+        if n_groups and n_groups > 2:
+            group_names = [f"Group{i+1}" for i in range(n_groups)]
+        elif n2 is not None:
+            group_names = ["Group1", "Group2"]
+        else:
+            group_names = ["Group1"]
+        
+        return PowerAnalysis(
+            comparison_id="power_analysis",  # Will be set properly by caller
+            metric_name="metric",  # Will be set properly by caller
+            group_names=group_names,
+            effect_size_value=abs(effect_size),
+            effect_size_type="cohens_d" if test_type in [TestType.T_TEST, TestType.WELCH_T, TestType.MANN_WHITNEY] else "cohens_f",
+            n_group1=n1,
+            n_group2=n2,
+            achieved_power=achieved_power if achieved_power is not None else 0.0,
+            target_power=target_power,
+            alpha=alpha,
+            power_adequate=power_adequate,
+            recommended_n_per_group=recommended_n,
+            adequacy_flag=adequacy_flag,
+            warning_message=warning_message
+        )
+    
+    # T010-T015: Bootstrap confidence interval with independent group resampling
+    def _bootstrap_confidence_interval(
+        self,
+        group1_values: List[float],
+        group2_values: List[float],
+        effect_size_func,
+        n_iterations: int = 10000,
+        confidence_level: float = 0.95,
+        random_seed: Optional[int] = None
+    ) -> Tuple[float, float, bool]:
+        """
+        Compute bootstrap confidence interval for effect sizes using independent group resampling.
+        
+        This is the CORRECT approach - each group is resampled independently, preserving
+        group structure. The broken approach resamples from a combined array, which
+        scrambles group assignments and produces invalid CIs.
+        
+        Args:
+            group1_values: First group's data
+            group2_values: Second group's data
+            effect_size_func: Function that computes effect size (cohens_d or cliffs_delta)
+            n_iterations: Number of bootstrap samples (must be ≥ 10,000 per FR-003)
+            confidence_level: CI level (default 0.95 for 95% CI)
+            random_seed: Optional seed for reproducibility
+        
+        Returns:
+            Tuple of (ci_lower, ci_upper, ci_valid)
+            - ci_lower: Lower bound of CI
+            - ci_upper: Upper bound of CI
+            - ci_valid: True if CI contains point estimate (should always be True)
+        
+        Raises:
+            StatisticalAnalysisError: If bootstrap fails or CI doesn't contain point estimate
+        """
+        from .exceptions import StatisticalAnalysisError
+        
+        # FR-003: Require at least 10,000 iterations
+        if n_iterations < 10000:
+            raise ValueError(f"n_iterations must be ≥ 10,000, got {n_iterations}")
+        
+        # Preconditions
+        if len(group1_values) < 2 or len(group2_values) < 2:
+            raise ValueError("Each group must have at least 2 samples for bootstrap")
+        
+        # Compute point estimate on original data
+        try:
+            point_estimate = effect_size_func(group1_values, group2_values)
+        except Exception as e:
+            raise StatisticalAnalysisError(f"Failed to compute point estimate: {e}")
+        
+        # Use provided seed or class random state
+        rng = np.random.RandomState(random_seed) if random_seed is not None else self.rng
+        
+        # Bootstrap resampling - INDEPENDENT GROUP RESAMPLING (FR-001)
+        bootstrap_stats = []
+        n1, n2 = len(group1_values), len(group2_values)
+        
+        for _ in range(n_iterations):
+            try:
+                # FR-001: Resample each group INDEPENDENTLY (preserves group structure)
+                g1_sample = rng.choice(group1_values, size=n1, replace=True)
+                g2_sample = rng.choice(group2_values, size=n2, replace=True)
+                
+                # Compute effect size on resampled groups
+                effect = effect_size_func(g1_sample.tolist(), g2_sample.tolist())
+                bootstrap_stats.append(effect)
+            except Exception:
+                # FR-004: Handle bootstrap failures gracefully
+                continue
+        
+        # FR-004: Check if bootstrap failed
+        if len(bootstrap_stats) < n_iterations * 0.9:  # Allow 10% failure rate
+            raise StatisticalAnalysisError(
+                f"Bootstrap failed: only {len(bootstrap_stats)}/{n_iterations} iterations succeeded"
+            )
+        
+        # Compute percentile-based CI
+        alpha = 1 - confidence_level
+        ci_lower = float(np.percentile(bootstrap_stats, (alpha / 2) * 100))
+        ci_upper = float(np.percentile(bootstrap_stats, (1 - alpha / 2) * 100))
+        
+        # FR-002: Validate that CI contains point estimate
+        from ..utils.statistical_helpers import validate_ci
+        ci_valid = validate_ci(point_estimate, ci_lower, ci_upper)
+        
+        if not ci_valid:
+            # This should NEVER happen with correct independent resampling
+            raise StatisticalAnalysisError(
+                f"CRITICAL BUG: Bootstrap CI [{ci_lower:.3f}, {ci_upper:.3f}] "
+                f"does not contain point estimate {point_estimate:.3f}. "
+                f"This indicates the bootstrap implementation is broken."
+            )
+        
+        return ci_lower, ci_upper, ci_valid
+    
+    # T040-T043: Multiple comparison correction (NEW METHOD)
+    def _apply_multiple_comparison_correction(
+        self,
+        pvalues: List[float],
+        comparison_labels: List[str],
+        metric_name: str,
+        alpha: float = 0.05,
+        method: str = "holm"
+    ) -> 'MultipleComparisonCorrection':
+        """
+        Apply multiple testing correction to control family-wise error rate.
+        
+        Implements FR-022 to FR-026: Holm-Bonferroni correction for multiple comparisons.
+        
+        Args:
+            pvalues: List of raw p-values from statistical tests
+            comparison_labels: Identifiers for each comparison (e.g., "group1_vs_group2")
+            metric_name: Name of metric family being corrected
+            alpha: Family-wise error rate threshold (default 0.05)
+            method: Correction method - "holm", "bonferroni", "fdr_bh", or "none"
+            
+        Returns:
+            MultipleComparisonCorrection object with adjusted p-values and decisions
+            
+        Raises:
+            ValueError: If method="none" when n_comparisons > 1 (T043)
+        """
+        from statsmodels.stats.multitest import multipletests
+        from ..paper_generation.models import MultipleComparisonCorrection
+        
+        n_comparisons = len(pvalues)
+        
+        # FR-026: No correction needed for single comparison (T042)
+        if n_comparisons == 1:
+            method = "none"
+            adjusted_pvalues = pvalues
+            reject_decisions = [p < alpha for p in pvalues]
+            corrected_alpha = alpha
+        else:
+            # FR-022: Apply Holm-Bonferroni correction for multiple comparisons (T041)
+            # T043: Validation - must use correction when n > 1
+            if method == "none":
+                raise ValueError(
+                    f"Must apply correction when n_comparisons > 1. "
+                    f"Got {n_comparisons} comparisons but method='none'"
+                )
+            
+            # T041: Use statsmodels multipletests with Holm method
+            reject, adjusted_pvalues, alphacSidak, alphacBonf = multipletests(
+                pvalues, alpha=alpha, method=method
+            )
+            reject_decisions = list(reject)
+            adjusted_pvalues = list(adjusted_pvalues)
+            corrected_alpha = alphacBonf
+        
+        # Create MultipleComparisonCorrection object
+        return MultipleComparisonCorrection(
+            metric_name=metric_name,
+            correction_method=method,
+            n_comparisons=n_comparisons,
+            alpha=alpha,
+            raw_pvalues=list(pvalues),
+            adjusted_pvalues=adjusted_pvalues,
+            comparison_labels=list(comparison_labels),
+            reject_decisions=reject_decisions,
+            corrected_alpha=corrected_alpha
+        )
+    
+    # T010: Calculate effect sizes (T036: Updated to use test_type for alignment)
     def _calculate_effect_sizes(
         self,
         metric_name: str,
         metric_data: Dict[str, List[float]],
-        distributions: List[MetricDistribution]
+        distributions: List[MetricDistribution],
+        test_results: List[StatisticalTest] = None
     ) -> List[EffectSize]:
         """
         Calculate effect sizes for all pairwise comparisons.
         
-        Uses Cohen's d for parametric comparisons and Cliff's Delta for non-parametric.
-        Includes bootstrap confidence intervals.
+        T036: Now uses test_type to select effect size measure (FR-013, FR-014, FR-015)
+        - Parametric tests → Cohen's d
+        - Non-parametric tests → Cliff's Delta
+        
+        Args:
+            metric_name: Name of the metric being analyzed
+            metric_data: Dict mapping group names to value lists
+            distributions: MetricDistribution objects for normality checks
+            test_results: Statistical test results for this metric (T036: NEW)
+            
+        Returns:
+            List of EffectSize objects with proper measure-test alignment
         """
         effects = []
         groups = list(metric_data.keys())
         
         # Check for zero variance
         dist_map = {d.group_name: d for d in distributions if d.metric_name == metric_name}
+        
+        # T036: Build test type lookup for this metric's pairwise comparisons
+        test_type_map = {}
+        if test_results:
+            for test in test_results:
+                if test.metric_name == metric_name and len(test.groups) == 2:
+                    # Create sorted key to match pairwise logic
+                    key = tuple(sorted(test.groups))
+                    test_type_map[key] = test.test_type
         
         # Pairwise comparisons
         for i, group1 in enumerate(groups):
@@ -1098,77 +1786,100 @@ class StatisticalAnalyzer:
                     )
                     continue
                 
-                # Check normality
-                _, p1 = stats.shapiro(vals1) if len(vals1) >= 3 else (None, 0.0)
-                _, p2 = stats.shapiro(vals2) if len(vals2) >= 3 else (None, 0.0)
-                both_normal = (p1 > self.alpha) and (p2 > self.alpha)
+                # T036: Use test type to select effect size measure (FR-013, FR-014)
+                comparison_key = tuple(sorted([group1, group2]))
                 
-                if both_normal:
+                if comparison_key in test_type_map:
+                    # T036: Get measure based on test type
+                    test_type = test_type_map[comparison_key]
+                    measure = self._select_effect_size_measure(test_type)
+                else:
+                    # Fallback: Use normality check (backward compatibility)
+                    _, p1 = stats.shapiro(vals1) if len(vals1) >= 3 else (None, 0.0)
+                    _, p2 = stats.shapiro(vals2) if len(vals2) >= 3 else (None, 0.0)
+                    both_normal = (p1 > self.alpha) and (p2 > self.alpha)
+                    measure = EffectSizeMeasure.COHENS_D if both_normal else EffectSizeMeasure.CLIFFS_DELTA
+                    test_type = None  # T038: Will be set below
+                
+                # T036-T037: Calculate effect based on selected measure
+                if measure == EffectSizeMeasure.COHENS_D:
                     # Use Cohen's d
                     effect_value = cohens_d(vals1, vals2)
-                    measure = EffectSizeMeasure.COHENS_D
+                    effect_func = cohens_d
+                    measure_str = "cohens_d"
                     
-                    # Bootstrap CI for Cohen's d
-                    def cohens_d_bootstrap(combined_data, n1):
-                        """Calculate Cohen's d from bootstrap sample."""
-                        return cohens_d(
-                            combined_data[:n1].tolist(),
-                            combined_data[n1:].tolist()
-                        )
+                    # T010-T015: Bootstrap CI using INDEPENDENT group resampling
+                    ci_lower, ci_upper, ci_valid = self._bootstrap_confidence_interval(
+                        vals1, vals2, effect_func, n_iterations=10000
+                    )
                     
-                    combined = np.array(vals1 + vals2)
-                    n1 = len(vals1)
-                    bootstrap_stats = []
-                    for _ in range(10000):
-                        sample = self.rng.choice(len(combined), size=len(combined), replace=True)
-                        resampled = combined[sample]
-                        try:
-                            d = cohens_d_bootstrap(resampled, n1)
-                            bootstrap_stats.append(d)
-                        except:
-                            continue
+                    magnitude = interpret_effect_size(effect_value, measure_str)
+                    # T061-T062: Use neutral language (FR-035, FR-036)
+                    if effect_value > 0:
+                        direction_phrase = f"shows higher values than"
+                    elif effect_value < 0:
+                        direction_phrase = f"shows lower values than"
+                    else:
+                        direction_phrase = f"shows similar values to"
                     
-                    ci_lower = float(np.percentile(bootstrap_stats, 2.5))
-                    ci_upper = float(np.percentile(bootstrap_stats, 97.5))
-                    
-                    magnitude = interpret_effect_size(effect_value, "cohens_d")
                     interpretation = (
                         f"Cohen's d = {effect_value:.3f} [{ci_lower:.3f}, {ci_upper:.3f}]: "
                         f"{magnitude} effect size. "
-                        f"{group1} {'outperforms' if effect_value > 0 else 'underperforms'} "
+                        f"{group1} {direction_phrase} "
                         f"{group2} by {abs(effect_value):.2f} pooled standard deviations."
                     )
-                else:
+                
+                elif measure == EffectSizeMeasure.CLIFFS_DELTA:
                     # Use Cliff's Delta
                     effect_value = cliffs_delta(vals1, vals2)
-                    measure = EffectSizeMeasure.CLIFFS_DELTA
+                    effect_func = cliffs_delta
+                    measure_str = "cliffs_delta"
                     
-                    # Bootstrap CI for Cliff's Delta
-                    def cliffs_delta_bootstrap(data1, data2):
-                        """Calculate Cliff's Delta from bootstrap samples."""
-                        return cliffs_delta(data1.tolist(), data2.tolist())
+                    # T010-T015: Bootstrap CI using INDEPENDENT group resampling
+                    ci_lower, ci_upper, ci_valid = self._bootstrap_confidence_interval(
+                        vals1, vals2, effect_func, n_iterations=10000
+                    )
                     
-                    bootstrap_stats = []
-                    for _ in range(10000):
-                        sample1 = self.rng.choice(vals1, size=len(vals1), replace=True)
-                        sample2 = self.rng.choice(vals2, size=len(vals2), replace=True)
-                        try:
-                            delta = cliffs_delta_bootstrap(sample1, sample2)
-                            bootstrap_stats.append(delta)
-                        except:
-                            continue
+                    magnitude = interpret_effect_size(effect_value, measure_str)
                     
-                    ci_lower = float(np.percentile(bootstrap_stats, 2.5))
-                    ci_upper = float(np.percentile(bootstrap_stats, 97.5))
+                    # T063: Special handling for extreme Cliff's Delta values (FR-037)
+                    if abs(effect_value) >= 0.999:
+                        # Extreme case: all values in one group exceed the other
+                        if effect_value > 0:
+                            dominance_phrase = (
+                                f"all observed values in {group1} exceed those in {group2}"
+                            )
+                        else:
+                            dominance_phrase = (
+                                f"all observed values in {group1} are less than those in {group2}"
+                            )
+                    else:
+                        # Normal case: probability interpretation with neutral language (FR-036)
+                        probability = abs(effect_value) * 50 + 50
+                        if effect_value > 0:
+                            dominance_phrase = (
+                                f"{group1} has systematically higher values compared to {group2} "
+                                f"(probability: {probability:.1f}%)"
+                            )
+                        elif effect_value < 0:
+                            dominance_phrase = (
+                                f"{group1} has systematically lower values compared to {group2} "
+                                f"(probability: {100 - probability:.1f}%)"
+                            )
+                        else:
+                            dominance_phrase = f"{group1} and {group2} show similar distributions"
                     
-                    magnitude = interpret_effect_size(effect_value, "cliffs_delta")
                     interpretation = (
                         f"Cliff's Delta = {effect_value:.3f} [{ci_lower:.3f}, {ci_upper:.3f}]: "
                         f"{magnitude} effect size. "
-                        f"Probability that {group1} {'exceeds' if effect_value > 0 else 'is less than'} "
-                        f"{group2} is {abs(effect_value) * 50 + 50:.1f}%."
+                        f"{dominance_phrase}."
                     )
                 
+                else:
+                    # T037: Validation - this should never happen
+                    raise ValueError(f"Invalid effect size measure selected: {measure}")
+                
+                # T014, T038: Set EffectSize fields including test_type_alignment
                 effect = EffectSize(
                     measure=measure,
                     metric_name=metric_name,
@@ -1178,7 +1889,11 @@ class StatisticalAnalyzer:
                     ci_lower=ci_lower,
                     ci_upper=ci_upper,
                     magnitude=magnitude,
-                    interpretation=interpretation
+                    interpretation=interpretation,
+                    bootstrap_iterations=10000,  # T014
+                    ci_method="bootstrap",        # T014
+                    ci_valid=ci_valid,           # T014
+                    test_type_alignment=test_type if test_type else None  # T038
                 )
                 
                 effects.append(effect)
@@ -1522,14 +2237,28 @@ class StatisticalAnalyzer:
         elif nonparametric_effects:
             sections.append("Effect sizes were quantified using Cliff's Delta. ")
         
-        # Multiple comparison corrections
-        tests_with_bonferroni = [t for t in findings.statistical_tests 
-                                 if 'Bonferroni' in t.rationale]
-        if tests_with_bonferroni:
-            sections.append(
-                "For experiments with 3+ groups, Bonferroni correction was applied to pairwise "
-                "comparisons to control family-wise error rate. "
-            )
+        # T048: Multiple comparison corrections (FR-025)
+        tests_with_correction = [
+            t for t in findings.statistical_tests 
+            if hasattr(t, 'correction_method') and t.correction_method != "none"
+        ]
+        
+        if tests_with_correction:
+            # Get unique correction methods used
+            correction_methods = set(t.correction_method for t in tests_with_correction)
+            
+            if "holm" in correction_methods:
+                sections.append(
+                    "Multiple comparison correction was applied using the Holm-Bonferroni method "
+                    f"(Holm, 1979) to control family-wise error rate at α={self.alpha}. "
+                    "This sequential procedure is less conservative than the standard Bonferroni "
+                    "correction while maintaining strong control of Type I error. "
+                    "Both raw and adjusted p-values are reported. "
+                )
+            elif "bonferroni" in correction_methods:
+                sections.append(
+                    "Bonferroni correction was applied to control family-wise error rate. "
+                )
         
         # Bootstrap confidence intervals
         if findings.effect_sizes:

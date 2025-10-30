@@ -206,3 +206,70 @@ def interpret_effect_size(effect_size: float, measure: str = "cohens_d") -> str:
     else:
         raise ValueError(f"Unknown effect size measure: {measure}. "
                         f"Use 'cohens_d' or 'cliffs_delta'")
+
+
+def format_pvalue(p: float, precision: int = 3) -> str:
+    """
+    Format p-value according to APA 7th edition guidelines.
+    
+    Args:
+        p: P-value to format (0.0 to 1.0)
+        precision: Number of decimal places (default 3)
+    
+    Returns:
+        Formatted string following APA conventions
+    
+    Rules:
+        - p < 0.001: Report as "p < 0.001"
+        - p ≥ 0.001: Report as "p = 0.XXX" (3 decimals, include leading zero)
+        - p = 0.050: Report as "p = 0.050" (not "p = 0.05")
+        - Always use equals sign or less-than, never "p = 0.000" or "p = 0.0000"
+    
+    Examples:
+        >>> format_pvalue(0.0000023)
+        'p < 0.001'
+        >>> format_pvalue(0.0234)
+        'p = 0.023'
+        >>> format_pvalue(0.05)
+        'p = 0.050'
+        >>> format_pvalue(0.234)
+        'p = 0.234'
+    
+    Reference:
+        American Psychological Association. (2020). Publication Manual of the 
+        American Psychological Association (7th ed.).
+    """
+    if p < 0.001:
+        return "p < 0.001"
+    elif p >= 1.0:
+        return "p = 1.000"
+    else:
+        return f"p = {p:.{precision}f}"
+
+
+def validate_ci(point_estimate: float, ci_lower: float, ci_upper: float) -> bool:
+    """
+    Validate that a confidence interval contains its point estimate.
+    
+    Args:
+        point_estimate: The calculated statistic value
+        ci_lower: Lower bound of confidence interval
+        ci_upper: Upper bound of confidence interval
+    
+    Returns:
+        True if CI is valid (contains point estimate), False otherwise
+    
+    Example:
+        >>> # Valid CI
+        >>> validate_ci(2.5, 2.0, 3.0)
+        True
+        >>> # Invalid CI (point estimate outside bounds)
+        >>> validate_ci(2.5, 3.0, 4.0)
+        False
+    
+    Note:
+        A confidence interval should always contain its point estimate. If this
+        validation fails, it indicates a bug in the bootstrap resampling logic
+        (e.g., resampling from combined array instead of independent groups).
+    """
+    return ci_lower <= point_estimate <= ci_upper

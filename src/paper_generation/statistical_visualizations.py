@@ -23,6 +23,7 @@ import seaborn as sns
 import numpy as np
 from scipy import stats
 
+from src.utils.statistical_helpers import format_pvalue
 from .statistical_analyzer import (
     MetricDistribution,
     EffectSize,
@@ -476,7 +477,7 @@ class StatisticalVisualizationGenerator:
         
         annotation_text = (
             f"Shapiro-Wilk Test\n"
-            f"p-value = {p_value:.4f}\n"
+            f"{format_pvalue(p_value)}\n"
             f"{'✅ Appears normal' if is_normal else '⚠️ Non-normal'}\n"
             f"(α = 0.05)"
         )
@@ -511,7 +512,7 @@ class StatisticalVisualizationGenerator:
             f"Q-Q plot assessing normality of {self._format_metric_label(metric_name)} "
             f"for {distribution.group_name}. "
             f"Points close to red line indicate normal distribution. "
-            f"Shapiro-Wilk test: p = {p_value:.4f} "
+            f"Shapiro-Wilk test: {format_pvalue(p_value)} "
             f"({'normal' if is_normal else 'non-normal'} at α = 0.05)."
         )
         
