@@ -152,13 +152,33 @@ class ExperimentAnalyzer:
                 logger.warning("%d. %s", i, warning)
             logger.warning("=" * 60)
         
-        # Generate visualizations
+        # Generate visualizations (T105-T108: Integration with paper generation workflow)
+        # Generate existing 4 visualization types (box, violin, forest, Q-Q)
         visualizations = viz_generator.generate_all_visualizations(statistical_findings)
         
-        # Update findings with visualization data (flatten dict to list)
-        statistical_findings.visualizations = [
+        # Generate enhanced 8 visualization types (feature 015)
+        enhanced_visualizations = viz_generator.generate_all_enhanced_plots(
+            statistical_findings,
+            quality_metric="completeness_rate",  # Default quality metric for normalized cost
+            cv_threshold=0.3,  # Default stability threshold
+            iqr_factor=1.5  # Default outlier detection threshold
+        )
+        
+        # Combine all visualizations (T107: Collect all 12 Visualization objects)
+        # Flatten dict to list for existing visualizations
+        all_viz_list = [
             viz for viz_list in visualizations.values() for viz in viz_list
         ]
+        # Add enhanced visualizations list
+        all_viz_list.extend(enhanced_visualizations)
+        
+        # Update findings with all visualization data (4 existing + 8 new types)
+        statistical_findings.visualizations = all_viz_list
+        
+        logger.info("Generated %d total visualizations (%d existing types + %d enhanced types)",
+                   len(all_viz_list),
+                   len(all_viz_list) - len(enhanced_visualizations),
+                   len(enhanced_visualizations))
         
         # Generate statistical reports
         logger.info("Generating statistical reports...")

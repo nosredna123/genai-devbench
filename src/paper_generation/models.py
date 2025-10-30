@@ -458,3 +458,96 @@ class MultipleComparisonCorrection:
             )
         elif self.correction_method == "none":
             self.explanation = "No correction applied (single comparison only)"
+
+
+# ============================================================================
+# Enhanced Statistical Visualizations Data Models (Feature 015)
+# ============================================================================
+
+@dataclass
+class RegressionResult:
+    """
+    Results from linear regression analysis for token-to-cost relationships.
+    
+    Used in generate_regression_plot() to store and display framework-specific
+    cost structures (US3: Token-to-Cost Relationship Analysis).
+    
+    Attributes:
+        slope: Regression line slope (cost increase per token)
+        intercept: Y-intercept (base cost when tokens=0)
+        r_squared: Coefficient of determination (goodness of fit, 0-1)
+        std_err: Standard error of the regression
+    """
+    slope: float
+    intercept: float
+    r_squared: float
+    std_err: float
+
+
+@dataclass
+class RankData:
+    """
+    Framework ranking data for a single metric.
+    
+    Used in generate_rank_plot() to track and visualize framework performance
+    rankings across multiple metrics (US6: Multi-Metric Framework Ranking).
+    
+    Attributes:
+        framework: Framework name (e.g., "BAEs", "ChatDev")
+        metric: Metric name (e.g., "execution_time", "total_cost_usd")
+        rank: Numeric rank (1=best, N=worst)
+        tied: Whether this rank is tied with other frameworks
+    """
+    framework: str
+    metric: str
+    rank: int
+    tied: bool = False
+
+
+@dataclass
+class StabilityMetric:
+    """
+    Coefficient of variation data for stability analysis.
+    
+    Used in generate_stability_plot() to assess framework predictability
+    (US7: Coefficient of Variation Stability Analysis).
+    
+    Attributes:
+        framework: Framework name
+        metric: Metric being measured
+        cv_value: Coefficient of variation (std/mean), np.nan if undefined
+        is_stable: True if CV < 0.20 (standard stability threshold)
+    """
+    framework: str
+    metric: str
+    cv_value: float
+    is_stable: bool
+    
+    def __post_init__(self):
+        """Validate and compute stability flag."""
+        import math
+        if not math.isnan(self.cv_value):
+            self.is_stable = self.cv_value < 0.20
+        else:
+            self.is_stable = False
+
+
+@dataclass
+class OutlierInfo:
+    """
+    Information about a single experimental run for outlier detection.
+    
+    Used in generate_outlier_run_plot() to identify and visualize anomalous
+    runs that may skew summary statistics (US8: Outlier Impact Visualization).
+    
+    Attributes:
+        run_index: Run number (1-indexed for display)
+        value: Metric value for this run
+        is_outlier: True if beyond 1.5×IQR threshold
+        iqr_factor: How many IQRs away from quartiles (for severity)
+    """
+    run_index: int
+    value: float
+    is_outlier: bool
+    iqr_factor: float = 0.0
+
