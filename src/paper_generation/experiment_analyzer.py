@@ -687,9 +687,10 @@ class ExperimentAnalyzer:
         sections.append("2. [Normality Assessment](#normality-assessment)\n")
         sections.append("3. [Assumption Validation](#assumption-validation)\n")
         sections.append("4. [Statistical Comparisons](#statistical-comparisons)\n")
-        sections.append("5. [Power Analysis](#power-analysis)\n")
-        sections.append("6. [Statistical Methodology](#statistical-methodology)\n")
-        sections.append("7. [Glossary](#glossary)\n\n")
+        # DISABLED: Power Analysis section removed (post-hoc power is statistically problematic)
+        # sections.append("5. [Power Analysis](#power-analysis)\n")
+        sections.append("5. [Statistical Methodology](#statistical-methodology)\n")
+        sections.append("6. [Glossary](#glossary)\n\n")
         sections.append("---\n\n")
         
         # 1. Descriptive Statistics
@@ -845,12 +846,18 @@ class ExperimentAnalyzer:
                 sections.append(f"![{viz.caption}]({rel_path})\n\n")
         
         # 5. Power Analysis (T031-T033)
-        sections.append("## 5. Power Analysis\n\n")
-        sections.append(self._generate_power_analysis_section(findings, educational_content))
-        sections.append("\n")
+        # DISABLED: Post-hoc power analysis removed per expert statistical review
+        # Post-hoc power (calculated from observed data) is directly correlated with p-values
+        # and provides no independent information about study adequacy.
+        # Recommendation: Use a priori power analysis for prospective study planning instead.
+        # Code kept for backward compatibility but section excluded from report output.
+        # See: docs/STATISTICAL_FIXES_NEEDED.md for detailed rationale
+        # sections.append("## 5. Power Analysis\n\n")
+        # sections.append(self._generate_power_analysis_section(findings, educational_content))
+        # sections.append("\n")
         
-        # 6. Statistical Methodology
-        sections.append("## 6. Statistical Methodology\n\n")
+        # 5. Statistical Methodology (renumbered from 6 after removing Power Analysis)
+        sections.append("## 5. Statistical Methodology\n\n")
         sections.append(findings.methodology_text)
         sections.append("\n\n")
         
@@ -862,8 +869,8 @@ class ExperimentAnalyzer:
             sections.append(f"| {key} | {value} |\n")
         sections.append("\n")
         
-        # 7. Glossary
-        sections.append("## 7. Glossary\n\n")
+        # 6. Glossary (renumbered from 7 after removing Power Analysis)
+        sections.append("## 6. Glossary\n\n")
         sections.append(educational_content.generate_glossary())
         sections.append("\n")
         

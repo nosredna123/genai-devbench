@@ -36,7 +36,10 @@ Based on expert review of statistical_report_full.md (2025-10-30), the following
 
 **Status**: Fixed via zero-variance detection
 
-### 3. Post-hoc Power Analysis
+###3. Post-hoc Power Analysis ✅ FIXED
+
+**Status**: Post-hoc power reporting disabled in report generation
+
 **Problem**:
 - "Achieved power = 0.995-1.000" for all metrics is meaningless
 - Post-hoc power always mirrors p-values (circular logic)
@@ -44,26 +47,36 @@ Based on expert review of statistical_report_full.md (2025-10-30), the following
 
 **Root Cause**: Using observed effect sizes to calculate power (tautological)
 
-**Fix Required**:
-1. **Option A (Recommended)**: Remove post-hoc power entirely
-2. **Option B**: Replace with *a priori* power based on expected effect sizes
-3. **Option C**: Simulate power curves showing required N for various effect sizes
+**Expert Guidance**:
+> "Post-hoc power is generally discouraged because it's directly related to p-value"
+> "When p < 0.05, power will be high; when p > 0.05, it will be low"
+> "This adds no information beyond what the p-value tells us"
 
+**Solution Implemented**: ✅ **COMPLETE**
+- Disabled Power Analysis section in statistical_report_full.md
+- Section 5 (Power Analysis) excluded from report output
+- Table of Contents updated (removed Power Analysis entry)
+- Section numbers renumbered (Methodology: 6→5, Glossary: 7→6)
+- All power calculation code preserved for backward compatibility
+- Added detailed comments explaining rationale
+
+**Implementation Details**:
 ```python
-# REMOVE THIS:
-def calculate_posthoc_power(observed_effect, n):
-    return power  # This is circular!
-
-# REPLACE WITH:
-def calculate_prospective_power(expected_effect, n, alpha=0.05):
-    """Calculate power for detecting expected effect size at given N"""
-    # Use predetermined effect sizes: small=0.2, medium=0.5, large=0.8
-    return power_analysis(effect_size=expected_effect, n=n, alpha=alpha)
+# In experiment_analyzer.py:
+# Power Analysis section commented out with explanatory note:
+# "Post-hoc power (calculated from observed data) is directly 
+#  correlated with p-values and provides no independent information 
+#  about study adequacy."
 ```
 
-**Files to Fix**:
-- `src/paper_generation/statistical_analyzer.py` - Remove or replace power calculations
-- Consider removing entire power analysis section from report
+**Files Modified**:
+- `src/paper_generation/experiment_analyzer.py` (lines 687-693, 847-857, 860, 874)
+  - Removed Power Analysis from Table of Contents
+  - Disabled _generate_power_analysis_section() call
+  - Renumbered subsequent sections
+  - Added detailed comments explaining why power analysis is disabled
+
+**Recommendation**: For prospective studies, use *a priori* power analysis with expected effect sizes
 
 ## ⚠️ Moderate Issues (Should Fix)
 
