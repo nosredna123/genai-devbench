@@ -46,8 +46,8 @@ EXPLANATION_TEMPLATES = {
         "what": "The Mann-Whitney U test compares two groups without assuming a normal distribution",
         "why": "It's a robust alternative to the t-test when data is skewed or has outliers",
         "how_to_interpret": {
-            "significant": "One group shows systematically higher/lower values than the other",
-            "not_significant": "The groups show similar distributions - no clear systematic difference"
+            "significant": "One group tends to show higher/lower values than the other",
+            "not_significant": "The groups show similar distributions - no clear systematic difference detected"
         },
         "assumptions": "Makes fewer assumptions than t-test - works with any distribution shape"
     },
@@ -246,24 +246,24 @@ class EducationalContentGenerator:
         """
         # FR-035 to FR-038: Neutral phrase dictionary
         language = {
-            # Comparison phrases (FR-035, FR-036)
-            "higher": "shows higher values than",
-            "lower": "shows lower values than",
-            "differs": "differs from",
-            "exceeds": "exceeds",
-            "is_exceeded_by": "is exceeded by",
-            "systematically_higher": "has systematically higher values compared to",
-            "systematically_lower": "has systematically lower values compared to",
+            # Comparison phrases (FR-035, FR-036) - moderated for academic tone
+            "higher": "tends to show higher values than",
+            "lower": "tends to show lower values than",
+            "differs": "appears to differ from",
+            "exceeds": "tends to exceed",
+            "is_exceeded_by": "tends to be exceeded by",
+            "systematically_higher": "tended to show higher values compared to",
+            "systematically_lower": "tended to show lower values compared to",
             
             # Effect size phrases (FR-036)
             "positive_effect": "positive difference favoring",
             "negative_effect": "negative difference favoring",
             "magnitude": "the magnitude of difference is",
             
-            # Cliff's Delta extreme values (FR-037)
-            "cliffs_all_higher": "all observed values in {group1} exceed those in {group2}",
-            "cliffs_all_lower": "all observed values in {group1} are less than those in {group2}",
-            "cliffs_probability": "probability that a randomly selected value from {group1} exceeds one from {group2}",
+            # Cliff's Delta extreme values (FR-037) - moderated language
+            "cliffs_all_higher": "in this sample, all observed values in {group1} exceeded those in {group2}",
+            "cliffs_all_lower": "in this sample, all observed values in {group1} were less than those in {group2}",
+            "cliffs_probability": "estimated probability that a randomly selected value from {group1} exceeds one from {group2}",
             
             # Non-significant with low power (FR-038)
             "insufficient_evidence_low_power": "insufficient evidence to detect a difference (achieved power: {power:.1%})",
@@ -473,7 +473,7 @@ class EducationalContentGenerator:
             additional = power.recommended_n_per_group - power.n_group1
             explanation.append(
                 f"To achieve {power.target_power:.0%} power for detecting an effect size of "
-                f"{power.effect_size:.2f}, you should collect **{additional} additional runs** "
+                f"{power.effect_size:.3f}, you should collect **{additional} additional runs** "
                 f"per group (target: {power.recommended_n_per_group} total per group).\n"
             )
         elif power.is_adequate:
@@ -528,7 +528,7 @@ class EducationalContentGenerator:
         
         # Show interpretation guide
         if "interpretation_guide" in template:
-            explanation.append(f"**Your data's skewness: {skewness:.2f}**\n\n")
+            explanation.append(f"**Your data's skewness: {skewness:.3f}**\n\n")
             explanation.append(f"**Interpretation scale:**\n")
             for category, desc in template["interpretation_guide"].items():
                 marker = "👉 " if category == skew_category else "   "
@@ -569,7 +569,7 @@ class EducationalContentGenerator:
             >>> print(analogy)  # Returns height difference analogy
         """
         if concept not in self.analogies:
-            return f"A {concept} of {value:.2f}"
+            return f"A {concept} of {value:.3f}"
         
         analogies = self.analogies[concept]
         

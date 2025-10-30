@@ -861,6 +861,31 @@ class ExperimentAnalyzer:
         sections.append(findings.methodology_text)
         sections.append("\n\n")
         
+        # Add practical significance interpretation guidance
+        sections.append("### Interpreting Statistical vs. Practical Significance\n\n")
+        sections.append(
+            "Statistical significance (p-value < 0.05) indicates that an observed difference "
+            "is unlikely to be due to random chance alone. However, **statistical significance "
+            "does not automatically imply practical importance**.\n\n"
+        )
+        sections.append(
+            "**Effect sizes** provide the magnitude of differences and should be considered alongside "
+            "p-values when evaluating practical significance:\n\n"
+        )
+        sections.append("- **Cohen's d**: |d| < 0.2 negligible, 0.2-0.5 small, 0.5-0.8 medium, >0.8 large\n")
+        sections.append("- **Cliff's Delta**: |δ| < 0.147 negligible, 0.147-0.33 small, 0.33-0.474 medium, >0.474 large\n\n")
+        sections.append(
+            "For performance benchmarks, even small effect sizes may be practically meaningful "
+            "if they translate to measurable improvements in real-world applications. "
+            "Conversely, large effect sizes on metrics with zero or near-zero variance "
+            "(e.g., cached tokens that are always identical) may reflect data characteristics "
+            "rather than meaningful performance differences.\n\n"
+        )
+        sections.append(
+            "**Recommendation**: Consider both statistical significance, effect size magnitude, "
+            "and domain-specific context when drawing conclusions about framework performance.\n\n"
+        )
+        
         # Reproducibility Information
         sections.append("### Reproducibility Information\n\n")
         sections.append("| Parameter | Value |\n")

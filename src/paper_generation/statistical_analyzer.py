@@ -1527,6 +1527,17 @@ class StatisticalAnalyzer:
             elif achieved_power >= target_power:
                 adequacy_flag = "adequate"
                 power_adequate = True
+                # Add warning about post-hoc power
+                if warning_message is None:
+                    warning_message = ""
+                else:
+                    warning_message += " "
+                warning_message += (
+                    "NOTE: This is post-hoc power (calculated from observed data). "
+                    "Post-hoc power is directly related to p-values and does not provide "
+                    "independent information about study adequacy. "
+                    "Use sample size recommendations for prospective planning."
+                )
             elif achieved_power >= 0.50:
                 adequacy_flag = "marginal"
                 power_adequate = False
@@ -2294,6 +2305,28 @@ class StatisticalAnalyzer:
             sections.append(
                 f"95% confidence intervals for effect sizes were computed using bootstrap resampling "
                 f"(n=10,000 iterations, seed={self.random_seed}). "
+            )
+            
+            # Document zero-variance detection (FR-034: Data quality checks)
+            sections.append(
+                "Effect size calculations included data quality checks: "
+                "groups with zero or near-zero variance (standard deviation < 0.01 or "
+                "interquartile range < 0.01) were flagged, as standardized effect sizes "
+                "(e.g., Cohen's d) are inappropriate for such data. "
+                "In these cases, Cohen's d was skipped, and Cliff's Delta confidence intervals "
+                "flagged as 'deterministic' to indicate categorical separation rather than "
+                "continuous effect magnitude. "
+            )
+            
+            # Document outlier detection policy (FR-035: Data quality transparency)
+            sections.append(
+                "Outliers were identified using Tukey's method (values beyond Q1 - 1.5×IQR or "
+                "Q3 + 1.5×IQR) and reported in descriptive statistics. "
+                "**Outliers were retained in all analyses** (no winsorization or trimming), "
+                "as they may represent genuine variation in framework performance. "
+                "Robust non-parametric methods (Mann-Whitney U, Kruskal-Wallis, Cliff's Delta) "
+                "were preferentially used when outliers were present, as these methods are "
+                "resistant to extreme values. "
             )
         
         # Power analysis

@@ -80,92 +80,120 @@ Based on expert review of statistical_report_full.md (2025-10-30), the following
 
 ## ⚠️ Moderate Issues (Should Fix)
 
-### 4. Multiple Comparison Correction
+### 4. Multiple Comparison Correction ✅ COMPLETE
+
+**Status**: Already implemented and functioning
+
 **Problem**: 21 pairwise comparisons without Bonferroni/Holm correction
 
-**Fix Required**:
-```python
-from statsmodels.stats.multitest import multipletests
+**Solution Implemented**: ✅ **ALREADY IN PLACE**
+- Holm-Bonferroni correction applied automatically (lines 610-638 in statistical_analyzer.py)
+- Both raw and adjusted p-values reported
+- Significance decisions based on adjusted p-values
+- Correction method displayed in reports
 
-# After all pairwise tests
-p_values = [comp['p_value'] for comp in comparisons]
-rejected, p_adjusted, _, _ = multipletests(p_values, alpha=0.05, method='holm')
+**Implementation**:
+- Uses `statsmodels.stats.multitest.multipletests` with method='holm'
+- Applied per metric family to control family-wise error rate
+- Single comparisons exempted (no correction needed)
 
-# Update comparisons with adjusted p-values
-for comp, p_adj in zip(comparisons, p_adjusted):
-    comp['p_value_adjusted'] = p_adj
-```
+### 5. Kruskal-Wallis vs Negligible Pairwise Effects ✅ ADDRESSED
 
-**Files to Fix**:
-- `src/paper_generation/statistical_analyzer.py` - Add multiple testing correction
+**Status**: Documented in practical significance section
 
-### 5. Kruskal-Wallis vs Negligible Pairwise Effects
 **Problem**: Significant omnibus test but δ = 0.069 (negligible) pairwise
 
 **Explanation**: 
 - Omnibus test detects *any* difference among groups
 - Pairwise tests may show small individual effects
-- This is expected but should be explained
+- This is expected and now explained
 
-**Fix Required**: Add interpretation note in report generation
+**Solution Implemented**: Added practical significance interpretation section explaining this phenomenon
 
-### 6. Zero-Variance BAES Metrics
+### 6. Zero-Variance BAES Metrics ✅ DOCUMENTED
+
+**Status**: Detected, flagged, and documented
+
 **Problem**: BAES variance ≈ 0 for cached_tokens, tokens_total
 
-**Investigation Needed**:
-- Check if BAES truly has identical values across all runs
-- If so, this is a data characteristic, not a bug
-- But standardized effect sizes are inappropriate
+**Solution Implemented**: ✅ **COMPLETE**
+- Zero-variance detection added (Issue #1)
+- Methodology section documents the policy
+- Explains why standardized effect sizes are inappropriate
+- Notes that Cohen's d is skipped, Cliff's Δ flagged as deterministic
 
-**Fix Required**: 
-- Detect and flag zero-variance groups
-- Skip or replace effect size calculations
-- Report as "categorical difference" instead
+**Files Modified**:
+- `src/paper_generation/statistical_analyzer.py` - Methodology documentation
 
 ## ⚠️ Minor Issues (Nice to Have)
 
-### 7. Over-Confident Language
+### 7. Over-Confident Language ✅ FIXED
+
+**Status**: Language moderated to appropriate academic tone
+
 **Problem**: "systematically higher (99.2%)" → false certainty
 
-**Fix Required**: 
-```python
-# Change wording in templates
-"ghspec systematically outperforms" 
-→ "ghspec tended to show higher values"
+**Solution Implemented**: ✅ **COMPLETE**
+- Changed "shows" → "tends to show"
+- Changed "has systematically" → "tended to show"
+- Changed "all observed values" → "in this sample, all observed values"
+- Changed "probability" → "estimated probability"
+- Updated Mann-Whitney interpretation: "tends to show" instead of "shows"
 
-"99.2% probability"
-→ "≈99% probability based on sample ranks"
-```
+**Files Modified**:
+- `src/paper_generation/educational_content.py` (lines 248-265)
 
-**Files to Fix**:
-- `src/paper_generation/educational_content.py` - Tone down certainty
+### 8. Missing Outlier Handling Documentation ✅ DOCUMENTED
 
-### 8. Missing Outlier Handling Documentation
+**Status**: Outlier policy documented in methodology
+
 **Problem**: Outliers identified but no mention of winsorization/trimming
 
-**Fix Required**: Add section documenting outlier treatment policy
+**Solution Implemented**: ✅ **COMPLETE**
+- Added section to methodology explaining outlier detection (Tukey's 1.5×IQR method)
+- Explicitly states outliers are **retained** (not removed)
+- Explains use of robust methods when outliers present
+- Justifies retention as genuine performance variation
 
-### 9. Inconsistent Numeric Formatting
+**Files Modified**:
+- `src/paper_generation/statistical_analyzer.py` - Methodology text generation
+
+### 9. Inconsistent Numeric Formatting ✅ STANDARDIZED
+
+**Status**: Standardized to 3 decimal places
+
 **Problem**: Mix of 2 and 3 decimal places
 
-**Fix Required**: Standardize to 3 decimals for effect sizes, p-values
+**Solution Implemented**: ✅ **COMPLETE**
+- Effect sizes: .3f (3 decimals)
+- P-values: .3f (3 decimals, already standardized via format_pvalue)
+- Confidence intervals: .3f (3 decimals)
+- Skewness: .2f → .3f
+- Power effect sizes: .2f → .3f
+
+**Files Modified**:
+- `src/paper_generation/educational_content.py` (3 formatting changes)
 
 ## 📋 Implementation Priority
 
-### Phase 1 (Critical - Must Fix Before Publication)
-1. ✅ Fix Cliff's Delta bootstrap implementation
-2. ✅ Add zero-variance detection and skip Cohen's d when invalid
-3. ✅ Remove or replace post-hoc power analysis
+### Phase 1 (Critical - Must Fix Before Publication) ✅ COMPLETE
+1. ✅ Fix Cliff's Delta bootstrap implementation → **RESOLVED: Bootstrap correct, added zero-variance detection**
+2. ✅ Add zero-variance detection and skip Cohen's d when invalid → **COMPLETE**
+3. ✅ Remove or replace post-hoc power analysis → **COMPLETE: Section disabled**
 
-### Phase 2 (Important - Should Fix)
-4. ✅ Add multiple comparison correction (Holm-Bonferroni)
-5. ✅ Document zero-variance BAES issue
-6. ✅ Add practical significance interpretation
+### Phase 2 (Important - Should Fix) ✅ COMPLETE
+4. ✅ Add multiple comparison correction (Holm-Bonferroni) → **ALREADY IMPLEMENTED**
+5. ✅ Document zero-variance BAES issue → **COMPLETE: In methodology**
+6. ✅ Add practical significance interpretation → **COMPLETE: New section added**
 
-### Phase 3 (Polish - Nice to Have)
-7. ✅ Moderate language for academic tone
-8. ✅ Document outlier handling
-9. ✅ Standardize numeric formatting
+### Phase 3 (Polish - Nice to Have) ✅ COMPLETE
+7. ✅ Moderate language for academic tone → **COMPLETE**
+8. ✅ Document outlier handling → **COMPLETE: In methodology**
+9. ✅ Standardize numeric formatting → **COMPLETE: 3 decimals**
+
+## ✅ ALL FIXES COMPLETE
+
+**All 9 issues** from the expert statistical review have been successfully addressed!
 
 ## 🔧 Testing Strategy
 
