@@ -1789,6 +1789,15 @@ class StatisticalAnalyzer:
                 # T036: Use test type to select effect size measure (FR-013, FR-014)
                 comparison_key = tuple(sorted([group1, group2]))
                 
+                # Check for zero-variance or near-zero variance (data quality issue)
+                std1, std2 = np.std(vals1), np.std(vals2)
+                iqr1 = np.percentile(vals1, 75) - np.percentile(vals1, 25)
+                iqr2 = np.percentile(vals2, 75) - np.percentile(vals2, 25)
+                
+                # Detect zero-inflation: either SD < 0.01 or IQR = 0
+                zero_variance_detected = (std1 < 0.01 or std2 < 0.01 or 
+                                         iqr1 < 0.01 or iqr2 < 0.01)
+                
                 if comparison_key in test_type_map:
                     # T036: Get measure based on test type
                     test_type = test_type_map[comparison_key]
@@ -1803,6 +1812,16 @@ class StatisticalAnalyzer:
                 
                 # T036-T037: Calculate effect based on selected measure
                 if measure == EffectSizeMeasure.COHENS_D:
+                    # Skip Cohen's d if zero variance (would produce inflated/invalid d)
+                    if zero_variance_detected:
+                        # Skip this comparison entirely - will not be added to results
+                        self.logger.warning(
+                            f"Skipping Cohen's d for {group1} vs {group2} on {metric_name}: "
+                            f"zero/near-zero variance detected (SD: {std1:.4f}, {std2:.4f}, "
+                            f"IQR: {iqr1:.4f}, {iqr2:.4f}). Effect size would be invalid."
+                        )
+                        continue
+                    
                     # Use Cohen's d
                     effect_value = cohens_d(vals1, vals2)
                     effect_func = cohens_d
@@ -1839,6 +1858,16 @@ class StatisticalAnalyzer:
                     ci_lower, ci_upper, ci_valid = self._bootstrap_confidence_interval(
                         vals1, vals2, effect_func, n_iterations=10000
                     )
+                    
+                    # Warn if zero variance produces deterministic CI
+                    if zero_variance_detected and abs(ci_upper - ci_lower) < 0.01:
+                        self.logger.warning(
+                            f"Cliff's Delta CI for {group1} vs {group2} on {metric_name} "
+                            f"is deterministic [{ci_lower:.3f}, {ci_upper:.3f}] due to "
+                            f"zero/near-zero variance (SD: {std1:.4f}, {std2:.4f}, "
+                            f"IQR: {iqr1:.4f}, {iqr2:.4f}). This represents categorical "
+                            f"separation rather than continuous effect size."
+                        )
                     
                     magnitude = interpret_effect_size(effect_value, measure_str)
                     
