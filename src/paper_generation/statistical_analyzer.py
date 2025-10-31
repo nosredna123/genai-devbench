@@ -65,6 +65,7 @@ class VisualizationType(Enum):
     RANK = "rank"                           # Multi-metric rankings
     STABILITY = "stability"                 # Coefficient of variation
     OUTLIER_RUN = "outlier_run"            # Run-index time series
+    RADAR = "radar"                         # Multi-metric radar/spider chart
 
 
 @dataclass

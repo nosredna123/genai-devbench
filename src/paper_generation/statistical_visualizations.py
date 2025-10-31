@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import warnings
+from datetime import datetime
 
 import matplotlib
 matplotlib.use('Agg')  # Non-interactive backend for server/script use
@@ -2044,6 +2045,239 @@ class StatisticalVisualizationGenerator:
             groups=[framework_name]
         )
     
+    def generate_radar_chart(
+        self,
+        metric_distributions: Dict[str, Dict[str, MetricDistribution]],
+        metrics: Optional[List[str]] = None,
+        title: str = "Multi-Metric Framework Comparison"
+    ) -> Visualization:
+        """
+        Generate radar chart comparing frameworks across multiple metrics.
+        
+        Creates a polar plot showing normalized metric values for each framework,
+        allowing visual comparison across multiple dimensions simultaneously.
+        Useful for holistic performance assessment.
+        
+        Args:
+            metric_distributions: Nested dict {metric_name: {framework: MetricDistribution}}
+            metrics: List of metric names to include. If None, uses all available metrics.
+                    Recommended to limit to 6-8 metrics for readability.
+            title: Chart title
+        
+        Returns:
+            Visualization object with metadata
+        
+        Raises:
+            ValueError: If metric_distributions is empty or metrics not found
+        
+        Example:
+            >>> # Select 6 key metrics
+            >>> metrics = ['tokens_in', 'tokens_out', 'execution_time', 
+            ...            'api_calls', 'cached_tokens', 'total_cost_usd']
+            >>> viz = generator.generate_radar_chart(
+            ...     metric_distributions, metrics, 
+            ...     "Performance Comparison Across Key Metrics"
+            ... )
+        """
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        
+        # FAIL-FAST VALIDATION: Input validation with clear error messages
+        if not metric_distributions:
+            raise ValueError(
+                "Cannot create radar chart: metric_distributions is empty. "
+                "Radar chart requires metric distribution data for comparison. "
+                "Check that statistical analysis completed successfully."
+            )
+        
+        if not isinstance(metric_distributions, dict):
+            raise TypeError(
+                f"metric_distributions must be a dictionary, got {type(metric_distributions).__name__}"
+            )
+        
+        # Determine metrics to plot
+        if metrics is None:
+            metrics = list(metric_distributions.keys())
+            if not metrics:
+                raise ValueError(
+                    "Cannot create radar chart: No metrics available in metric_distributions. "
+                    "Check that statistical analysis found measurable metrics."
+                )
+        else:
+            # FAIL-FAST: Validate all requested metrics exist
+            if not isinstance(metrics, list):
+                raise TypeError(f"metrics must be a list, got {type(metrics).__name__}")
+            
+            missing = set(metrics) - set(metric_distributions.keys())
+            if missing:
+                available = list(metric_distributions.keys())
+                raise ValueError(
+                    f"Requested metrics not found in data: {sorted(missing)}. "
+                    f"Available metrics: {sorted(available)}. "
+                    f"Check metric names match exactly (case-sensitive)."
+                )
+        
+        # FAIL-FAST: Validate minimum metric count
+        if len(metrics) < 3:
+            raise ValueError(
+                f"Radar chart requires at least 3 metrics for meaningful comparison, got {len(metrics)}. "
+                f"Available metrics: {sorted(metric_distributions.keys())}. "
+                f"Consider adding more metrics to your experiment or use a different visualization."
+            )
+        
+        if len(metrics) > 10:
+            logger.warning(
+                f"Radar chart with {len(metrics)} metrics may be cluttered and hard to read. "
+                f"Consider limiting to 6-8 most important metrics for clarity."
+            )
+        
+        # FAIL-FAST: Extract and validate frameworks
+        first_metric = metrics[0]
+        if first_metric not in metric_distributions:
+            raise ValueError(
+                f"Internal error: first_metric '{first_metric}' not in metric_distributions. "
+                f"This should not happen after validation."
+            )
+        
+        frameworks = list(metric_distributions[first_metric].keys())
+        
+        if len(frameworks) < 2:
+            raise ValueError(
+                f"Radar chart requires at least 2 frameworks for comparison, got {len(frameworks)}. "
+                f"Available frameworks: {frameworks}. "
+                f"Add more frameworks to your experiment for meaningful comparison."
+            )
+        
+        # FAIL-FAST: Validate all frameworks have all metrics (data consistency)
+        for metric in metrics:
+            if metric not in metric_distributions:
+                raise ValueError(
+                    f"Internal error: metric '{metric}' not in metric_distributions after validation"
+                )
+            
+            available_frameworks = set(metric_distributions[metric].keys())
+            missing_frameworks = set(frameworks) - available_frameworks
+            extra_frameworks = available_frameworks - set(frameworks)
+            
+            if missing_frameworks or extra_frameworks:
+                raise ValueError(
+                    f"Framework data inconsistency for metric '{metric}'. "
+                    f"Expected frameworks: {sorted(frameworks)}. "
+                    f"Found frameworks: {sorted(available_frameworks)}. "
+                    f"Missing: {sorted(missing_frameworks) if missing_frameworks else 'none'}. "
+                    f"Extra: {sorted(extra_frameworks) if extra_frameworks else 'none'}. "
+                    f"All metrics must have data for the same set of frameworks."
+                )
+        
+        # FAIL-FAST: Validate MetricDistribution objects have required fields
+        for metric in metrics:
+            for framework, dist in metric_distributions[metric].items():
+                if not hasattr(dist, 'mean'):
+                    raise AttributeError(
+                        f"MetricDistribution for {framework}/{metric} missing 'mean' attribute. "
+                        f"Check that statistical analysis computed distribution statistics correctly."
+                    )
+                if not isinstance(dist.mean, (int, float)):
+                    raise TypeError(
+                        f"MetricDistribution.mean must be numeric, got {type(dist.mean).__name__} "
+                        f"for {framework}/{metric}"
+                    )
+        
+        # Normalize metrics to [0, 1] range
+        normalized_data = {fw: [] for fw in frameworks}
+        
+        for metric in metrics:
+            # Collect all mean values for this metric
+            values = [metric_distributions[metric][fw].mean for fw in frameworks]
+            min_val = min(values)
+            max_val = max(values)
+            
+            # Normalize each framework's value
+            for fw in frameworks:
+                raw_value = metric_distributions[metric][fw].mean
+                if max_val == min_val:
+                    # All values identical, set to 0.5
+                    normalized_value = 0.5
+                else:
+                    normalized_value = (raw_value - min_val) / (max_val - min_val)
+                
+                normalized_data[fw].append(normalized_value)
+        
+        # Number of variables
+        num_vars = len(metrics)
+        
+        # Compute angle for each axis
+        angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
+        
+        # Complete the circle
+        angles += angles[:1]
+        
+        # Create figure with polar projection
+        fig, ax = plt.subplots(figsize=(10, 10), subplot_kw=dict(projection='polar'))
+        
+        # Use colorblind-friendly palette
+        colors = sns.color_palette("colorblind", n_colors=len(frameworks))
+        
+        # Plot each framework
+        for idx, framework in enumerate(frameworks):
+            values = normalized_data[framework]
+            values += values[:1]  # Complete the circle
+            
+            color = colors[idx]
+            ax.plot(angles, values, 'o-', linewidth=2, label=framework, 
+                   color=color, markersize=6)
+            ax.fill(angles, values, alpha=0.15, color=color)
+        
+        # Format metric names for display (remove underscores, title case)
+        display_labels = [m.replace('_', ' ').title() for m in metrics]
+        
+        # Set labels
+        ax.set_xticks(angles[:-1])
+        ax.set_xticklabels(display_labels, size=11)
+        
+        # Set y-axis limits and labels
+        ax.set_ylim(0, 1)
+        ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
+        ax.set_yticklabels(['0.2', '0.4', '0.6', '0.8', '1.0'], size=10, alpha=0.7)
+        
+        # Add grid
+        ax.grid(True, linestyle='--', alpha=0.5)
+        
+        # Add title and legend
+        ax.set_title(title, size=14, pad=20, weight='bold')
+        ax.legend(loc='upper right', bbox_to_anchor=(1.25, 1.1), 
+                 fontsize=11, frameon=True, fancybox=True, shadow=True)
+        
+        # Save to correct directory (figures/statistical/)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_filename = f"radar_chart_{timestamp}.svg"
+        output_path = self._validate_output_path(output_filename)
+        
+        plt.tight_layout()
+        plt.savefig(output_path, format='svg', bbox_inches='tight', dpi=300)
+        plt.close()
+        
+        logger.info(f"Radar chart saved to {output_path}")
+        
+        # Return Visualization object
+        return Visualization(
+            viz_type=VisualizationType.RADAR,
+            file_path=output_path,
+            format="svg",
+            metric_name=", ".join(metrics[:3]) + (f" (+{len(metrics)-3} more)" if len(metrics) > 3 else ""),
+            title=title,
+            caption=(
+                f"Radar chart comparing {len(frameworks)} frameworks across {len(metrics)} metrics. "
+                f"Frameworks: {', '.join(frameworks)}. "
+                f"Metrics: {', '.join(metrics)}. "
+                f"Each axis shows normalized values (0-1 scale) where outer edge represents "
+                f"maximum observed value. Useful for holistic multi-dimensional comparison. "
+                f"Note: All metrics normalized independently; values are relative to this dataset."
+            ),
+            groups=frameworks
+        )
+    
     def generate_all_enhanced_plots(
         self,
         statistical_findings: 'StatisticalFindings',
@@ -2359,6 +2593,47 @@ class StatisticalVisualizationGenerator:
             logger.info("ℹ No outliers detected - outlier run plots not needed")
         else:
             logger.info(f"✓ Generated {outlier_plot_count} outlier run plots")
+        
+        # T109: US9 - Radar Chart (OPTIONAL - multi-metric overview)
+        logger.info("Generating radar chart...")
+        # Select key metrics that are common and meaningful
+        # Prioritize: tokens, time, cost, API calls
+        radar_metrics = []
+        candidate_metrics = [
+            'tokens_total', 'tokens_in', 'tokens_out', 
+            'execution_time', 'total_cost_usd', 'api_calls',
+            'cached_tokens'
+        ]
+        
+        logger.info(f"Radar chart candidates: {candidate_metrics}")
+        logger.info(f"Available metrics: {list(metric_distributions.keys())}")
+        
+        for metric in candidate_metrics:
+            if metric in metric_distributions:
+                # Check that all frameworks have this metric
+                frameworks_with_metric = set(metric_distributions[metric].keys())
+                logger.info(f"  {metric}: {len(frameworks_with_metric)} frameworks - {frameworks_with_metric}")
+                if len(frameworks_with_metric) >= 2:
+                    radar_metrics.append(metric)
+        
+        logger.info(f"Selected {len(radar_metrics)} metrics for radar chart: {radar_metrics}")
+        
+        if len(radar_metrics) >= 3:
+            # Limit to 6-8 metrics for readability
+            radar_metrics = radar_metrics[:8]
+            
+            try:
+                viz = self.generate_radar_chart(
+                    metric_distributions,
+                    metrics=radar_metrics,
+                    title="Multi-Metric Framework Comparison"
+                )
+                visualizations.append(viz)
+                logger.info(f"✓ Generated radar chart with {len(radar_metrics)} metrics")
+            except Exception as e:
+                logger.warning(f"⚠ Skipping radar chart - error: {e}")
+        else:
+            logger.info(f"ℹ Skipping radar chart - need at least 3 common metrics, found {len(radar_metrics)}")
         
         logger.info(f"Batch generation complete: {len(visualizations)} plots generated")
         return visualizations
